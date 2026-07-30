@@ -1,0 +1,2 @@
+# Standard Flutter lint set; the spike app must stay lint-clean.
+include: package:flutter_lints/flutter.yaml

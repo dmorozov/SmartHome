@@ -1,0 +1,28 @@
+# Runtime state must never be committed — only the starter configs are tracked.
+
+# Home Assistant: keep configuration.yaml + automations.yaml, ignore everything
+# else (.storage holds credentials/auth tokens, plus databases, logs, backups).
+ha-config/*
+!ha-config/configuration.yaml
+!ha-config/automations.yaml
+
+# Mosquitto: persistence database and logs (config stays tracked).
+mosquitto/data/
+mosquitto/log/
+
+# Zigbee2MQTT: only the tracked EXAMPLE starter; the live configuration.yaml
+# is ignored on purpose — Z2M rewrites it at runtime and injects the generated
+# Zigbee network key on first start, so it must never be committable.
+z2m-data/*
+!z2m-data/configuration.example.yaml
+
+# go2rtc: only the tracked EXAMPLE starter; the live go2rtc.yaml is ignored —
+# stream definitions embed camera credentials.
+go2rtc/*
+!go2rtc/go2rtc.example.yaml
+
+# Secrets in any form.
+secrets.yaml
+secret.yaml
+*.env
+passwd

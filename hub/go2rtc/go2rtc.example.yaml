@@ -1,0 +1,21 @@
+# go2rtc starter configuration — EXAMPLE FILE.
+#
+# Bring-up: copy this to go2rtc.yaml (which is gitignored) before first start:
+#   cp go2rtc.example.yaml go2rtc.yaml
+#
+# WHY the live file is gitignored: stream source URLs embed camera
+# credentials (RTSP user:pass, ring-mqtt tokens). This example stays the
+# tracked starter; secrets never enter git.
+#
+# Phase-1 role (docs/research/hub-and-device-integrations.md §5): restream
+# layer for the Panel's tap-to-view popups. Chosen so Frigate slots in later
+# without rework (it embeds this same go2rtc).
+
+# API/UI on :1984, RTSP on :8554, WebRTC on :8555 (host networking).
+streams:
+  # Wyze v3 / Pan v3 after the official RTSP firmware flash (research §3.2).
+  # wyze_living_room: rtsp://user:pass@CAMERA-IP/live
+
+  # Ring doorbell arrives via ring-mqtt's RTSP output when that container is
+  # added (research §3.1).
+  # ring_doorbell: rtsp://127.0.0.1:8554/RING-CAMERA-ID_live

@@ -1,0 +1,22 @@
+# Home Assistant starter configuration for the Hub.
+# The Hub is headless: its built-in frontend exists but is only used for
+# administration; the Panel is the family-facing UI.
+
+# Standard set of integrations (recorder, history, mobile_app, automation
+# engine, etc.).
+default_config:
+
+# --- Panel authentication -----------------------------------------------------
+# The Panel connects to the Hub over the WebSocket API at
+#   ws://<appliance>:8123/api/websocket
+# authenticating with a long-lived access token (valid 10 years).
+# Tokens are NOT configured in this file — they are minted in the HA UI:
+#   your user profile (bottom-left avatar) -> Security tab
+#   -> "Long-lived access tokens" -> Create token.
+# Paste the token into the Panel's own configuration; never commit it to git.
+# ------------------------------------------------------------------------------
+
+# Automations live in the Hub's native engine (the Panel is a pure
+# view/command layer — see ADR-0002). This include keeps them editable from
+# the HA automation UI.
+automation: !include automations.yaml

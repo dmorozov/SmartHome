@@ -1,0 +1,21 @@
+# Dart / Flutter build artifacts.
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+# Generated on the spike box by bootstrap.sh; the only dependency is
+# flutter_lints, so a committed lock buys nothing here.
+pubspec.lock
+
+# Editor noise.
+.idea/
+*.iml
+*.swp
+
+# Generated Linux runner — intentionally NOT committed. bootstrap.sh
+# regenerates it (`flutter create --platforms=linux`) and applies the kiosk
+# patch to linux/runner/my_application.cc (HeaderBar off +
+# gtk_window_fullscreen) deterministically, so the checkout stays free of
+# generated platform code.
+linux/

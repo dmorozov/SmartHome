@@ -1,0 +1,25 @@
+name: spike_app
+description: >-
+  Flutter-under-cage touch validation app for the SmartHome Panel spike.
+  Runbook: docs/research/flutter-cage-spike.md.
+publish_to: none
+version: 0.1.0
+
+environment:
+  # The Flutter bound is the real pin: the Wayland touch regression
+  # (flutter/flutter#182606) is fixed in 3.44.0 stable — never build this
+  # with a 3.41.x toolchain. The Dart bound matches 3.44-era SDKs.
+  sdk: ">=3.8.0 <4.0.0"
+  flutter: ">=3.44.0"
+
+# Pure Flutter SDK on purpose: the spike must isolate embedder/compositor
+# behavior, and the build must not depend on pub.dev beyond flutter_lints.
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

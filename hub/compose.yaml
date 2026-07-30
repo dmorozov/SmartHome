@@ -1,0 +1,90 @@
+# Hub stack — Home Assistant + Mosquitto + Zigbee2MQTT + go2rtc.
+#
+# Runs on the dev laptop today and migrates UNCHANGED to the Ryzen AI mini PC
+# (copy this directory, including runtime state, and `docker compose up -d`).
+#
+# Start order: mosquitto -> zigbee2mqtt (depends_on) -> homeassistant.
+#   `docker compose up -d` handles it; Home Assistant tolerates the broker
+#   appearing after it (the MQTT integration reconnects).
+#
+# Bring-up: see README.md in this directory. TL;DR:
+#   1. cp z2m-data/configuration.example.yaml z2m-data/configuration.yaml
+#      and put the SLZB-06 address into the copy (the live file is gitignored
+#      because Z2M injects the Zigbee network key into it at runtime).
+#   2. cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml (live file gitignored —
+#      stream URLs embed camera credentials).
+#   3. docker compose up -d
+#   4. HA onboarding at http://<appliance>:8123, Z2M frontend at :8080.
+#
+# Secrets are NOT in git:
+#   - The Panel's long-lived HA token lives in the Panel's own config.
+#   - HA runtime state (./ha-config/.storage — credentials, tokens) is gitignored.
+#   - Zigbee2MQTT writes the generated Zigbee network key into ./z2m-data
+#     after first start — see hub/.gitignore and README before committing.
+
+services:
+  homeassistant:
+    # Pinned exactly. Per the repo README: the Hub is a black-box appliance —
+    # versions are pinned and updated deliberately on OUR schedule, after
+    # reading the release notes, never by a floating tag. (HA ships monthly
+    # with documented breaking changes; see the calendar items in hub/README.md
+    # before moving past 2026.7.)
+    image: ghcr.io/home-assistant/home-assistant:2026.7
+    container_name: homeassistant
+    # host networking is REQUIRED, not an optimization: HomeKit-controller
+    # pairing for the Ecobee and Samsung TV discovery both need mDNS/multicast,
+    # which Docker bridge networking breaks. (This is also why the hub stack
+    # lives on the Linux laptop, not Docker-on-macOS.)
+    network_mode: host
+    volumes:
+      - ./ha-config:/config
+      # Our own extensions/fixes slot: custom integrations dropped here are
+      # picked up by HA without a custom image. See custom_components/README.md.
+      - ./custom_components:/config/custom_components
+    restart: unless-stopped
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
+  zigbee2mqtt:
+    # PIN THE EXACT TAG AT FIRST DEPLOY: replace `2` with the exact version you
+    # brought up (e.g. koenkk/zigbee2mqtt:2.x.y) and commit it. Zigbee2MQTT's
+    # exact current 2026 version was not researched when this scaffold was
+    # written; the major is pinned so a config-format-breaking 3.x can never
+    # arrive silently.
+    image: koenkk/zigbee2mqtt:2
+    container_name: zigbee2mqtt
+    depends_on:
+      - mosquitto
+    # host networking so the config's `mqtt://localhost:1883` reaches the
+    # broker's host-published port, and the frontend is on <appliance>:8080
+    # with no extra mapping.
+    network_mode: host
+    volumes:
+      - ./z2m-data:/app/data
+    # NO usb device mapping on purpose: the coordinator is an SMLIGHT SLZB-06
+    # reached over TCP (Ethernet), not a USB stick. The radio stays central in
+    # the house and survives the laptop -> mini PC migration untouched.
+    restart: unless-stopped
+
+  go2rtc:
+    # 1.9.10 per docs/research/frigate-amd-acceleration.md (the version Frigate
+    # 0.17 embeds) — keeps the phase-1 restream layer aligned with the future
+    # Frigate deployment so cameras slot in without rework.
+    image: alexxit/go2rtc:1.9.10
+    container_name: go2rtc
+    # host networking for WebRTC (dynamic UDP ports + correct candidate IPs).
+    # API/UI :1984, RTSP :8554, WebRTC :8555.
+    network_mode: host
+    volumes:
+      # Stream definitions (may embed camera credentials — gitignored).
+      - ./go2rtc:/config
+    restart: unless-stopped

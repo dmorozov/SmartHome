@@ -1,0 +1,35 @@
+# Zigbee2MQTT starter configuration for the Hub stack — EXAMPLE FILE.
+#
+# Bring-up: copy this to configuration.yaml (which is gitignored) and edit the
+# SLZB-06 address there:   cp configuration.example.yaml configuration.yaml
+#
+# WHY the live file is gitignored: Zigbee2MQTT REWRITES configuration.yaml at
+# runtime and, on first start, injects the generated Zigbee network key /
+# pan_id into it. Keeping the live file out of git makes committing that
+# secret impossible; this example stays the tracked starter.
+
+# Home Assistant MQTT discovery — HA auto-creates entities for every paired
+# Zigbee device.
+homeassistant:
+  enabled: true
+
+mqtt:
+  base_topic: zigbee2mqtt
+  # The Mosquitto sibling container, published on the host (z2m runs with
+  # host networking — see compose.yaml).
+  server: mqtt://localhost:1883
+
+serial:
+  # SMLIGHT SLZB-06 network coordinator (TI CC2652P -> zstack driver), reached
+  # over TCP — port 6638 is the SLZB-06 factory default. Replace the
+  # placeholder with the device's LAN IP or hostname.
+  # IMPORTANT: run the SLZB-06 in Ethernet mode, NOT WiFi — Z2M explicitly
+  # warns that serial-over-WiFi is failure-prone (see
+  # docs/research/hub-and-device-integrations.md §4).
+  port: tcp://SLZB-06-IP-OR-HOSTNAME:6638
+  adapter: zstack
+
+# Web frontend for pairing, mapping, and OTA — http://<appliance>:8080
+frontend:
+  enabled: true
+  port: 8080
