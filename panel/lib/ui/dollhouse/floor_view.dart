@@ -6,8 +6,9 @@ import '../hub_controller.dart';
 import '../theme.dart';
 import 'iso.dart';
 
-/// One Floor as an isometric slab: room outlines, warm glow on lit Rooms,
-/// and — when [expanded] — room labels plus tappable Device pins.
+/// One Floor as an isometric slab: rooms behind full-height translucent
+/// "glass" walls, warm glow on lit Rooms, and — when [expanded] — room
+/// labels plus tappable Device pins.
 class FloorView extends StatelessWidget {
   const FloorView({
     super.key,
@@ -223,12 +224,50 @@ class _FloorPainter extends CustomPainter {
         ..color = PanelTheme.inkFaint.withValues(alpha: .8),
     );
 
+    _paintGlassWalls(canvas);
+
     if (showLabels) {
       for (final room in floor.rooms) {
         // Above the room center — ceiling lights tend to sit exactly there.
         _label(canvas, room.name,
             projection.project(room.footprint.center) - const Offset(0, 24));
       }
+    }
+  }
+
+  /// Full-height translucent walls on every room boundary — the "glass
+  /// house" look (walls-prototype verdict; the other candidates live on the
+  /// prototype/dollhouse-walls branch).
+  static const _wallHeightM = 1.5;
+
+  void _paintGlassWalls(Canvas canvas) {
+    for (final seg in _wallSegments(floor, projection.planSize)) {
+      final pa = projection.project(seg.a);
+      final pb = projection.project(seg.b);
+      final up = Offset(0, -_wallHeightM * projection.scale);
+      final quad = Path()
+        ..addPolygon([pa, pb, pb + up, pa + up], true);
+      // x-running walls face the viewer, y-running walls sit in shade; the
+      // two viewer-far exterior walls are more opaque so the shell reads.
+      final face =
+          seg.horizontal ? const Color(0xFFE2E7F0) : const Color(0xFFC7CFE0);
+      final alpha = seg.backExterior ? .5 : .26;
+      canvas.drawPath(quad, Paint()..color = face.withValues(alpha: alpha));
+      canvas.drawPath(
+        quad,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8
+          ..color = PanelTheme.inkFaint.withValues(alpha: .45),
+      );
+      // Bright top cap catches the light.
+      canvas.drawLine(
+        pa + up,
+        pb + up,
+        Paint()
+          ..color = Colors.white.withValues(alpha: alpha + .15)
+          ..strokeWidth = 2,
+      );
     }
   }
 
@@ -254,4 +293,44 @@ class _FloorPainter extends CustomPainter {
       !oldDelegate.litRooms.containsAll(litRooms) ||
       oldDelegate.showLabels != showLabels ||
       oldDelegate.projection.scale != projection.scale;
+}
+
+class _WallSeg {
+  const _WallSeg(this.a, this.b,
+      {required this.horizontal, required this.backExterior});
+
+  final Offset a;
+  final Offset b;
+  final bool horizontal;
+
+  /// One of the two viewer-far exterior walls (north y = 0, west x = 0).
+  final bool backExterior;
+}
+
+/// Room-boundary segments, deduplicated (rooms tile, so shared boundaries
+/// come out identical) and sorted back-to-front for the painter.
+List<_WallSeg> _wallSegments(Floor floor, Size plan) {
+  final seen = <String>{};
+  final segs = <_WallSeg>[];
+  for (final room in floor.rooms) {
+    final r = room.footprint;
+    void add(Offset a, Offset b) {
+      if (!seen.add('${a.dx},${a.dy}-${b.dx},${b.dy}')) return;
+      final horizontal = a.dy == b.dy;
+      segs.add(_WallSeg(
+        a,
+        b,
+        horizontal: horizontal,
+        backExterior: horizontal ? a.dy == 0 : a.dx == 0,
+      ));
+    }
+
+    add(r.topLeft, r.topRight);
+    add(r.bottomLeft, r.bottomRight);
+    add(r.topLeft, r.bottomLeft);
+    add(r.topRight, r.bottomRight);
+  }
+  double depth(_WallSeg s) => s.a.dx + s.a.dy + s.b.dx + s.b.dy;
+  segs.sort((s1, s2) => depth(s1).compareTo(depth(s2)));
+  return segs;
 }

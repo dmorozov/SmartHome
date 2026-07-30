@@ -53,6 +53,7 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 - **NVR + AI detection**: Frigate on the same box — 24/7 recording, person/package detection, event timeline on the panel. Detector: Hailo-8L M.2 module (per `docs/research/frigate-amd-acceleration.md`); iGPU handles VAAPI decode; storage ≈ bitrate-Mbps × 10.8 GB/day/camera. Phase-1 go2rtc restream layer was chosen so this slots in without rework.
 - **More panels**: additional rooms get cheap thin clients running the Flutter Web build served from the box (or flutter-pi devices).
 - **Ansible provisioning** (port done 2026-07-30, ahead of the original post-spike plan): `appliance/ansible/` — tested against the `appliance/test/` container (fresh-host converge + idempotence). The mini PC gets provisioned by playbook, not by hand. Bash scripts remain the spike-day path of record until the spike passes; future roles to add: docker + hub stack, tailscale, Frigate, voice pipeline.
+- **House plan authoring — grill before building**: a dedicated grilling session on how to capture the real house for the Panel. Scope decided up front: 2D blueprint floor plan only (room footprints + walls per Floor), no 3D modeling; output replaces `panel/lib/data/demo_house.dart` (and decides whether the layout stays Dart or becomes a config file).
 - **Appliance-hardening**: revisit Ubuntu Core + Ubuntu Frame (immutable OS, transactional updates) once the system design is frozen.
 
 ## Spike plan (decided 2026-07-30)

@@ -9,7 +9,9 @@ safe because the spike risk lives in the Linux embedder/compositor layer, not in
 Dart code, and even the worst-case fallback (web kiosk, ADR-0001) reuses this
 codebase via the Flutter Web build. What exists:
 
-- Stacked isometric Floors, tap a collapsed Floor to expand it
+- Stacked isometric Floors with full-height translucent "glass" walls
+  (winner of the walls prototype — variants preserved on the
+  `prototype/dollhouse-walls` branch), tap a collapsed Floor to expand it
 - Rooms glow with light state; tapping a Room toggles its lights
 - Device pins with live readings (thermostat °C, Emporia watts); tapping a
   binary Device toggles it, cameras/doorbell open the Popup (go2rtc live view
