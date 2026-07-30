@@ -22,7 +22,7 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 
 - `appliance/` — provisioning for the Appliance (laptop now, mini PC later): Ansible playbooks (`ansible/`), interactive diagnostics (`scripts/`), disposable Docker test host (`test/`)
 - `hub/` — the Hub stack: Docker Compose (HA, Mosquitto, Zigbee2MQTT, go2rtc, pinned), HA config, `custom_components/` for future device fixes (volume-mounted — no custom image until system deps demand one)
-- `panel/` — the Flutter dollhouse app (created after the spike passes)
+- `panel/` — the Panel Flutter app: dollhouse UI prototype + `FakeHub` (runs on web/macOS today; real HA client and Linux/kiosk validation come with the spike)
 - `spike/` — the Flutter-under-cage validation app + bootstrap script; runbook in `docs/research/flutter-cage-spike.md`
 - `docs/` — research (cited), ADRs, agent docs; `CONTEXT.md` — domain glossary
 
