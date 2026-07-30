@@ -44,6 +44,10 @@ apt-get install -y \
 # (docs.flutter.dev/platform-integration/linux/setup):
 apt-get install -y \
     clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev
+# Flutter SDK bootstrap prerequisites — found by the appliance/test container:
+# without unzip the flutter launcher dies with 'Unable to extract Dart SDK'.
+apt-get install -y \
+    curl git unzip zip xz-utils
 
 # --- The 'cage' user: dedicated, unprivileged ------------------------------
 echo "==> Ensuring the 'cage' user exists"

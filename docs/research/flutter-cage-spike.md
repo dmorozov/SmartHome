@@ -264,6 +264,10 @@ sudo apt install -y cage wlr-randr swayidle grim ddcutil evtest libinput-tools w
 # all in noble universe
 sudo apt install -y clang cmake ninja-build pkg-config libgtk-3-dev libstdc++-12-dev
 # Flutter Linux toolchain prerequisites (docs.flutter.dev/platform-integration/linux/setup)
+sudo apt install -y curl git unzip zip xz-utils
+# Flutter SDK bootstrap prerequisites — verified missing-by-default in the
+# appliance/test container: without unzip, the flutter launcher fails with
+# "Unable to extract Dart SDK".
 ```
 
 ### Step 2 — Verify touch at the kernel layer (evtest)

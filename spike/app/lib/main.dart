@@ -610,7 +610,7 @@ class _ReadoutBar extends StatelessWidget {
               style: const TextStyle(fontFamily: 'monospace', fontSize: 15),
             ),
           ),
-          if (trailing != null) trailing!,
+          ?trailing,
         ],
       ),
     );

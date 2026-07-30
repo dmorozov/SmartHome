@@ -50,7 +50,10 @@ if [[ -z "$VERSION" ]]; then
   VERSION="$(flutter --version 2>/dev/null \
     | awk '/^Flutter [0-9]/ {print $2; exit}' || true)"
 fi
-[[ -n "$VERSION" ]] || die "could not parse 'flutter --version' output."
+[[ -n "$VERSION" ]] || die "could not parse 'flutter --version' output.
+If flutter itself errored above (e.g. 'Unable to extract Dart SDK'), the SDK
+bootstrap tools may be missing — run appliance/scripts/install-kiosk.sh, or:
+  sudo apt install -y curl git unzip zip xz-utils"
 
 MAJOR="${VERSION%%.*}"
 REST="${VERSION#*.}"
@@ -133,7 +136,14 @@ fi
 say "Building the release bundle"
 flutter build linux --release
 
-BUNDLE="$APP_DIR/build/linux/x64/release/bundle/spike_app"
+# Flutter names the output dir after the host arch (x64 on the real laptop
+# and mini PC; arm64 e.g. in the arm64 test container on Apple Silicon).
+case "$(uname -m)" in
+  x86_64)  FLUTTER_ARCH=x64 ;;
+  aarch64) FLUTTER_ARCH=arm64 ;;
+  *) die "unsupported architecture: $(uname -m)" ;;
+esac
+BUNDLE="$APP_DIR/build/linux/$FLUTTER_ARCH/release/bundle/spike_app"
 [[ -x "$BUNDLE" ]] || die "build finished but $BUNDLE is missing."
 
 # --- Done: how to run (runbook Step 6) --------------------------------------

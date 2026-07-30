@@ -13,6 +13,7 @@ Everything here follows the spike runbook: [`../docs/research/flutter-cage-spike
 | `scripts/install-kiosk.sh` | Idempotent provisioning: packages, `cage` user, unit + PAM install; deliberately enables nothing |
 | `scripts/check-hybrid-gpu.sh` | Runbook Step 0a: which GPU owns HDMI; prints the `WLR_DRM_DEVICES` pin or mitigation advice; read-only |
 | `scripts/screen-power-probe.sh` | Runbook Step 7: `wlr-randr` blank/wake cycle + read-only DDC/CI probe; never runs destructive `setvcp` |
+| `test/` | Disposable Ubuntu 24.04 systemd+SSH container (Docker) for testing the deployment scripts and, later, the Ansible playbooks — see `test/README.md` for what it can and cannot validate |
 
 ## Spike-day order of operations
 
