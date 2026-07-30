@@ -1,0 +1,11 @@
+# AMD laptop — dev Appliance (Radeon iGPU + NVIDIA dGPU, Ubuntu Desktop 24.04).
+
+# MANDATORY before enabling the kiosk here (runbook Step 0a): pin cage to the
+# amdgpu iGPU so the NVIDIA card stays out of the compositor's path. Find the
+# right card with appliance/scripts/check-hybrid-gpu.sh, then set e.g.:
+# wlr_drm_devices: /dev/dri/card1
+
+# The laptop runs GNOME — enabling the kiosk requires clearing gdm's claim on
+# display-manager.service. Both gates stay false until spike day:
+# kiosk_enable: true
+# kiosk_disable_gdm: true

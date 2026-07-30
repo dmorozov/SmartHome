@@ -91,7 +91,7 @@ echo "== Conclusion =="
 if [[ -z "${hdmi_owner_card}" ]]; then
     echo "No HDMI-A-* connector found on any card."
     echo "If the touchscreen is meant to be on HDMI, plug it in and re-run;"
-    echo "for full detail run: drm_info | less   (installed by install-kiosk.sh)."
+    echo "for full detail run: drm_info | less   (installed by the ansible kiosk role)."
 elif [[ "${hdmi_owner_driver}" == "amdgpu" ]]; then
     echo "HDMI (${hdmi_owner_card}) is wired to the amdgpu card — good."
     echo

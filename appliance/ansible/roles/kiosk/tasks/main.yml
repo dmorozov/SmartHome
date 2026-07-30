@@ -1,0 +1,143 @@
+# Kiosk role — THE provisioning path for every Appliance (the earlier bash
+# install-kiosk.sh was retired 2026-07-30 once this role passed fresh-host
+# converge + idempotence + check-mode in appliance/test). The runbook
+# (docs/research/flutter-cage-spike.md Step 8) keeps the manual recipe as
+# reference documentation.
+#
+# Semantics note: this role enforces desired state — an existing kiosk
+# user's shell, home, and password lock are corrected on every run.
+---
+- name: Install the HWE kernel stack (real hardware only — runbook Step 0)
+  ansible.builtin.apt:
+    name: linux-generic-hwe-24.04
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+  when: kiosk_hwe_kernel | bool
+
+- name: Install kiosk, Flutter toolchain, and SDK bootstrap packages
+  ansible.builtin.apt:
+    name: "{{ kiosk_packages + flutter_toolchain_packages + flutter_bootstrap_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the unprivileged kiosk user
+  ansible.builtin.user:
+    name: "{{ kiosk_user }}"
+    system: true
+    create_home: true
+    home: "/home/{{ kiosk_user }}"
+    shell: /usr/sbin/nologin
+    password_lock: true
+
+- name: Install the cage PAM stack
+  ansible.builtin.copy:
+    src: cage.pam
+    dest: /etc/pam.d/cage
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the cage@ systemd unit (templated)
+  ansible.builtin.template:
+    src: cage@.service.j2
+    dest: /etc/systemd/system/cage@.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart cage
+
+# --- Deliberate gates: nothing below runs by default (parity with the
+# --- bash script, which also enables nothing). See group_vars/all.yml.
+
+- name: Clear gdm's seat claim (laptop only, gated)
+  when: kiosk_disable_gdm | bool
+  block:
+    - name: Disable gdm
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        enabled: false
+      loop: [gdm3, gdm]
+      register: gdm_disable
+      # Absent unit names are expected (package is gdm3 OR gdm); any other
+      # failure (D-Bus down, real disable error) must surface.
+      failed_when: >-
+        gdm_disable is failed and
+        'Could not find the requested service' not in (gdm_disable.msg | default(''))
+
+    - name: Check what owns the display-manager alias
+      ansible.builtin.stat:
+        path: /etc/systemd/system/display-manager.service
+      register: dm_alias
+
+    - name: Remove a stale gdm display-manager symlink
+      ansible.builtin.file:
+        path: /etc/systemd/system/display-manager.service
+        state: absent
+      when:
+        - dm_alias.stat.exists
+        - "'gdm' in (dm_alias.stat.lnk_target | default(''))"
+
+# Make any pending unit-file change visible to systemd BEFORE enabling —
+# handlers otherwise fire only at end of play, so the enable below would act
+# on a stale unit view. This also means the reload runs exactly once.
+- name: Flush pending handlers before the enable gate
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable boot-to-kiosk (gated — the point of no return on a console-only box)
+  when: kiosk_enable | bool
+  block:
+    - name: Enable cage@{{ kiosk_tty }}
+      ansible.builtin.systemd_service:
+        name: "cage@{{ kiosk_tty }}.service"
+        enabled: true
+      # In --check the unit file was never written, and systemd_service
+      # fails on missing units before its check-mode guard.
+      ignore_errors: "{{ ansible_check_mode }}"
+
+    - name: Read the current default target
+      ansible.builtin.command: systemctl get-default
+      register: current_default
+      changed_when: false
+      check_mode: false
+
+    - name: Boot into graphical.target
+      ansible.builtin.command: systemctl set-default graphical.target
+      when: current_default.stdout != 'graphical.target'
+      changed_when: true
+
+- name: Appliance hardening (gated)
+  when: kiosk_hardening | bool
+  tags: [hardening]
+  block:
+    # Activation deliberately waits for the next reboot — logind re-reads its
+    # config only at start, and the spike-day flow reboots right after this.
+    - name: No spare getty VTs (logind)
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/logind.conf
+        regexp: "^#?{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: NAutoVTs, value: "0" }
+        - { key: ReserveVT, value: "0" }
+
+    - name: Check for grub (absent in containers)
+      ansible.builtin.stat:
+        path: /etc/default/grub
+      register: grub_default
+
+    - name: Silent boot via grub
+      when: grub_default.stat.exists
+      block:
+        - name: Grub timeout and quiet cmdline
+          ansible.builtin.lineinfile:
+            path: /etc/default/grub
+            regexp: "^{{ item.key }}="
+            line: '{{ item.key }}={{ item.value }}'
+          loop:
+            - { key: GRUB_TIMEOUT, value: "0" }
+            - { key: GRUB_CMDLINE_LINUX_DEFAULT, value: '"quiet splash loglevel=3"' }
+          notify: Update grub

@@ -36,7 +36,8 @@ EOF
 fi
 
 if ! command -v wlr-randr >/dev/null 2>&1; then
-    echo "error: wlr-randr not found — run appliance/scripts/install-kiosk.sh first." >&2
+    echo "error: wlr-randr not found — provision this host first:" >&2
+    echo "  ansible-playbook appliance/ansible/site.yml -l <host>" >&2
     exit 1
 fi
 
@@ -110,7 +111,7 @@ echo "is a panel-purchase criterion (runbook Step 7)."
 echo
 
 if ! command -v ddcutil >/dev/null 2>&1; then
-    echo "ddcutil not found — run appliance/scripts/install-kiosk.sh, then re-run."
+    echo "ddcutil not found — provision this host (ansible-playbook appliance/ansible/site.yml), then re-run."
     exit 0
 fi
 

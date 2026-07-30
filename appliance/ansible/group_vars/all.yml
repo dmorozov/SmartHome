@@ -1,0 +1,57 @@
+# Shared Appliance configuration. Per-host overrides live in host_vars/.
+
+kiosk_user: cage
+kiosk_tty: tty1
+
+# The app cage launches at boot — the spike bundle today, the Panel app later.
+kiosk_app: "/home/{{ kiosk_user }}/spike_app/bundle/spike_app"
+
+# Hybrid-GPU pin (runbook Step 0a): empty = no pin. On the laptop this MUST be
+# set to the amdgpu card (see host_vars/laptop.yml and check-hybrid-gpu.sh).
+wlr_drm_devices: ""
+
+# Uncomment-equivalents of the unit's optional Environment lines:
+# wlroots refuses to start with zero input devices — set true if the USB
+# touchscreen enumerates late at boot (cage wiki Troubleshooting).
+kiosk_wlr_no_devices: false
+
+# Deliberate manual gates — a plain converge enables nothing; boot-to-kiosk
+# is an explicit choice. Override per-host or with -e when the time comes.
+kiosk_enable: false        # enable cage@<tty> + graphical.target default
+kiosk_disable_gdm: false   # laptop only: clear gdm's display-manager.service claim
+kiosk_hardening: false     # grub silent boot, logind NAutoVTs/ReserveVT
+
+# HWE kernel (runbook Step 0): required on real hardware — Strix Point
+# graphics want the newest kernel Ubuntu 24.04 offers. Off only where a
+# kernel is meaningless (the test container).
+kiosk_hwe_kernel: true
+
+# Package sets (runbook Step 1, plus drm-info for Step 0a; verified in the
+# appliance/test container).
+kiosk_packages:
+  - cage
+  - wlr-randr
+  - swayidle
+  - grim
+  - ddcutil
+  - evtest
+  - libinput-tools
+  - wev
+  - drm-info
+
+flutter_toolchain_packages:
+  - clang
+  - cmake
+  - ninja-build
+  - pkg-config
+  - libgtk-3-dev
+  - libstdc++-12-dev
+
+# Flutter SDK bootstrap tools — absence found by the test container
+# ("Unable to extract Dart SDK" without unzip).
+flutter_bootstrap_packages:
+  - curl
+  - git
+  - unzip
+  - zip
+  - xz-utils

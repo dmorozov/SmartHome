@@ -218,8 +218,9 @@ attributable to the right layer.
 
 1. On the laptop (primary dev box), install **Ubuntu Desktop 24.04 LTS amd64** (GNOME wanted for
    daily dev; it includes `libpam-systemd`). Enable OpenSSH. During spike runs, GNOME's display
-   manager must release the seat: either `sudo systemctl stop gdm` before launching cage from a
-   TTY, or run the Step 8 boot test with `sudo systemctl disable gdm` for the session. (On the
+   manager must release the seat: either `sudo systemctl stop gdm3` (or `gdm`, depending on
+   package) before launching cage from a TTY, or run the Step 8 boot test with
+   `sudo systemctl disable gdm3` for the session. (On the
    final mini PC appliance: Ubuntu **Server** standard install, no DE at all.)
 ### Step 0a — Hybrid-graphics check (laptop-specific, do this FIRST)
 
@@ -487,14 +488,22 @@ PAMName=cage
 
 [Install]
 WantedBy=graphical.target
-Alias=display-manager.service
-DefaultInstance=tty7
+# EMPIRICAL CORRECTION (appliance/test container, systemd 255/noble): the
+# wiki's 'Alias=display-manager.service' line that belongs here BREAKS
+# 'systemctl enable cage@tty1' — "Cannot alias cage@tty1.service as
+# display-manager.service" (systemd cannot alias template instances). Omit
+# it; boot-in works via the WantedBy symlink alone.
+# tty1, not the wiki's tty7 — we enable cage@tty1 explicitly (getty lives on
+# tty1); aligning DefaultInstance avoids surprises on an instance-less enable.
+DefaultInstance=tty1
 ```
 
-`/etc/pam.d/cage` (verbatim from the wiki):
+`/etc/pam.d/cage` (wiki recipe minus `nullok`: nothing in the systemd
+`PAMName=` flow ever calls `pam_authenticate` and the cage account is locked,
+so `nullok` was only a dormant blank-password auth path):
 
 ```
-auth           required        pam_unix.so nullok
+auth           required        pam_unix.so
 account        required        pam_unix.so
 session        required        pam_unix.so
 session        required        pam_systemd.so
@@ -503,9 +512,12 @@ session        required        pam_systemd.so
 Setup:
 
 ```bash
-sudo useradd -m cage                       # dedicated unprivileged user
+# dedicated unprivileged user: system account, locked password, no login
+# shell — the only way in is the unit's PAM session (matches the ansible
+# kiosk role, which automates this whole step)
+sudo useradd --system --create-home --home-dir /home/cage --shell /usr/sbin/nologin cage
 # copy the bundle: rsync -a ~/spike_app/build/linux/x64/release/bundle/ /home/cage/spike_app/bundle/
-sudo systemctl enable cage@tty1.service    # tty1, NOT the DefaultInstance tty7 —
+sudo systemctl enable cage@tty1.service    # explicit tty1 instance —
                                            # Conflicts= then evicts Ubuntu's getty@tty1 cleanly
 sudo systemctl set-default graphical.target
 sudo reboot

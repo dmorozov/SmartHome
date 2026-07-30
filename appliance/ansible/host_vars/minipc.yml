@@ -1,0 +1,5 @@
+# Ryzen AI mini PC — production Appliance (Ubuntu Server 24.04, no DE).
+# Not purchased yet. When provisioning for real:
+#   kiosk_enable: true          # no gdm to fight on Server
+#   kiosk_hardening: true       # silent boot, no spare getty VTs
+#   kiosk_app: <Panel app bundle path once the Panel replaces the spike app>

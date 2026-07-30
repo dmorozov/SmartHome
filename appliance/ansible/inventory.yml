@@ -1,0 +1,21 @@
+# Appliance inventory. Real hosts carry PLACEHOLDER addresses until they
+# exist on the LAN — set ansible_host (and any SSH particulars) when known.
+all:
+  children:
+    appliances:
+      hosts:
+        laptop:
+          # AMD laptop (Radeon iGPU + NVIDIA dGPU), Ubuntu Desktop 24.04.
+          # PLACEHOLDER (.invalid is unresolvable by design — a real .local
+          # name here could make an untargeted run SSH into a random LAN
+          # device with become). Set the real address when Ubuntu is on:
+          ansible_host: laptop.placeholder.invalid
+        minipc:
+          # Ryzen AI mini PC (production Appliance), Ubuntu Server 24.04.
+          # PLACEHOLDER — machine not purchased yet:
+          ansible_host: minipc.placeholder.invalid
+    test:
+      hosts:
+        # Disposable Docker test appliance (appliance/test/run.sh up).
+        # Connection details live in host_vars/test-appliance.yml.
+        test-appliance:

@@ -20,7 +20,7 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 
 ## Repository layout
 
-- `appliance/` — provisioning for the Appliance (laptop now, mini PC later): install scripts, cage/systemd/PAM units, hybrid-GPU check
+- `appliance/` — provisioning for the Appliance (laptop now, mini PC later): Ansible playbooks (`ansible/`), interactive diagnostics (`scripts/`), disposable Docker test host (`test/`)
 - `hub/` — the Hub stack: Docker Compose (HA, Mosquitto, Zigbee2MQTT, go2rtc, pinned), HA config, `custom_components/` for future device fixes (volume-mounted — no custom image until system deps demand one)
 - `panel/` — the Flutter dollhouse app (created after the spike passes)
 - `spike/` — the Flutter-under-cage validation app + bootstrap script; runbook in `docs/research/flutter-cage-spike.md`
@@ -52,7 +52,7 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 - **Local voice assistant with local LLM — PRIMARY future target**: this is the reason for choosing strong mini-PC hardware (Ryzen AI NPU/iGPU, 32GB+). Privacy-preserving pipeline fully on-box: wake word + STT + local LLM intent handling; mic-array hardware near the panel TBD. HA's Assist voice pipeline keeps this door open. Size hardware for concurrent hub + restreaming + LLM.
 - **NVR + AI detection**: Frigate on the same box — 24/7 recording, person/package detection, event timeline on the panel. Detector: Hailo-8L M.2 module (per `docs/research/frigate-amd-acceleration.md`); iGPU handles VAAPI decode; storage ≈ bitrate-Mbps × 10.8 GB/day/camera. Phase-1 go2rtc restream layer was chosen so this slots in without rework.
 - **More panels**: additional rooms get cheap thin clients running the Flutter Web build served from the box (or flutter-pi devices).
-- **Ansible port of `appliance/`**: after the spike settles the real config, provisioning moves from bash scripts to Ansible playbooks (inventory: laptop + mini PC; templated `cage@.service`) — the mini PC gets provisioned by playbook, not by hand. See `appliance/README.md` "Provisioning evolution".
+- **Ansible provisioning** (port done 2026-07-30, ahead of the original post-spike plan): `appliance/ansible/` — tested against the `appliance/test/` container (fresh-host converge + idempotence). The mini PC gets provisioned by playbook, not by hand. Bash scripts remain the spike-day path of record until the spike passes; future roles to add: docker + hub stack, tailscale, Frigate, voice pipeline.
 - **Appliance-hardening**: revisit Ubuntu Core + Ubuntu Frame (immutable OS, transactional updates) once the system design is frozen.
 
 ## Spike plan (decided 2026-07-30)

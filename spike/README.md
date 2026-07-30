@@ -12,7 +12,8 @@ unknowns, and fallback ladder: [`../docs/research/flutter-cage-spike.md`](../doc
 - The dev laptop (AMD Radeon iGPU): Ubuntu 24.04 LTS + HWE kernel, the
   HDMI/USB-HID touchscreen attached.
 - System packages (cage, wlr-randr, evtest, Flutter Linux toolchain deps):
-  [`../appliance/scripts/install-kiosk.sh`](../appliance/scripts/install-kiosk.sh).
+  the ansible kiosk role: [`../appliance/ansible/`](../appliance/ansible/)
+  (`ansible-playbook site.yml -l laptop`).
 - Flutter >= 3.44 stable on PATH — never 3.41.x (Wayland touch regression;
   runbook Step 5).
 - Hybrid GPU: know which `/dev/dri/cardN` is the amdgpu iGPU and pin cage to

@@ -52,7 +52,8 @@ if [[ -z "$VERSION" ]]; then
 fi
 [[ -n "$VERSION" ]] || die "could not parse 'flutter --version' output.
 If flutter itself errored above (e.g. 'Unable to extract Dart SDK'), the SDK
-bootstrap tools may be missing — run appliance/scripts/install-kiosk.sh, or:
+bootstrap tools may be missing — provision via the ansible kiosk role
+(appliance/ansible/), or directly:
   sudo apt install -y curl git unzip zip xz-utils"
 
 MAJOR="${VERSION%%.*}"

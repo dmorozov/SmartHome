@@ -1,0 +1,13 @@
+# Provision an Appliance (laptop / mini PC / test container).
+#
+#   ansible-playbook site.yml -l test-appliance          # converge the test box
+#   ansible-playbook site.yml -l laptop                  # dev laptop (when up)
+#   ansible-playbook site.yml -l minipc -e kiosk_enable=true ...
+#
+# Future roles per the roadmap (README "Provisioning evolution" / repo README):
+# docker + hub stack deployment, tailscale, Frigate/NVR, voice pipeline.
+- name: Provision the Appliance kiosk
+  hosts: appliances:test
+  become: true
+  roles:
+    - kiosk

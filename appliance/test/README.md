@@ -2,8 +2,8 @@
 
 A disposable Ubuntu 24.04 container with **systemd as PID 1** and **real SSH**,
 for exercising the Appliance deployment tooling without the laptop/mini PC:
-`scripts/install-kiosk.sh`, `spike/bootstrap.sh`, and later the Ansible
-playbooks (which will target it over SSH exactly like a real host).
+the Ansible playbooks (`../ansible/`, targeting it over SSH exactly like a
+real host) and `spike/bootstrap.sh`.
 
 Debug loop: scripts are fixed in the repo and re-tested by **reset-and-rerun**
 (`./run.sh reset`) — never by hand-fixing container state.
@@ -34,8 +34,9 @@ clone (`bootstrap.sh`'s git guard requires one, and the ro mount protects the
 working tree):
 
 ```sh
+# provision from the Mac side:  cd appliance/ansible && ansible-playbook site.yml -l test-appliance
+# then inside (./run.sh ssh):
 git clone /mnt/SmartHome-src ~/SmartHome
-sudo ~/SmartHome/appliance/scripts/install-kiosk.sh
 ~/SmartHome/spike/bootstrap.sh        # long: clones Flutter + release build
 ```
 

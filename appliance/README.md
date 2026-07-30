@@ -8,29 +8,24 @@ Everything here follows the spike runbook: [`../docs/research/flutter-cage-spike
 
 | File | What it does |
 |---|---|
-| `systemd/cage@.service` | Boot-to-app unit (cage wiki recipe + spike restart tweaks); installed to `/etc/systemd/system/` |
-| `systemd/cage.pam` | PAM stack for the cage session (logind grants DRM/input access); installed to `/etc/pam.d/cage` |
-| `scripts/install-kiosk.sh` | Idempotent provisioning: packages, `cage` user, unit + PAM install; deliberately enables nothing |
-| `scripts/check-hybrid-gpu.sh` | Runbook Step 0a: which GPU owns HDMI; prints the `WLR_DRM_DEVICES` pin or mitigation advice; read-only |
-| `scripts/screen-power-probe.sh` | Runbook Step 7: `wlr-randr` blank/wake cycle + read-only DDC/CI probe; never runs destructive `setvcp` |
-| `test/` | Disposable Ubuntu 24.04 systemd+SSH container (Docker) for testing the deployment scripts and, later, the Ansible playbooks — see `test/README.md` for what it can and cannot validate |
+| `ansible/` | **The provisioning path**: packages, `cage` user, PAM, templated `cage@.service`, gated enable/hardening (inventory: laptop / minipc / test-appliance) — see `ansible/README.md` |
+| `scripts/check-hybrid-gpu.sh` | Interactive diagnostic, runbook Step 0a: which GPU owns HDMI; prints the `WLR_DRM_DEVICES` pin or mitigation advice; read-only |
+| `scripts/screen-power-probe.sh` | Interactive diagnostic, runbook Step 7: `wlr-randr` blank/wake cycle + read-only DDC/CI probe; never runs destructive `setvcp` |
+| `test/` | Disposable Ubuntu 24.04 systemd+SSH container (Docker) for testing the playbooks and deployment scripts — see `test/README.md` for what it can and cannot validate |
 
 ## Spike-day order of operations
 
 1. **`scripts/check-hybrid-gpu.sh`** — find which GPU owns the HDMI port (runbook Step 0a). On the laptop, cage must run on the amdgpu iGPU; note the printed `WLR_DRM_DEVICES=/dev/dri/cardN` pin — it is mandatory for every cage run on this machine.
-2. **`sudo scripts/install-kiosk.sh`** — packages, `cage` user, unit + PAM files. Enables nothing; prints the exact enable commands for later.
+2. **Provision** — from the Mac (or any controller with the repo): `cd appliance/ansible && ansible-playbook site.yml -l laptop` (set the laptop's address in `inventory.yml` first; needs only openssh-server on the laptop). Installs packages, `cage` user, PAM, unit. Enables nothing.
 3. **Bootstrap the spike app** — build the four-page touch-test app and copy the bundle to `/home/cage/spike_app/bundle/` (see `../spike/` and runbook Step 5; pin Flutter >= 3.44 stable).
-4. **Manual cage run** — from a local TTY with GNOME's display manager stopped (`sudo systemctl stop gdm`): `WLR_DRM_DEVICES=/dev/dri/cardN cage -- <bundle>`; work through tap / multi-touch / fling / pinch, both backends (runbook Step 6).
+4. **Manual cage run** — from a local TTY with GNOME's display manager stopped (`sudo systemctl stop gdm3` — or `gdm`): `WLR_DRM_DEVICES=/dev/dri/cardN cage -- <bundle>`; work through tap / multi-touch / fling / pinch, both backends (runbook Step 6).
 5. **`scripts/screen-power-probe.sh`** — from SSH with the cage session env exported: blank/wake cycle and DDC/CI probe (runbook Step 7).
-6. **Enable the boot unit** (runbook Step 8) — only after confirming SSH works, because VT switching is disabled under cage. On the GNOME laptop, gdm's claim on the `display-manager.service` alias must be cleared first, or `systemctl enable` refuses:
+6. **Enable the boot unit** (runbook Step 8) — only after confirming SSH works, because VT switching is disabled under cage. Set `wlr_drm_devices` in `ansible/host_vars/laptop.yml` (from step 1), then run the gated converge — it clears gdm's seat claim, enables `cage@tty1`, and sets `graphical.target`:
 
    ```bash
-   sudo systemctl disable gdm3                              # or gdm
-   readlink /etc/systemd/system/display-manager.service     # must NOT point at gdm
-   sudo rm -f /etc/systemd/system/display-manager.service   # if it still does
-
-   sudo systemctl enable cage@tty1.service
-   sudo systemctl set-default graphical.target
+   cd appliance/ansible
+   ansible-playbook site.yml -l laptop -e kiosk_enable=true -e kiosk_disable_gdm=true
+   # then, on the laptop:
    sudo reboot
    ```
 
@@ -38,18 +33,16 @@ Everything here follows the spike runbook: [`../docs/research/flutter-cage-spike
 
 Score the result against the runbook's 13-item pass/fail checklist; on failure, use its fallback ladder (Weston kiosk-shell, `GDK_BACKEND=x11`, labwc, flutter-pi).
 
-## Provisioning evolution (decided 2026-07-30)
+## Provisioning evolution (2026-07-30)
 
-Bash scripts are the **spike-phase** tooling only. Once the spike settles the real
-configuration (GPU pin, compositor choice, screen-power mechanism, gdm handling),
-this directory is ported to **Ansible playbooks** (`appliance/ansible/`) as the
-mini-PC provisioning step: inventory with `laptop` / `minipc` host vars,
-`cage@.service` as a Jinja2 template (the `WLR_DRM_DEVICES` and ExecStart
-differences become per-host variables instead of commented lines), and the
-hardening list below as tagged tasks. The laptop can self-provision via
-`ansible-playbook --connection=local`. These scripts then retire or remain as the
-playbooks' smoke test. Note: Ansible "playbooks" ≠ the spike "runbook"
-(`docs/research/flutter-cage-spike.md`).
+Ansible in **`ansible/`** is the single provisioning path. History, same day:
+planned post-spike → pulled forward once the `test/` container made playbook
+testing possible → the interim bash script (`install-kiosk.sh`) and static
+`systemd/` files were retired after the playbooks surpassed them (fresh-host
+converge, `changed=0` idempotence, `--check` dry-run, gated enable/hardening
+all verified; the bash path had none of that). The runbook keeps the manual
+recipe as reference documentation. Note: Ansible "playbooks" ≠ the spike
+"runbook" (`docs/research/flutter-cage-spike.md`).
 
 ## Later hardening (appliance polish — optional for the spike, record findings anyway)
 

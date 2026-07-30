@@ -19,6 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         systemd systemd-sysv dbus \
         openssh-server sudo git ca-certificates curl less nano \
+        python3 python3-apt \
         docker.io \
     && rm -rf /var/lib/apt/lists/* \
     && systemctl mask docker.service containerd.service \
