@@ -5,7 +5,14 @@
 # right card with appliance/scripts/check-hybrid-gpu.sh, then set e.g.:
 # wlr_drm_devices: /dev/dri/card1
 
-# The laptop runs GNOME — enabling the kiosk requires clearing gdm's claim on
-# display-manager.service. Both gates stay false until spike day:
+# DAILY-DRIVER GUARANTEE: a plain converge leaves this a normal GNOME laptop.
+# All kiosk gates default false — cage is installed but never enabled, gdm is
+# never touched. The laptop becomes a kiosk ONLY with the explicit spike-day
+# flags below, and reverts with:
+#   sudo systemctl disable cage@tty1.service && sudo systemctl enable gdm3
 # kiosk_enable: true
 # kiosk_disable_gdm: true
+#
+# Not yet automated here: Docker Engine + the hub stack (hub/compose.yaml) —
+# manual for now (sudo apt install docker.io; cd hub && docker compose up -d);
+# becomes a 'hub' role in site.yml later.

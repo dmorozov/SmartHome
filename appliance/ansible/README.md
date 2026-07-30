@@ -7,6 +7,14 @@ container (see `../README.md` "Provisioning evolution"). The runbook
 (`../../docs/research/flutter-cage-spike.md`) keeps the manual recipe as
 reference documentation for what the role automates.
 
+## Target hosts
+
+| Host | Role | Behavior |
+|---|---|---|
+| `minipc` | Production Appliance (Ryzen AI, Ubuntu Server 24.04, no DE) | Boots straight into the kiosk — gated converge with `kiosk_enable=true` + `kiosk_hardening=true`. **No NPU-specific provisioning yet, deliberately**: the XDNA2 NPU has no viable Linux inference path in 2026 (NVR detector = Hailo-8L M.2, LLM = iGPU per `docs/research/frigate-amd-acceleration.md`); the HWE kernel task already ships the `amdxdna` driver, and an accelerator role gets added with the NVR/voice-LLM roadmap items. |
+| `laptop` | Development environment (AMD CPU + NVIDIA dGPU, Ubuntu Desktop 24.04) | **Daily-driver guarantee: a plain converge leaves it a normal GNOME laptop** — all kiosk gates default `false` (cage installed but never enabled, gdm untouched). Becomes a kiosk only with the explicit spike-day flags, reversible via `sudo systemctl disable cage@tty1.service && sudo systemctl enable gdm3`. Docker + the hub stack (`hub/compose.yaml`) are still manual — a `hub` role comes later. |
+| `test-appliance` | Playbook test bed (disposable Docker container, `../test/`) | Headless; tests all playbook logic over real SSH, excluding kernel/GPU/NPU specifics (`kiosk_hwe_kernel: false`) and anything needing a real seat (cage compositing, touch). Dispose/recreate with `../test/run.sh reset`. |
+
 ## Layout
 
 - `site.yml` — the one play: role `kiosk` against any Appliance

@@ -3,3 +3,10 @@
 #   kiosk_enable: true          # no gdm to fight on Server
 #   kiosk_hardening: true       # silent boot, no spare getty VTs
 #   kiosk_app: <Panel app bundle path once the Panel replaces the spike app>
+#
+# AI acceleration: nothing NPU-specific is provisioned yet, deliberately.
+# Research (docs/research/frigate-amd-acceleration.md): the XDNA2 NPU has no
+# viable Linux inference path in 2026 — the NVR detector will be a Hailo-8L
+# M.2 module, LLM inference likely iGPU (ROCm/Vulkan). The HWE kernel task
+# already brings the amdxdna driver (mainline >= 6.14); an accelerator role
+# gets added when the NVR / voice-LLM roadmap items land.
