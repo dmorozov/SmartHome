@@ -68,7 +68,7 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 ## Development topology (decided 2026-07-30)
 
 - **Primary dev box**: the AMD laptop, fresh Ubuntu 24.04 LTS + HWE kernel, GNOME for daily work (NVIDIA proprietary driver OK for the desktop). One machine does: Flutter UI dev natively (hot reload + Linux release builds), the Docker hub stack (HA, Mosquitto, Zigbee2MQTT, go2rtc) with real host networking + mDNS device discovery, and the cage spike (on the iGPU, separate TTY or DE stopped).
-- **macOS**: optional secondary for UI dev (`flutter run -d macos`); cannot build Linux bundles and Docker-on-macOS breaks multicast/mDNS (kills Ecobee HomeKit-controller pairing and TV discovery) — so the laptop hosts everything stateful.
+- **macOS**: optional secondary for UI dev (`flutter run -d macos`); cannot build Linux bundles and Docker-on-macOS breaks multicast/mDNS (kills Ecobee HomeKit-controller pairing and TV discovery) — so the laptop hosts everything stateful. **Exception (2026-07-31)**: `hub/dev/` runs Home Assistant alone on the Mac (arm64 image, same 2026.7 pin) with a generated stand-in fleet, so the Panel's `HubClient` can be developed against real HA protocol traffic without the appliance. Only discovery-dependent integrations need the Linux box.
 - **Migration**: the Docker stack moves unchanged from laptop to mini PC when it arrives.
 
 ## First implementation steps
@@ -84,3 +84,22 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 - UI Neumorphism links: <https://github.com/mrsaeeddev/awesome-neumorphism>, <https://pub.dev/packages/neumorphic> (Flutter)
 - Device fleet: Ring Video Doorbell, multiple Wyze cameras (some floodlight), Ecobee thermostat, smart outlets, Emporia Vue 3 energy monitor, Samsung SmartThings oven + TVs, Whisker Litter-Robot 5 Pro, Petlibro One RFID feeder, Granary Smart Camera Feeder, LG washer/dryer, Chamberlain myQ garage opener with camera, Tesla Wall Connector.
 - Hardware on hand: HDMI touchscreen; all devices on the same home network.
+
+## Home Assistant (development Hub)
+
+### First time initialization
+
+1. open http://localhost:8123, finish onboarding
+2. profile → Security → create a long-lived access token
+
+Onboarding: https://www.home-assistant.io/getting-started/onboarding/
+
+The token lives in `hub/dev/token` (gitignored) — **never in a tracked
+file**. The Panel reads it from there at build time; see
+[`hub/dev/README.md`](hub/dev/README.md).
+
+### Documentation
+
+Website: https://www.home-assistant.io/
+Documentation: https://www.home-assistant.io/installation/
+Live demo: https://demo.home-assistant.io/#/lovelace/home
