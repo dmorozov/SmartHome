@@ -5,29 +5,38 @@
 #       washer | dryer | litter-robot | feeder | garage-door | ev-charger |
 #       energy-monitor
 # connectivity: local | cloud
+# entity: the Hub entity this Device's state comes from. These currently
+#   point at the development Hub's generated stand-ins (hub/dev/) — replace
+#   each one with the real entity id as the hardware is integrated. Omit the
+#   line for a Device the Hub does not know about yet; it renders with
+#   unknown state.
 devices:
   # Garage
   - id: garage-door
     name: "Garage Door"
     kind: garage-door
+    entity: input_boolean.garage_door
     connectivity: cloud # ratgdo retrofit planned
     room: garage
     position: [3, 7.6]
   - id: ev-charger
     name: "Tesla Wall Connector"
     kind: ev-charger
+    entity: sensor.tesla_wall_connector
     connectivity: cloud
     room: garage
     position: [0.5, 5]
   - id: energy-monitor
     name: "Emporia Vue"
     kind: energy-monitor
+    entity: sensor.emporia_vue
     connectivity: cloud # ESPHome reflash planned
     room: garage
     position: [5.4, 2.6]
   - id: cam-garage
     name: "Garage Cam"
     kind: camera
+    entity: sensor.garage_cam
     connectivity: cloud
     room: garage
     position: [0.6, 2.6]
@@ -36,24 +45,28 @@ devices:
   - id: tv-family
     name: "Family Room TV"
     kind: tv
+    entity: input_boolean.tv_family
     connectivity: local
     room: family-room
     position: [9.5, 0.7]
   - id: light-family
     name: "Family Ceiling Light"
     kind: light
+    entity: input_boolean.light_family
     connectivity: local
     room: family-room
     position: [9.5, 3]
   - id: light-reading
     name: "Reading Lamp"
     kind: light
+    entity: input_boolean.light_reading
     connectivity: local
     room: family-room
     position: [6.7, 5.2]
   - id: outlet-media
     name: "Media Outlet"
     kind: outlet
+    entity: input_boolean.outlet_media
     connectivity: local
     room: family-room
     position: [12.4, 0.7]
@@ -62,24 +75,28 @@ devices:
   - id: oven
     name: "Oven"
     kind: oven
+    entity: sensor.oven
     connectivity: cloud
     room: kitchen
     position: [13.6, 0.7]
   - id: light-kitchen
     name: "Kitchen Light"
     kind: light
+    entity: input_boolean.light_kitchen
     connectivity: local
     room: kitchen
     position: [15, 3]
   - id: feeder-granary
     name: "Granary Feeder"
     kind: feeder
+    entity: sensor.granary_feeder
     connectivity: cloud
     room: kitchen
     position: [16.4, 5.4]
   - id: feeder-petlibro
     name: "Petlibro One"
     kind: feeder
+    entity: sensor.petlibro_one
     connectivity: cloud
     room: kitchen
     position: [13.6, 5.4]
@@ -88,18 +105,21 @@ devices:
   - id: tv-living
     name: "Living Room TV"
     kind: tv
+    entity: input_boolean.tv_living
     connectivity: local
     room: living-room
     position: [21.4, 3]
   - id: light-living
     name: "Living Room Light"
     kind: light
+    entity: input_boolean.light_living
     connectivity: local
     room: living-room
     position: [19.5, 3]
   - id: cam-living
     name: "Living Cam"
     kind: camera
+    entity: sensor.living_cam
     connectivity: cloud
     room: living-room
     position: [17.6, 0.6]
@@ -108,18 +128,21 @@ devices:
   - id: light-office
     name: "Office Light"
     kind: light
+    entity: input_boolean.light_office
     connectivity: local
     room: office
     position: [8.5, 8.5]
   - id: outlet-office
     name: "Desk Outlet"
     kind: outlet
+    entity: input_boolean.outlet_office
     connectivity: local
     room: office
     position: [6.6, 10.4]
   - id: cam-office
     name: "Office Cam"
     kind: camera
+    entity: sensor.office_cam
     connectivity: cloud
     room: office
     position: [10.4, 6.6]
@@ -128,18 +151,21 @@ devices:
   - id: doorbell
     name: "Ring Doorbell"
     kind: doorbell
+    entity: sensor.ring_doorbell
     connectivity: cloud
     room: hall
     position: [14, 10.6]
   - id: thermostat
     name: "Ecobee"
     kind: thermostat
+    entity: climate.ecobee
     connectivity: local # HomeKit-controller
     room: hall
     position: [11.5, 7]
   - id: light-hall
     name: "Hall Light"
     kind: light
+    entity: input_boolean.light_hall
     connectivity: local
     room: hall
     position: [14, 8.5]
@@ -148,18 +174,21 @@ devices:
   - id: light-guest-bath
     name: "Guest Bath Light"
     kind: light
+    entity: input_boolean.light_guest_bath
     connectivity: local
     room: guest-bathroom
     position: [18.2, 8.5]
   - id: washer
     name: "LG Washer"
     kind: washer
+    entity: sensor.lg_washer
     connectivity: cloud
     room: laundry
     position: [20.2, 10.3]
   - id: dryer
     name: "LG Dryer"
     kind: dryer
+    entity: sensor.lg_dryer
     connectivity: cloud
     room: laundry
     position: [21.4, 10.3]
@@ -168,54 +197,63 @@ devices:
   - id: light-master
     name: "Master Light"
     kind: light
+    entity: input_boolean.light_master
     connectivity: local
     room: master-bedroom
     position: [8.5, 3]
   - id: tv-master
     name: "Master TV"
     kind: tv
+    entity: input_boolean.tv_master
     connectivity: local
     room: master-bedroom
     position: [6.7, 3]
   - id: outlet-master
     name: "Bedside Outlet"
     kind: outlet
+    entity: input_boolean.outlet_master
     connectivity: local
     room: master-bedroom
     position: [10.4, 0.7]
   - id: light-master-bath
     name: "Master Bath Light"
     kind: light
+    entity: input_boolean.light_master_bath
     connectivity: local
     room: master-bathroom
     position: [12.5, 1.5]
   - id: light-bed2
     name: "Bedroom 2 Light"
     kind: light
+    entity: input_boolean.light_bed2
     connectivity: local
     room: bedroom-2
     position: [12.5, 5]
   - id: light-bed3
     name: "Bedroom 3 Light"
     kind: light
+    entity: input_boolean.light_bed3
     connectivity: local
     room: bedroom-3
     position: [12.5, 9]
   - id: light-kids-bath
     name: "Kids Bath Light"
     kind: light
+    entity: input_boolean.light_kids_bath
     connectivity: local
     room: kids-bathroom
     position: [7.2, 8.5]
   - id: light-landing
     name: "Landing Light"
     kind: light
+    entity: input_boolean.light_landing
     connectivity: local
     room: landing
     position: [9.7, 7.5]
   - id: litter-robot
     name: "Litter-Robot 5"
     kind: litter-robot
+    entity: sensor.litter_robot_5
     connectivity: cloud
     room: landing
     position: [9.7, 10.3]

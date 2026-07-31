@@ -14,10 +14,26 @@ House loadHouse({required String houseYaml, required String devicesYaml}) {
 
   final devicesByRoom = <String, List<Device>>{};
   final seenIds = <String>{};
+  final seenEntities = <String, String>{};
   for (final d in devicesDoc['devices'] as YamlList) {
     final id = d['id'] as String;
     if (!seenIds.add(id)) {
       throw FormatException('devices.yaml: duplicate device id "$id"');
+    }
+    final entityId = d['entity'] as String?;
+    if (entityId != null) {
+      if (!RegExp(r'^[a-z_]+\.[a-z0-9_]+$').hasMatch(entityId)) {
+        throw FormatException(
+            'devices.yaml: device "$id" has entity "$entityId", which is not '
+            'a Home Assistant entity id (domain.object_id)');
+      }
+      final clash = seenEntities[entityId];
+      if (clash != null) {
+        throw FormatException(
+            'devices.yaml: devices "$clash" and "$id" both bind to entity '
+            '"$entityId" — one entity, one Device.');
+      }
+      seenEntities[entityId] = id;
     }
     final device = Device(
       id: id,
@@ -31,6 +47,7 @@ House loadHouse({required String houseYaml, required String devicesYaml}) {
             '(local | cloud)'),
       },
       position: _point(d['position'], 'device "$id" position'),
+      entityId: entityId,
     );
     devicesByRoom.putIfAbsent(d['room'] as String, () => []).add(device);
   }

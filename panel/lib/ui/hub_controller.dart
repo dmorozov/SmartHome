@@ -11,7 +11,11 @@ import '../domain/house.dart';
 class HubController extends ChangeNotifier {
   HubController({required this.house, required HubClient hub}) : _hub = hub {
     _sub = hub.stateChanges.listen((_) => notifyListeners());
+    hub.connected.addListener(notifyListeners);
   }
+
+  /// Whether the Panel currently has the Hub.
+  bool get connected => _hub.connected.value;
 
   final House house;
   final HubClient _hub;
@@ -43,6 +47,7 @@ class HubController extends ChangeNotifier {
   @override
   void dispose() {
     _sub.cancel();
+    _hub.connected.removeListener(notifyListeners);
     _hub.dispose();
     super.dispose();
   }

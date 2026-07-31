@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
+
 import '../domain/device_state.dart';
 import '../domain/house.dart';
 import 'hub_client.dart';
@@ -18,6 +20,10 @@ class FakeHub implements HubClient {
       _driftTimer = Timer.periodic(driftEvery, (_) => _drift());
     }
   }
+
+  /// Always up: the fake Hub is in this process.
+  @override
+  final ValueNotifier<bool> connected = ValueNotifier(true);
 
   final _states = <String, DeviceState>{};
   final _changes = StreamController<DeviceState>.broadcast();
@@ -44,6 +50,7 @@ class FakeHub implements HubClient {
   void dispose() {
     _driftTimer?.cancel();
     _changes.close();
+    connected.dispose();
   }
 
   void _apply(DeviceState state) {

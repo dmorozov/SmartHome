@@ -1,0 +1,33 @@
+# Development Hub — Home Assistant alone, on the workstation.
+#
+# NOT the appliance stack. `../compose.yaml` is the real Hub (host
+# networking, Mosquitto, Zigbee2MQTT, go2rtc) and still belongs on the
+# Linux appliance. This one exists for a single purpose: giving the Panel a
+# real Home Assistant to develop its WebSocket `HubClient` against, on
+# whatever machine is at hand — including an Apple-silicon Mac, since the
+# HA image ships an arm64 variant.
+#
+# What it deliberately does NOT do:
+#   - No host networking, so no mDNS/multicast, so no HomeKit-controller
+#     pairing (Ecobee) and no Samsung TV discovery. Those need the Linux
+#     appliance; see ../README.md.
+#   - No Zigbee, no MQTT, no cameras. The entities here are generated
+#     helpers standing in for the real fleet (see README.md).
+#
+# Same image pin as the appliance stack — develop against the version we
+# actually ship.
+name: smarthome-dev-hub
+
+services:
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.7
+    # Distinct from the appliance stack's `homeassistant`, so both can exist
+    # on one machine without a name collision.
+    container_name: homeassistant-dev
+    environment:
+      TZ: ${TZ:-UTC}
+    ports:
+      - "8123:8123"
+    volumes:
+      - ./ha-config:/config
+    restart: unless-stopped

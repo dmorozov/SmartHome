@@ -103,12 +103,18 @@ class Device {
     required this.kind,
     required this.connectivity,
     required this.position,
+    this.entityId,
   });
 
   final String id;
   final String name;
   final DeviceKind kind;
   final Connectivity connectivity;
+
+  /// The Hub entity this Device's state comes from, e.g.
+  /// `light.hall_ceiling`. Null while a Device has no Hub counterpart yet —
+  /// it still renders, with unknown state.
+  final String? entityId;
 
   /// Plan-space position on the Floor (same space as Room.footprint), meters.
   final Offset position;

@@ -1,0 +1,9 @@
+# Home Assistant rewrites its config directory at runtime: .storage holds
+# credentials and the long-lived token, plus the database, logs and the
+# files onboarding generates. Track only what we author.
+ha-config/*
+!ha-config/configuration.yaml
+!ha-config/packages/
+
+# The Panel long-lived token. Never commit it.
+token

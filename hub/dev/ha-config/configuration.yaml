@@ -1,0 +1,25 @@
+# Development Hub config. Tracked in git — unlike the appliance's
+# ha-config/, which is all runtime state and secrets.
+homeassistant:
+  name: Dev Hub
+  # The Panel's stand-in fleet, generated from panel/assets/house/devices.yaml.
+  # Regenerate with: cd panel && dart run tool/gen_dev_entities.dart
+  packages: !include_dir_named packages
+
+# frontend (for onboarding + creating the long-lived token), api,
+# websocket_api, history — everything the Panel's HubClient talks to.
+default_config:
+
+# This Hub exists to develop the Panel's HubClient, so its traffic is the
+# interesting part: every connect, auth and command shows up in
+# `docker compose logs`.
+#
+# CAUTION: debug websocket logging writes the auth frame — long-lived token
+# and all — into home-assistant.log in plaintext. Fine here (development
+# Hub, gitignored config dir, localhost only); never turn this on for the
+# appliance. `docker compose logs` and the log file both hold it until you
+# wipe ha-config/ (see README.md).
+logger:
+  default: info
+  logs:
+    homeassistant.components.websocket_api: debug

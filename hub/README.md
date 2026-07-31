@@ -7,6 +7,11 @@ never its replacement (see `CONTEXT.md` and ADR-0002).
 
 Research backing every choice here: `docs/research/hub-and-device-integrations.md`.
 
+**Developing the Panel's `HubClient`?** You do not need this stack, or the
+appliance. `dev/` runs Home Assistant alone on your workstation (Mac
+included) with a generated stand-in for the device fleet — see
+[`dev/README.md`](dev/README.md).
+
 ## ⚠️ Dated risks (from the repo README — do not lose these)
 
 > **Before upgrading past HA 2026.8** — define an explicit `turn_on`

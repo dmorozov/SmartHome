@@ -25,14 +25,41 @@ codebase via the Flutter Web build. What exists:
 - Device pins with live readings (thermostat °C, Emporia watts); tapping a
   binary Device toggles it, cameras/doorbell open the Popup (go2rtc live view
   placeholder), everything else shows its state
-- `FakeHub` drives it all — seeded from the real device fleet, drifts readings
-  so the UI visibly lives
+- Two Hubs behind one interface: `FakeHub` (in-memory, seeded from the real
+  fleet, drifts readings so the UI visibly lives) and `HaHubClient` (the real
+  Home Assistant WebSocket API). Pick with `--dart-define=HUB=fake|ha`; the
+  header badge names the Hub and shows whether it is reachable
 
-Still to come: the real Home Assistant WebSocket `HubClient` (developed against
-the `../hub/` stack once it runs on the laptop), the real house drawing (the
-pipeline below is built; the shipped House Plan is a placeholder resembling
-it), the actual design system, and the spike-app migrations (multi-touch debug
-screen, fullscreen/cursor runner patches) once the spike passes.
+Still to come: the real house drawing (the pipeline below is built; the
+shipped House Plan is a placeholder resembling it), the actual design system,
+Popup controls beyond toggling (thermostat setpoint, camera streams), and the
+spike-app migrations (multi-touch debug screen, fullscreen/cursor runner
+patches) once the spike passes.
+
+## Talking to the Hub
+
+`HubClient` has two implementations; `lib/main.dart` picks one at build time.
+
+```sh
+flutter run -d chrome                       # FakeHub (default)
+flutter run -d chrome --dart-define=HUB=ha \
+  --dart-define=HA_URL=http://localhost:8123 \
+  --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
+```
+
+`HaHubClient` authenticates with a long-lived token, seeds from `get_states`,
+follows `state_changed`, and commands through `homeassistant.toggle` (which
+spans domains, so the Panel needs no per-domain knowledge). It reconnects
+forever with backoff — a wall display has to recover from a Hub restart with
+nobody there to press anything.
+
+Each Device names its Hub entity in `devices.yaml` (`entity:`); how that
+entity is read depends on the **Device's kind**, not the entity's domain, so a
+washer behind a `sensor.*` and one behind a vendor integration both fold into
+a `StatusState`. Devices without an `entity:` render with unknown state.
+
+Run a Home Assistant to develop against — on this Mac, no appliance needed:
+[`../hub/dev/README.md`](../hub/dev/README.md).
 
 ## House Plan pipeline (ADR-0004)
 

@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/fake_hub.dart';
+import 'data/ha_hub.dart';
 import 'data/house_loader.dart';
+import 'data/hub_client.dart';
+import 'domain/house.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
@@ -15,8 +18,33 @@ Future<void> main() async {
     devicesYaml: await rootBundle.loadString('assets/house/devices.yaml'),
   );
   runApp(PanelApp(
-    controller: HubController(house: house, hub: FakeHub(house)),
+    controller: HubController(house: house, hub: _hub(house)),
   ));
+}
+
+/// Which Hub the build talks to. Defaults to the in-memory [FakeHub]; pass
+/// `--dart-define=HUB=ha` (plus `HA_URL` and `HA_TOKEN`) for a real Home
+/// Assistant — see hub/dev/README.md.
+const _hubKind = String.fromEnvironment('HUB', defaultValue: 'fake');
+
+HubClient _hub(House house) {
+  const which = _hubKind;
+  if (which == 'fake') return FakeHub(house);
+  if (which != 'ha') {
+    throw ArgumentError('unknown HUB "$which" (fake | ha)');
+  }
+  const url = String.fromEnvironment('HA_URL',
+      defaultValue: 'http://localhost:8123');
+  const token = String.fromEnvironment('HA_TOKEN');
+  if (token.isEmpty) {
+    throw ArgumentError('HUB=ha needs --dart-define=HA_TOKEN=<long-lived '
+        'token>; keep it out of the repo (hub/dev/token)');
+  }
+  return HaHubClient(
+    house: house,
+    url: HaHubClient.webSocketUrl(url),
+    token: token,
+  );
 }
 
 class PanelApp extends StatelessWidget {
@@ -48,22 +76,11 @@ class PanelApp extends StatelessWidget {
                       ),
                     ),
                     const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: PanelTheme.surfaceRaised,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: PanelTheme.raised(8),
-                      ),
-                      child: const Text(
-                        'FAKE HUB',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1,
-                          color: PanelTheme.inkFaint,
-                        ),
+                    ListenableBuilder(
+                      listenable: controller,
+                      builder: (context, _) => _HubBadge(
+                        label: _hubKind == 'fake' ? 'FAKE HUB' : 'HUB',
+                        connected: controller.connected,
                       ),
                     ),
                   ],
@@ -85,6 +102,53 @@ class PanelApp extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Hub reachability, always visible: a wall display has nobody watching a
+/// console, so "these readings are frozen" must be legible from across the
+/// room.
+class _HubBadge extends StatelessWidget {
+  const _HubBadge({required this.label, required this.connected});
+
+  final String label;
+  final bool connected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: PanelTheme.surfaceRaised,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: PanelTheme.raised(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: connected
+                  ? const Color(0xFF4CAF50)
+                  : const Color(0xFFE05A5A),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            connected ? label : '$label OFFLINE',
+            style: const TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.1,
+              color: PanelTheme.inkFaint,
+            ),
+          ),
+        ],
       ),
     );
   }
