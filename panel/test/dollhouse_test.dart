@@ -29,11 +29,13 @@ void main() {
     final (controller, _) = makeController();
     await tester.pumpWidget(PanelApp(controller: controller));
 
-    // Collapsed floors are scaled toward their top-center, so tap inside
-    // the scaled slab rather than the full-size widget's center.
+    // The rect is the unscaled box; a neighbour is drawn at 0.32 about its
+    // top centre, so the box centre maps to 0.16 of the height. Only the
+    // slab itself takes taps — the rest of the box belongs to whichever
+    // Floor is behind it.
     final rect =
         tester.getRect(find.byKey(const ValueKey('floor-upstairs')));
-    await tester.tapAt(rect.topCenter + Offset(0, rect.height * 0.2));
+    await tester.tapAt(rect.topCenter + Offset(0, rect.height * 0.16));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.pets), findsOneWidget);

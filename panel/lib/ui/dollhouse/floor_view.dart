@@ -43,7 +43,10 @@ class FloorView extends StatelessWidget {
         clipBehavior: Clip.none,
         children: [
           GestureDetector(
-            behavior: HitTestBehavior.opaque,
+            // Defer to the painter's hit test: Floors overlap each other's
+            // bounding boxes (a neighbour sits in the selected Floor's empty
+            // isometric corner), so only the slab itself may take a tap.
+            behavior: HitTestBehavior.deferToChild,
             onTapUp: expanded ? (d) => _handleTap(d.localPosition) : null,
             child: CustomPaint(
               size: Size(size.width, size.height + wallDepth),
@@ -304,6 +307,20 @@ class _FloorPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     )..layout();
     tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
+  }
+
+  /// Only the slab (and the plinth extruded below it) belongs to this
+  /// Floor; a tap anywhere else in the box falls through to whatever sits
+  /// behind — normally the neighbouring Floor tucked into the corner.
+  @override
+  bool hitTest(Offset position) {
+    for (final offset in const [Offset.zero, Offset(0, -FloorView.wallDepth)]) {
+      final plan = projection.unproject(position + offset);
+      for (final room in floor.rooms) {
+        if (room.contains(plan)) return true;
+      }
+    }
+    return false;
   }
 
   @override

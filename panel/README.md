@@ -11,7 +11,13 @@ codebase via the Flutter Web build. What exists:
 
 - Stacked isometric Floors with full-height translucent "glass" walls
   (winner of the walls prototype — variants preserved on the
-  `prototype/dollhouse-walls` branch), tap a collapsed Floor to expand it
+  `prototype/dollhouse-walls` branch)
+- At most three Floors on stage: the selected one at full size, its
+  immediate neighbours shrunk and tucked into the empty isometric corners
+  (the Floor above up and to the right, the one below down and to the
+  left). Tap a neighbour to select it and the next Floor along slides in;
+  only the slab takes taps, so the overlapping boxes don't steal from each
+  other. Winner of the floor-drift prototype
 - Rooms are rectilinear polygons tiling each Floor; a Floor's slab is the
   union of its Rooms (partial upper floors and the protruding garage just
   work); Walls are data — an undrawn boundary renders as an open passage
