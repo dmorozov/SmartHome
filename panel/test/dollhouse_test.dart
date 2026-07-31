@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:panel/data/demo_house.dart';
 import 'package:panel/data/fake_hub.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 
+import 'test_house.dart';
+
 void main() {
   (HubController, FakeHub) makeController() {
-    final house = demoHouse();
+    final house = loadTestHouse();
     final hub = FakeHub(house, driftEvery: Duration.zero);
     return (HubController(house: house, hub: hub), hub);
   }
@@ -20,8 +21,8 @@ void main() {
     expect(find.text('Demo House'), findsOneWidget);
     // Ground-floor pins are live (the doorbell lives in the hall)…
     expect(find.byIcon(Icons.doorbell), findsOneWidget);
-    // …while collapsed upstairs shows no pins.
-    expect(find.byIcon(Icons.local_laundry_service), findsNothing);
+    // …while collapsed upstairs shows no pins (litter robot: landing).
+    expect(find.byIcon(Icons.pets), findsNothing);
   });
 
   testWidgets('tapping a collapsed floor expands it', (tester) async {
@@ -35,7 +36,7 @@ void main() {
     await tester.tapAt(rect.topCenter + Offset(0, rect.height * 0.2));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.local_laundry_service), findsOneWidget);
+    expect(find.byIcon(Icons.pets), findsOneWidget);
     expect(find.byIcon(Icons.doorbell), findsNothing);
   });
 

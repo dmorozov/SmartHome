@@ -16,13 +16,14 @@ class House {
 }
 
 /// One level of the house in the Dollhouse. Floors stack; tapping one
-/// expands it.
+/// expands it. A Floor need not span the whole house footprint.
 class Floor {
   const Floor({
     required this.id,
     required this.name,
     required this.level,
     required this.rooms,
+    this.walls = const [],
   });
 
   final String id;
@@ -32,10 +33,25 @@ class Floor {
   final int level;
   final List<Room> rooms;
 
+  /// Drawn Walls only — an undrawn room boundary is an open passage
+  /// (ADR-0004).
+  final List<Wall> walls;
+
   Iterable<Device> get devices => rooms.expand((r) => r.devices);
 }
 
-/// A named area on a Floor. Rooms display aggregate state (lit) and hold
+/// A Wall segment on a Floor, meters in plan space. Axis-aligned.
+class Wall {
+  const Wall(this.a, this.b);
+
+  final Offset a;
+  final Offset b;
+
+  bool get horizontal => a.dy == b.dy;
+}
+
+/// A named area on a Floor. Rooms tile their Floor completely — every point
+/// belongs to exactly one Room. Rooms display aggregate state (lit) and hold
 /// pinned Devices; tapping a Room acts on it (toggles its lights).
 class Room {
   const Room({
@@ -48,9 +64,35 @@ class Room {
   final String id;
   final String name;
 
-  /// Plan-space rectangle on the Floor, in meters.
-  final Rect footprint;
+  /// Rectilinear polygon on the Floor, in meters (right angles only).
+  final List<Offset> footprint;
   final List<Device> devices;
+
+  Rect get bounds {
+    var minX = footprint.first.dx, maxX = minX;
+    var minY = footprint.first.dy, maxY = minY;
+    for (final p in footprint) {
+      if (p.dx < minX) minX = p.dx;
+      if (p.dx > maxX) maxX = p.dx;
+      if (p.dy < minY) minY = p.dy;
+      if (p.dy > maxY) maxY = p.dy;
+    }
+    return Rect.fromLTRB(minX, minY, maxX, maxY);
+  }
+
+  /// Even-odd point-in-polygon test in plan space.
+  bool contains(Offset p) {
+    var inside = false;
+    for (var i = 0; i < footprint.length; i++) {
+      final a = footprint[i];
+      final b = footprint[(i + 1) % footprint.length];
+      if ((a.dy > p.dy) != (b.dy > p.dy)) {
+        final xt = a.dx + (p.dy - a.dy) * (b.dx - a.dx) / (b.dy - a.dy);
+        if (p.dx < xt) inside = !inside;
+      }
+    }
+    return inside;
+  }
 }
 
 /// A controllable or observable thing in the house, pinned to a Room.

@@ -40,11 +40,6 @@ class IsoProjection {
     return Offset((sx + 2 * sy) / (2 * scale), (2 * sy - sx) / (2 * scale));
   }
 
-  Path projectRect(Rect rect) => Path()
-    ..addPolygon([
-      project(rect.topLeft),
-      project(rect.topRight),
-      project(rect.bottomRight),
-      project(rect.bottomLeft),
-    ], true);
+  Path projectPolygon(List<Offset> plan) =>
+      Path()..addPolygon([for (final p in plan) project(p)], true);
 }

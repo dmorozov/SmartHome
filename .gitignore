@@ -22,3 +22,6 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Sweet Home 3D binary fixtures (large; re-download from sweethome3d.com gallery)
+panel/tool/fixtures/*.sh3d

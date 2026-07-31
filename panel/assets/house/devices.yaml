@@ -1,0 +1,221 @@
+# Hand-maintained Device declarations (ADR-0004) — the converter NEVER
+# touches this file. Each device references a room id from house.yaml
+# (slugified room name); position is meters from the house NW corner.
+# kind: light | outlet | thermostat | camera | doorbell | oven | tv |
+#       washer | dryer | litter-robot | feeder | garage-door | ev-charger |
+#       energy-monitor
+# connectivity: local | cloud
+devices:
+  # Garage
+  - id: garage-door
+    name: "Garage Door"
+    kind: garage-door
+    connectivity: cloud # ratgdo retrofit planned
+    room: garage
+    position: [3, 7.6]
+  - id: ev-charger
+    name: "Tesla Wall Connector"
+    kind: ev-charger
+    connectivity: cloud
+    room: garage
+    position: [0.5, 5]
+  - id: energy-monitor
+    name: "Emporia Vue"
+    kind: energy-monitor
+    connectivity: cloud # ESPHome reflash planned
+    room: garage
+    position: [5.4, 2.6]
+  - id: cam-garage
+    name: "Garage Cam"
+    kind: camera
+    connectivity: cloud
+    room: garage
+    position: [0.6, 2.6]
+
+  # Family Room
+  - id: tv-family
+    name: "Family Room TV"
+    kind: tv
+    connectivity: local
+    room: family-room
+    position: [9.5, 0.7]
+  - id: light-family
+    name: "Family Ceiling Light"
+    kind: light
+    connectivity: local
+    room: family-room
+    position: [9.5, 3]
+  - id: light-reading
+    name: "Reading Lamp"
+    kind: light
+    connectivity: local
+    room: family-room
+    position: [6.7, 5.2]
+  - id: outlet-media
+    name: "Media Outlet"
+    kind: outlet
+    connectivity: local
+    room: family-room
+    position: [12.4, 0.7]
+
+  # Kitchen
+  - id: oven
+    name: "Oven"
+    kind: oven
+    connectivity: cloud
+    room: kitchen
+    position: [13.6, 0.7]
+  - id: light-kitchen
+    name: "Kitchen Light"
+    kind: light
+    connectivity: local
+    room: kitchen
+    position: [15, 3]
+  - id: feeder-granary
+    name: "Granary Feeder"
+    kind: feeder
+    connectivity: cloud
+    room: kitchen
+    position: [16.4, 5.4]
+  - id: feeder-petlibro
+    name: "Petlibro One"
+    kind: feeder
+    connectivity: cloud
+    room: kitchen
+    position: [13.6, 5.4]
+
+  # Living Room
+  - id: tv-living
+    name: "Living Room TV"
+    kind: tv
+    connectivity: local
+    room: living-room
+    position: [21.4, 3]
+  - id: light-living
+    name: "Living Room Light"
+    kind: light
+    connectivity: local
+    room: living-room
+    position: [19.5, 3]
+  - id: cam-living
+    name: "Living Cam"
+    kind: camera
+    connectivity: cloud
+    room: living-room
+    position: [17.6, 0.6]
+
+  # Office
+  - id: light-office
+    name: "Office Light"
+    kind: light
+    connectivity: local
+    room: office
+    position: [8.5, 8.5]
+  - id: outlet-office
+    name: "Desk Outlet"
+    kind: outlet
+    connectivity: local
+    room: office
+    position: [6.6, 10.4]
+  - id: cam-office
+    name: "Office Cam"
+    kind: camera
+    connectivity: cloud
+    room: office
+    position: [10.4, 6.6]
+
+  # Hall (front door south side)
+  - id: doorbell
+    name: "Ring Doorbell"
+    kind: doorbell
+    connectivity: cloud
+    room: hall
+    position: [14, 10.6]
+  - id: thermostat
+    name: "Ecobee"
+    kind: thermostat
+    connectivity: local # HomeKit-controller
+    room: hall
+    position: [11.5, 7]
+  - id: light-hall
+    name: "Hall Light"
+    kind: light
+    connectivity: local
+    room: hall
+    position: [14, 8.5]
+
+  # Guest Bathroom / Laundry
+  - id: light-guest-bath
+    name: "Guest Bath Light"
+    kind: light
+    connectivity: local
+    room: guest-bathroom
+    position: [18.2, 8.5]
+  - id: washer
+    name: "LG Washer"
+    kind: washer
+    connectivity: cloud
+    room: laundry
+    position: [20.2, 10.3]
+  - id: dryer
+    name: "LG Dryer"
+    kind: dryer
+    connectivity: cloud
+    room: laundry
+    position: [21.4, 10.3]
+
+  # Upstairs
+  - id: light-master
+    name: "Master Light"
+    kind: light
+    connectivity: local
+    room: master-bedroom
+    position: [8.5, 3]
+  - id: tv-master
+    name: "Master TV"
+    kind: tv
+    connectivity: local
+    room: master-bedroom
+    position: [6.7, 3]
+  - id: outlet-master
+    name: "Bedside Outlet"
+    kind: outlet
+    connectivity: local
+    room: master-bedroom
+    position: [10.4, 0.7]
+  - id: light-master-bath
+    name: "Master Bath Light"
+    kind: light
+    connectivity: local
+    room: master-bathroom
+    position: [12.5, 1.5]
+  - id: light-bed2
+    name: "Bedroom 2 Light"
+    kind: light
+    connectivity: local
+    room: bedroom-2
+    position: [12.5, 5]
+  - id: light-bed3
+    name: "Bedroom 3 Light"
+    kind: light
+    connectivity: local
+    room: bedroom-3
+    position: [12.5, 9]
+  - id: light-kids-bath
+    name: "Kids Bath Light"
+    kind: light
+    connectivity: local
+    room: kids-bathroom
+    position: [7.2, 8.5]
+  - id: light-landing
+    name: "Landing Light"
+    kind: light
+    connectivity: local
+    room: landing
+    position: [9.7, 7.5]
+  - id: litter-robot
+    name: "Litter-Robot 5"
+    kind: litter-robot
+    connectivity: cloud
+    room: landing
+    position: [9.7, 10.3]

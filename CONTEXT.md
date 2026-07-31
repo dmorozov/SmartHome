@@ -20,13 +20,21 @@ _Avoid_: server, backend, HA (in domain discussion)
 The Panel's main view — the house as stacked 2.5D isometric Floors with tappable Rooms.
 _Avoid_: floor plan, map, 3D view
 
+**House Plan**:
+The Panel-side description of the house's geometry — Floors with their Rooms and Walls, authored by the family. The Dollhouse renders it; the Hub never sees it.
+_Avoid_: blueprint (that is the paper source it may be drawn from), map, layout
+
 **Floor**:
-One level of the house in the Dollhouse (e.g. basement, first floor). Floors stack; tapping one expands it.
+One level of the house in the Dollhouse (e.g. basement, first floor). Floors stack; tapping one expands it. A Floor need not span the whole house footprint (e.g. an upper floor over half the house).
 _Avoid_: level, story
 
 **Room**:
-A named area on a Floor. Rooms display aggregate state (lit, occupied) and hold pinned Devices. Tapping a Room acts on it (e.g. toggles its lights).
+A named area on a Floor. Rooms tile their Floor completely — every point belongs to exactly one Room (halls, stairs and the garage are Rooms too; there is no "outside the perimeter"). Rooms display aggregate state (lit, occupied) and hold pinned Devices. Tapping a Room acts on it (e.g. toggles its lights).
 _Avoid_: area, zone
+
+**Wall**:
+A boundary segment drawn on the House Plan. Only drawn Walls exist: where none is drawn, the boundary is an open passage. Doorways within a Wall are not modeled.
+_Avoid_: opening (an opening is just the absence of a Wall), partition
 
 **Device**:
 A controllable or observable thing in the house (light, camera, thermostat, feeder…), pinned to a Room in the Dollhouse.

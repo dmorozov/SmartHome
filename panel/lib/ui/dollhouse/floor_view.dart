@@ -5,6 +5,7 @@ import '../../domain/house.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
 import 'iso.dart';
+import 'plan_geometry.dart';
 
 /// One Floor as an isometric slab: rooms behind full-height translucent
 /// "glass" walls, warm glow on lit Rooms, and — when [expanded] — room
@@ -95,7 +96,7 @@ class FloorView extends StatelessWidget {
   void _handleTap(Offset local) {
     final plan = projection.unproject(local);
     for (final room in floor.rooms) {
-      if (room.footprint.contains(plan)) {
+      if (room.contains(plan)) {
         onRoomTap?.call(room);
         return;
       }
@@ -170,23 +171,34 @@ class _FloorPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final plan = Offset.zero & projection.planSize;
-    final slab = projection.projectRect(plan);
     const depth = Offset(0, FloorView.wallDepth);
 
-    final left = projection.project(plan.bottomLeft);
-    final bottom = projection.project(plan.bottomRight);
-    final right = projection.project(plan.topRight);
+    // Rooms tile the Floor, so the slab is the union of their footprints —
+    // there is no house-perimeter concept (partial upper floors and the
+    // protruding garage just work).
+    Path? slab;
+    for (final room in floor.rooms) {
+      final path = projection.projectPolygon(room.footprint);
+      slab = slab == null ? path : Path.combine(PathOperation.union, slab, path);
+    }
+    if (slab == null) return;
 
     canvas.drawShadow(
         slab.shift(depth), const Color(0xFF7A849C), 6, false);
 
-    Path face(Offset a, Offset b) =>
-        Path()..addPolygon([a, b, b + depth, a + depth], true);
-    canvas.drawPath(
-        face(left, bottom), Paint()..color = const Color(0xFFCBD2E0));
-    canvas.drawPath(
-        face(bottom, right), Paint()..color = const Color(0xFFBFC7D8));
+    // Plinth: extrude the viewer-facing outline edges (south + east).
+    for (final seg in outlineSegments(floor.rooms)) {
+      if (!seg.outwardPositive) continue;
+      final a = projection.project(seg.a);
+      final b = projection.project(seg.b);
+      canvas.drawPath(
+        Path()..addPolygon([a, b, b + depth, a + depth], true),
+        Paint()
+          ..color = seg.horizontal
+              ? const Color(0xFFCBD2E0)
+              : const Color(0xFFBFC7D8),
+      );
+    }
 
     canvas.drawPath(slab, Paint()..color = PanelTheme.surfaceRaised);
 
@@ -196,10 +208,10 @@ class _FloorPainter extends CustomPainter {
       ..color = PanelTheme.inkFaint.withValues(alpha: .55);
 
     for (final room in floor.rooms) {
-      final path = projection.projectRect(room.footprint);
+      final path = projection.projectPolygon(room.footprint);
       if (litRooms.contains(room.id)) {
-        final center = projection.project(room.footprint.center);
-        final radius = room.footprint.longestSide * projection.scale;
+        final center = projection.project(room.bounds.center);
+        final radius = room.bounds.longestSide * projection.scale;
         canvas.save();
         canvas.clipPath(path);
         canvas.drawPath(
@@ -230,28 +242,36 @@ class _FloorPainter extends CustomPainter {
       for (final room in floor.rooms) {
         // Above the room center — ceiling lights tend to sit exactly there.
         _label(canvas, room.name,
-            projection.project(room.footprint.center) - const Offset(0, 24));
+            projection.project(room.bounds.center) - const Offset(0, 24));
       }
     }
   }
 
-  /// Full-height translucent walls on every room boundary — the "glass
-  /// house" look (walls-prototype verdict; the other candidates live on the
-  /// prototype/dollhouse-walls branch).
+  /// Full-height translucent "glass" walls (walls-prototype verdict; other
+  /// candidates live on the prototype/dollhouse-walls branch). Drawn from
+  /// the Floor's Wall data as-is: an undrawn boundary is an open passage
+  /// (ADR-0004).
   static const _wallHeightM = 1.5;
 
   void _paintGlassWalls(Canvas canvas) {
-    for (final seg in _wallSegments(floor, projection.planSize)) {
-      final pa = projection.project(seg.a);
-      final pb = projection.project(seg.b);
+    // Painter's algorithm: back-to-front by plan depth.
+    final walls = [...floor.walls]..sort((w1, w2) =>
+        (w1.a.dx + w1.a.dy + w1.b.dx + w1.b.dy)
+            .compareTo(w2.a.dx + w2.a.dy + w2.b.dx + w2.b.dy));
+    for (final wall in walls) {
+      final pa = projection.project(wall.a);
+      final pb = projection.project(wall.b);
       final up = Offset(0, -_wallHeightM * projection.scale);
       final quad = Path()
         ..addPolygon([pa, pb, pb + up, pa + up], true);
       // x-running walls face the viewer, y-running walls sit in shade; the
-      // two viewer-far exterior walls are more opaque so the shell reads.
+      // viewer-far exterior walls (outside to the north/west) are more
+      // opaque so the shell reads.
       final face =
-          seg.horizontal ? const Color(0xFFE2E7F0) : const Color(0xFFC7CFE0);
-      final alpha = seg.backExterior ? .5 : .26;
+          wall.horizontal ? const Color(0xFFE2E7F0) : const Color(0xFFC7CFE0);
+      final backExterior =
+          wallOutsideSide(floor.rooms, wall.a, wall.b) == -1;
+      final alpha = backExterior ? .5 : .26;
       canvas.drawPath(quad, Paint()..color = face.withValues(alpha: alpha));
       canvas.drawPath(
         quad,
@@ -295,42 +315,3 @@ class _FloorPainter extends CustomPainter {
       oldDelegate.projection.scale != projection.scale;
 }
 
-class _WallSeg {
-  const _WallSeg(this.a, this.b,
-      {required this.horizontal, required this.backExterior});
-
-  final Offset a;
-  final Offset b;
-  final bool horizontal;
-
-  /// One of the two viewer-far exterior walls (north y = 0, west x = 0).
-  final bool backExterior;
-}
-
-/// Room-boundary segments, deduplicated (rooms tile, so shared boundaries
-/// come out identical) and sorted back-to-front for the painter.
-List<_WallSeg> _wallSegments(Floor floor, Size plan) {
-  final seen = <String>{};
-  final segs = <_WallSeg>[];
-  for (final room in floor.rooms) {
-    final r = room.footprint;
-    void add(Offset a, Offset b) {
-      if (!seen.add('${a.dx},${a.dy}-${b.dx},${b.dy}')) return;
-      final horizontal = a.dy == b.dy;
-      segs.add(_WallSeg(
-        a,
-        b,
-        horizontal: horizontal,
-        backExterior: horizontal ? a.dy == 0 : a.dx == 0,
-      ));
-    }
-
-    add(r.topLeft, r.topRight);
-    add(r.bottomLeft, r.bottomRight);
-    add(r.topLeft, r.bottomLeft);
-    add(r.topRight, r.bottomRight);
-  }
-  double depth(_WallSeg s) => s.a.dx + s.a.dy + s.b.dx + s.b.dy;
-  segs.sort((s1, s2) => depth(s1).compareTo(depth(s2)));
-  return segs;
-}

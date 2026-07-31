@@ -1,0 +1,90 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!-- Hand-crafted placeholder resembling the real house (2 levels, ~2840 sqft:
+     garage attached west, family/living/kitchen/office/full bath downstairs,
+     3 bedrooms + 2 baths + landing upstairs over roughly half the footprint).
+     Units are centimeters, the format Sweet Home 3D writes in Home.xml.
+     Regenerate panel/assets/house/house.yaml with the converter (exact
+     command in panel/README.md).
+     Replaced by the real drawing when it lands (ADR-0004). -->
+<home version="7400" name="Placeholder House" wallHeight="250.0">
+  <level id="level0" name="Ground Floor" elevation="0.0" floorThickness="12.0" height="250.0" elevationIndex="0"/>
+  <level id="level1" name="Upstairs" elevation="262.0" floorThickness="12.0" height="250.0" elevationIndex="0"/>
+
+  <!-- Ground floor: main block x 600..2200, y 0..1100; garage sticks out west -->
+  <room id="r-garage" level="level0" name="Garage">
+    <point x="0" y="200"/><point x="600" y="200"/><point x="600" y="800"/><point x="0" y="800"/>
+  </room>
+  <room id="r-family" level="level0" name="Family Room">
+    <point x="600" y="0"/><point x="1300" y="0"/><point x="1300" y="600"/><point x="600" y="600"/>
+  </room>
+  <room id="r-kitchen" level="level0" name="Kitchen">
+    <point x="1300.2" y="0"/><point x="1700" y="0"/><point x="1700" y="600"/><point x="1300" y="600"/>
+  </room>
+  <room id="r-living" level="level0" name="Living Room">
+    <point x="1700" y="0"/><point x="2200" y="0"/><point x="2200" y="600"/><point x="1700" y="600"/>
+  </room>
+  <room id="r-office" level="level0" name="Office">
+    <point x="600" y="600"/><point x="1100" y="600"/><point x="1100" y="1100"/><point x="600" y="1100"/>
+  </room>
+  <room id="r-hall" level="level0" name="Hall">
+    <point x="1100" y="600"/><point x="1700" y="600"/><point x="1700" y="1100"/><point x="1100" y="1100"/>
+  </room>
+  <room id="r-gbath" level="level0" name="Guest Bathroom">
+    <point x="1700" y="600"/><point x="1950" y="600"/><point x="1950" y="1100"/><point x="1700" y="1100"/>
+  </room>
+  <room id="r-laundry" level="level0" name="Laundry">
+    <point x="1950" y="600"/><point x="2200" y="600"/><point x="2200" y="1100"/><point x="1950" y="1100"/>
+  </room>
+
+  <!-- Ground exterior shell -->
+  <wall id="w1" level="level0" xStart="600" yStart="0" xEnd="2200" yEnd="0" height="250" thickness="10"/>
+  <wall id="w2" level="level0" xStart="2200" yStart="0" xEnd="2200" yEnd="1100" height="250" thickness="10"/>
+  <wall id="w3" level="level0" xStart="600" yStart="1100" xEnd="2200" yEnd="1100" height="250" thickness="10"/>
+  <wall id="w4" level="level0" xStart="600" yStart="0" xEnd="600" yEnd="200" height="250" thickness="10"/>
+  <wall id="w5" level="level0" xStart="600" yStart="800" xEnd="600" yEnd="1100" height="250" thickness="10"/>
+  <wall id="w6" level="level0" xStart="0" yStart="200" xEnd="600" yEnd="200" height="250" thickness="10"/>
+  <wall id="w7" level="level0" xStart="0" yStart="200" xEnd="0" yEnd="800" height="250" thickness="10"/>
+  <wall id="w8" level="level0" xStart="0" yStart="800" xEnd="600" yEnd="800" height="250" thickness="10"/>
+  <!-- Ground interior: garage wall, then partitions; family↔kitchen and
+       family↔hall have NO wall (open passages); kitchen↔living is partial -->
+  <wall id="w9" level="level0" xStart="600" yStart="200" xEnd="600" yEnd="800" height="250" thickness="10"/>
+  <wall id="w10" level="level0" xStart="1700" yStart="0" xEnd="1700" yEnd="200" height="250" thickness="8"/>
+  <wall id="w11" level="level0" xStart="1700" yStart="400" xEnd="1700" yEnd="600" height="250" thickness="8"/>
+  <wall id="w12" level="level0" xStart="600" yStart="600" xEnd="1100" yEnd="600" height="250" thickness="8"/>
+  <wall id="w13" level="level0" xStart="1300" yStart="600" xEnd="1700" yEnd="600" height="250" thickness="8"/>
+  <wall id="w14" level="level0" xStart="1700" yStart="600" xEnd="1950" yEnd="600" height="250" thickness="8"/>
+  <wall id="w15" level="level0" xStart="1950" yStart="600" xEnd="2200" yEnd="600" height="250" thickness="8"/>
+  <wall id="w16" level="level0" xStart="1100" yStart="600" xEnd="1100" yEnd="900" height="250" thickness="8"/>
+  <wall id="w17" level="level0" xStart="1700" yStart="600" xEnd="1700" yEnd="1100" height="250" thickness="8"/>
+  <wall id="w18" level="level0" xStart="1950" yStart="600" xEnd="1950" yEnd="1100" height="250" thickness="8"/>
+
+  <!-- Upstairs: half footprint, x 600..1400, y 0..1100 -->
+  <room id="r-master" level="level1" name="Master Bedroom">
+    <point x="600" y="0"/><point x="1100" y="0"/><point x="1100" y="600"/><point x="600" y="600"/>
+  </room>
+  <room id="r-mbath" level="level1" name="Master Bathroom">
+    <point x="1100" y="0"/><point x="1400" y="0"/><point x="1400" y="300"/><point x="1100" y="300"/>
+  </room>
+  <room id="r-bed2" level="level1" name="Bedroom 2">
+    <point x="1100" y="300"/><point x="1400" y="300"/><point x="1400" y="700"/><point x="1100" y="700"/>
+  </room>
+  <room id="r-bed3" level="level1" name="Bedroom 3">
+    <point x="1100" y="700"/><point x="1400" y="700"/><point x="1400" y="1100"/><point x="1100" y="1100"/>
+  </room>
+  <room id="r-kbath" level="level1" name="Kids Bathroom">
+    <point x="600" y="600"/><point x="850" y="600"/><point x="850" y="1100"/><point x="600" y="1100"/>
+  </room>
+  <room id="r-landing" level="level1" name="Landing">
+    <point x="850" y="600"/><point x="1100" y="600"/><point x="1100" y="1100"/><point x="850" y="1100"/>
+  </room>
+
+  <wall id="u1" level="level1" xStart="600" yStart="0" xEnd="1400" yEnd="0" height="250" thickness="10"/>
+  <wall id="u2" level="level1" xStart="1400" yStart="0" xEnd="1400" yEnd="1100" height="250" thickness="10"/>
+  <wall id="u3" level="level1" xStart="600" yStart="1100" xEnd="1400" yEnd="1100" height="250" thickness="10"/>
+  <wall id="u4" level="level1" xStart="600" yStart="0" xEnd="600" yEnd="1100" height="250" thickness="10"/>
+  <wall id="u5" level="level1" xStart="1100" yStart="0" xEnd="1100" yEnd="1100" height="250" thickness="8"/>
+  <wall id="u6" level="level1" xStart="1100" yStart="300" xEnd="1400" yEnd="300" height="250" thickness="8"/>
+  <wall id="u7" level="level1" xStart="1100" yStart="700" xEnd="1400" yEnd="700" height="250" thickness="8"/>
+  <wall id="u8" level="level1" xStart="600" yStart="600" xEnd="1100" yEnd="600" height="250" thickness="8"/>
+  <wall id="u9" level="level1" xStart="850" yStart="600" xEnd="850" yEnd="1100" height="250" thickness="8"/>
+</home>

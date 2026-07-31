@@ -115,8 +115,8 @@ class _DollhouseViewState extends State<DollhouseView> {
     var w = 0.0, d = 0.0;
     for (final floor in house.floors) {
       for (final room in floor.rooms) {
-        w = math.max(w, room.footprint.right);
-        d = math.max(d, room.footprint.bottom);
+        w = math.max(w, room.bounds.right);
+        d = math.max(d, room.bounds.bottom);
       }
     }
     return Size(w, d);

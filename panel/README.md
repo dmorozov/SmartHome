@@ -12,6 +12,9 @@ codebase via the Flutter Web build. What exists:
 - Stacked isometric Floors with full-height translucent "glass" walls
   (winner of the walls prototype — variants preserved on the
   `prototype/dollhouse-walls` branch), tap a collapsed Floor to expand it
+- Rooms are rectilinear polygons tiling each Floor; a Floor's slab is the
+  union of its Rooms (partial upper floors and the protruding garage just
+  work); Walls are data — an undrawn boundary renders as an open passage
 - Rooms glow with light state; tapping a Room toggles its lights
 - Device pins with live readings (thermostat °C, Emporia watts); tapping a
   binary Device toggles it, cameras/doorbell open the Popup (go2rtc live view
@@ -20,18 +23,43 @@ codebase via the Flutter Web build. What exists:
   so the UI visibly lives
 
 Still to come: the real Home Assistant WebSocket `HubClient` (developed against
-the `../hub/` stack once it runs on the laptop), the real house layout, the
-actual design system, and the spike-app migrations (multi-touch debug screen,
-fullscreen/cursor runner patches) once the spike passes.
+the `../hub/` stack once it runs on the laptop), the real house drawing (the
+pipeline below is built; the shipped House Plan is a placeholder resembling
+it), the actual design system, and the spike-app migrations (multi-touch debug
+screen, fullscreen/cursor runner patches) once the spike passes.
+
+## House Plan pipeline (ADR-0004)
+
+Draw the house in [Sweet Home 3D](https://www.sweethome3d.com) — one level
+per Floor, name every room in-tool, right angles only (square 45° corners
+off), don't draw walls across open passages. Then:
+
+```sh
+python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
+```
+
+- `assets/house/house.yaml` — **generated geometry, never hand-edit**. The
+  converter errors on diagonals, overlapping rooms and duplicate room names,
+  and warns on unwalled boundaries and non-tiling floors.
+- `assets/house/devices.yaml` — **hand-maintained**: each Device references a
+  room id (slugified room name) with a position in meters. The converter
+  never touches it; renaming a room in the drawing makes the loader point at
+  the missing slug by name.
+- Current placeholder: `tool/fixtures/placeholder-house.Home.xml` (crafted
+  two-storey approximation of the real house) run through the converter.
+  `tool/fixtures/AlpsHotel.Home.xml` is a real Sweet Home 3D export used to
+  smoke-test the parser.
 
 ## Layout
 
-- `lib/domain/` — `House`/`Floor`/`Room`/`Device` structure + `DeviceState`
+- `lib/domain/` — `House`/`Floor`/`Room`/`Wall`/`Device` + `DeviceState`
   (CONTEXT.md language; geometry is Panel-side config, the Hub never sees it)
-- `lib/data/` — `HubClient` interface, `FakeHub`, `demo_house.dart`
-  (**placeholder layout** — edit footprints/positions to match the real house)
+- `lib/data/` — `HubClient` interface, `FakeHub`, `house_loader.dart` (parses
+  the two House Plan YAML assets)
 - `lib/ui/` — theme, `HubController` (ChangeNotifier over `HubClient`),
-  `dollhouse/` (iso projection, floor slab painter, stacking view), Popup
+  `dollhouse/` (iso projection, plan geometry, floor slab painter, stacking
+  view), Popup
+- `tool/` — the Sweet Home 3D converter + fixtures
 
 ## Run
 

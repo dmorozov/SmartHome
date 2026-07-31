@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
-import 'data/demo_house.dart';
 import 'data/fake_hub.dart';
+import 'data/house_loader.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
 
-void main() {
-  final house = demoHouse();
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // The House Plan (ADR-0004): generated geometry + hand-maintained devices.
+  final house = loadHouse(
+    houseYaml: await rootBundle.loadString('assets/house/house.yaml'),
+    devicesYaml: await rootBundle.loadString('assets/house/devices.yaml'),
+  );
   runApp(PanelApp(
     controller: HubController(house: house, hub: FakeHub(house)),
   ));
