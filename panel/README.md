@@ -30,9 +30,12 @@ screen, fullscreen/cursor runner patches) once the spike passes.
 
 ## House Plan pipeline (ADR-0004)
 
-Draw the house in [Sweet Home 3D](https://www.sweethome3d.com) — one level
-per Floor, name every room in-tool, right angles only (square 45° corners
-off), don't draw walls across open passages. Then:
+**Full step-by-step runbook: [HOUSE-PLAN.md](HOUSE-PLAN.md)** — drawing
+rules, converter errors and fixes, and how to add/move Devices.
+
+Short version: draw the house in [Sweet Home 3D](https://www.sweethome3d.com)
+— one level per Floor, name every room in-tool, right angles only (square
+45° corners off), don't draw walls across open passages. Then:
 
 ```sh
 python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml

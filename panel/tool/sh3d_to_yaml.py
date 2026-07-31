@@ -358,6 +358,9 @@ def main():
     n_walls = sum(len(f['walls']) for f in floors)
     print(f'wrote {args.output}: {len(floors)} floor(s), {n_rooms} room(s), '
           f'{n_walls} wall(s), {len(warnings)} warning(s)')
+    print(f'origin shift: yaml (x, y) = Sweet Home 3D (x, y) in cm / 100 '
+          f'minus ({fmt(min_x)}, {fmt(min_y)}) m — use this to compute '
+          f'devices.yaml positions from plan coordinates')
 
 
 def report_and_exit(errors, warnings):
