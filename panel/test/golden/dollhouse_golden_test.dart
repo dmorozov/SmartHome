@@ -1,0 +1,91 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:panel/data/fake_hub.dart';
+import 'package:panel/data/hub_client.dart';
+import 'package:panel/domain/device_state.dart';
+import 'package:panel/main.dart';
+import 'package:panel/ui/hub_controller.dart';
+
+import '../test_house.dart';
+import 'golden_setup.dart';
+
+/// Renders the Panel to PNGs, headlessly, with no browser and no server.
+///
+/// Two jobs. It fails when the dollhouse changes shape unintentionally —
+/// and, on failure, writes `failures/*_isolatedDiff.png` showing exactly
+/// what moved. And it is the cheapest way to *look* at the Panel while
+/// working on it: `flutter test --update-goldens test/golden` regenerates
+/// every scene in a couple of seconds.
+///
+/// Goldens are host-rendered, so a small pixel tolerance is allowed (see
+/// golden_setup.dart). Regenerate and eyeball the diff rather than
+/// rubber-stamping a failure.
+void main() {
+  setUpPanelGoldens();
+
+  // driftEvery: zero — the fake readings must not wander between runs.
+  HubController fakeHub() {
+    final house = loadTestHouse();
+    return HubController(
+        house: house, hub: FakeHub(house, driftEvery: Duration.zero));
+  }
+
+  goldenTest('ground floor selected', (tester) async {
+    await pumpPanel(tester, fakeHub());
+
+    await expectLater(find.byType(PanelApp),
+        matchesGoldenFile('goldens/ground_floor.png'));
+  });
+
+  goldenTest('upstairs selected', (tester) async {
+    await pumpPanel(tester, fakeHub());
+
+    // The neighbour's box is drawn unscaled; the slab itself sits at ~0.16
+    // of its height (0.32 scale about the top centre), and only the slab
+    // takes taps — see dollhouse_test.dart.
+    final rect = tester.getRect(find.byKey(const ValueKey('floor-upstairs')));
+    await tester.tapAt(rect.topCenter + Offset(0, rect.height * 0.16));
+    await tester.pumpAndSettle();
+
+    await expectLater(find.byType(PanelApp),
+        matchesGoldenFile('goldens/upstairs_selected.png'));
+  });
+
+  goldenTest('device popup over the dollhouse', (tester) async {
+    await pumpPanel(tester, fakeHub());
+
+    await tester.tap(find.byKey(const ValueKey('pin-doorbell')));
+    await tester.pumpAndSettle();
+
+    await expectLater(find.byType(PanelApp),
+        matchesGoldenFile('goldens/device_popup.png'));
+  });
+
+  goldenTest('hub unreachable', (tester) async {
+    final house = loadTestHouse();
+    await pumpPanel(tester, HubController(house: house, hub: _OfflineHub()));
+
+    await expectLater(find.byType(PanelApp),
+        matchesGoldenFile('goldens/hub_offline.png'));
+  });
+}
+
+/// What the wall shows when the Hub is down: red badge, and every Device
+/// unknown rather than frozen on its last reading. The most important scene
+/// to be able to recognise at a glance, and the hardest to reach by hand.
+class _OfflineHub implements HubClient {
+  @override
+  final ValueNotifier<bool> connected = ValueNotifier(false);
+
+  @override
+  Map<String, DeviceState> get states => const {};
+
+  @override
+  Stream<DeviceState> get stateChanges => const Stream.empty();
+
+  @override
+  Future<void> toggle(String deviceId) async {}
+
+  @override
+  void dispose() => connected.dispose();
+}

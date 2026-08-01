@@ -36,6 +36,15 @@ class FloorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = projection.size;
+    // Room labels go straight onto the canvas, so they do not inherit the
+    // app's text style the way a Text widget does. Without this they render
+    // in whatever font the engine happens to default to — a different one
+    // from the rest of the Panel, and on a bare Linux kiosk possibly none.
+    final labelStyle = DefaultTextStyle.of(context).style.copyWith(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: PanelTheme.inkFaint,
+        );
     return SizedBox(
       width: size.width,
       height: size.height + wallDepth,
@@ -58,6 +67,7 @@ class FloorView extends StatelessWidget {
                     if (controller.isRoomLit(r)) r.id,
                 },
                 showLabels: expanded,
+                labelStyle: labelStyle,
               ),
             ),
           ),
@@ -165,12 +175,14 @@ class _FloorPainter extends CustomPainter {
     required this.projection,
     required this.litRooms,
     required this.showLabels,
+    required this.labelStyle,
   });
 
   final Floor floor;
   final IsoProjection projection;
   final Set<String> litRooms;
   final bool showLabels;
+  final TextStyle labelStyle;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -296,14 +308,7 @@ class _FloorPainter extends CustomPainter {
 
   void _label(Canvas canvas, String text, Offset center) {
     final tp = TextPainter(
-      text: TextSpan(
-        text: text,
-        style: const TextStyle(
-          fontSize: 10,
-          color: PanelTheme.inkFaint,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
+      text: TextSpan(text: text, style: labelStyle),
       textDirection: TextDirection.ltr,
     )..layout();
     tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
@@ -329,6 +334,7 @@ class _FloorPainter extends CustomPainter {
       oldDelegate.litRooms.length != litRooms.length ||
       !oldDelegate.litRooms.containsAll(litRooms) ||
       oldDelegate.showLabels != showLabels ||
+      oldDelegate.labelStyle != labelStyle ||
       oldDelegate.projection.scale != projection.scale;
 }
 

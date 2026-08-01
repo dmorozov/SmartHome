@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/ha_hub.dart';
+import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -170,6 +171,28 @@ void main() {
     expect(channel.sent.single['service'], 'toggle');
     expect(channel.sent.single['target'],
         {'entity_id': 'input_boolean.light_hall'});
+  });
+
+  test('reports how much of the House the snapshot actually covered',
+      () async {
+    final records = <LogRecord>[];
+    Log.sink = records.add;
+    Log.level = LogLevel.info;
+    addTearDown(() {
+      Log.sink = Log.printRecord;
+      Log.level = LogLevel.warn;
+    });
+
+    await connectAndSeed([_entity('input_boolean.light_hall', 'on')]);
+
+    final snapshot = records.firstWhere((r) => r.event == 'snapshot').fields!;
+    expect(snapshot['entities'], 1);
+    expect(snapshot['bound'], 1);
+    // Every other Device in devices.yaml names an entity the Hub did not
+    // report. Without this line that failure — a typo in devices.yaml, an
+    // integration not set up — shows only as a pin that never fills in.
+    expect(snapshot['missing'], greaterThan(0));
+    expect(records.map((r) => r.event), contains('missing_entities'));
   });
 
   test('a dropped connection is retried', () async {

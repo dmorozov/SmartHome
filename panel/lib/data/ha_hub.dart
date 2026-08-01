@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../diagnostics/log.dart';
 import '../domain/device_state.dart';
 import '../domain/house.dart';
 import 'hub_client.dart';
@@ -61,6 +62,10 @@ class HaHubClient implements HubClient {
 
   final _byEntity = <String, Device>{};
   final _states = <String, DeviceState>{};
+
+  /// Devices currently reporting an unusable state, so the warning is
+  /// logged once per outage rather than once per message.
+  final _unusable = <String>{};
   final _changes = StreamController<DeviceState>.broadcast();
 
   WebSocketChannel? _channel;
@@ -84,7 +89,13 @@ class HaHubClient implements HubClient {
   Future<void> toggle(String deviceId) async {
     final device = _byEntity.values.where((d) => d.id == deviceId).firstOrNull;
     final entityId = device?.entityId;
-    if (entityId == null) return;
+    if (entityId == null) {
+      // A pin that does nothing when tapped, silently, is the worst kind of
+      // bug to chase on a wall panel.
+      Log.warn('hub', 'toggle_unbound', {'device': deviceId});
+      return;
+    }
+    Log.debug('hub', 'toggle', {'device': deviceId, 'entity': entityId});
     // `homeassistant.toggle` spans domains (light, switch, input_boolean,
     // cover…), so the Panel does not have to know which one backs a Device.
     _send({
@@ -98,6 +109,7 @@ class HaHubClient implements HubClient {
 
   @override
   void dispose() {
+    Log.info('hub', 'closed');
     _disposed = true;
     _retryTimer?.cancel();
     _subscription?.cancel();
@@ -108,22 +120,28 @@ class HaHubClient implements HubClient {
 
   void _open() {
     if (_disposed) return;
+    Log.info('hub', 'connecting', {'url': _url});
     try {
       final channel = _connect(_url);
       _channel = channel;
       _subscription = channel.stream.listen(
         _onFrame,
-        onError: (_) => _reconnect(),
+        onError: (Object error) {
+          Log.warn('hub', 'socket_error', {'error': error});
+          _reconnect();
+        },
         onDone: _reconnect,
         cancelOnError: true,
       );
-    } on Object {
+    } on Object catch (error) {
+      Log.warn('hub', 'connect_failed', {'error': error});
       _reconnect();
     }
   }
 
   void _reconnect() {
     if (_disposed || _retryTimer != null) return;
+    final wasConnected = connected.value;
     connected.value = false;
     _subscription?.cancel();
     _subscription = null;
@@ -134,6 +152,12 @@ class HaHubClient implements HubClient {
         : Duration(
             microseconds:
                 (_retryIn.inMicroseconds * 2).clamp(0, retryCeiling.inMicroseconds));
+    // `was_connected` separates "the Hub went away" from "it was never
+    // there" — different problems, and the retry loop looks identical.
+    Log.warn('hub', 'reconnecting', {
+      'in_ms': _retryIn.inMilliseconds,
+      'was_connected': wasConnected,
+    });
     _retryTimer = Timer(_retryIn, () {
       _retryTimer = null;
       _open();
@@ -153,6 +177,7 @@ class HaHubClient implements HubClient {
       case 'auth_ok':
         _retryIn = Duration.zero;
         connected.value = true;
+        Log.info('hub', 'connected', {'url': _url, 'devices': _byEntity.length});
         // Snapshot first, then the delta subscription. Both ids are ours;
         // HA echoes them back on the results.
         _send({'id': _nextId++, 'type': 'get_states'});
@@ -163,6 +188,7 @@ class HaHubClient implements HubClient {
         });
       case 'auth_invalid':
         // A bad token is not worth retrying — it will not fix itself.
+        Log.error('hub', 'auth_invalid', fields: {'reason': message['message']});
         connected.value = false;
         _disposed = true;
         _channel?.sink.close();
@@ -170,10 +196,40 @@ class HaHubClient implements HubClient {
             'Home Assistant rejected the token: ${message['message']}. '
             'Create a new long-lived token and rebuild with --dart-define.');
       case 'result':
+        if (message['success'] == false) {
+          // A rejected command would otherwise vanish: the Panel would show
+          // the tap doing nothing and give no reason.
+          Log.warn('hub', 'command_failed',
+              {'id': message['id'], 'error': message['error']});
+        }
         final result = message['result'];
         if (result is List) {
+          // The only List result the Panel asks for is the get_states
+          // snapshot.
+          final bound = <String>{};
           for (final entity in result) {
-            if (entity is Map) _applyEntity(entity);
+            if (entity is Map && _applyEntity(entity)) {
+              bound.add('${entity['entity_id']}');
+            }
+          }
+          final missing =
+              _byEntity.keys.where((e) => !bound.contains(e)).toList();
+          Log.info('hub', 'snapshot', {
+            'entities': result.length,
+            'bound': bound.length,
+            'missing': missing.length,
+          });
+          if (missing.isNotEmpty) {
+            // The Hub has never heard of these. Typo in devices.yaml, or an
+            // integration not set up yet — either way those pins stay blank
+            // forever and nothing else says so. Capped because thirty-odd
+            // ids on one line is unreadable, and the first few identify the
+            // pattern; `snapshot` above carries the true count.
+            const shown = 8;
+            Log.warn('hub', 'missing_entities', {
+              'ids': missing.take(shown).join(','),
+              if (missing.length > shown) 'more': missing.length - shown,
+            });
           }
         }
       case 'event':
@@ -185,18 +241,41 @@ class HaHubClient implements HubClient {
     }
   }
 
-  void _applyEntity(Map<dynamic, dynamic> entity) {
+  /// Returns whether the entity belongs to a Device at all — the caller
+  /// counts that to report how much of the House the Hub actually covers.
+  bool _applyEntity(Map<dynamic, dynamic> entity) {
     final device = _byEntity[entity['entity_id']];
-    if (device == null) return;
+    if (device == null) return false;
     final state = _toDeviceState(device, entity);
     if (state == null) {
       // 'unavailable'/'unknown', or a reading we could not parse: drop the
       // Device back to unknown rather than showing a stale value.
       _states.remove(device.id);
-      return;
+      // One line per *entry* into the unusable state. Logging every message
+      // would put a permanently-unavailable entity into journald forever.
+      if (_unusable.add(device.id)) {
+        Log.warn('hub', 'state_unusable', {
+          'device': device.id,
+          'entity': entity['entity_id'],
+          'state': entity['state'],
+        });
+      }
+      return true;
+    }
+    if (_unusable.remove(device.id)) {
+      Log.info('hub', 'state_recovered',
+          {'device': device.id, 'entity': entity['entity_id']});
     }
     _states[device.id] = state;
+    if (Log.isDebug) {
+      Log.debug('hub', 'state', {
+        'device': device.id,
+        'entity': entity['entity_id'],
+        'state': entity['state'],
+      });
+    }
     if (!_changes.isClosed) _changes.add(state);
+    return true;
   }
 
   DeviceState? _toDeviceState(Device device, Map<dynamic, dynamic> entity) {

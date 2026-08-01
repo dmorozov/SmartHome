@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -5,6 +6,7 @@ import 'data/fake_hub.dart';
 import 'data/ha_hub.dart';
 import 'data/house_loader.dart';
 import 'data/hub_client.dart';
+import 'diagnostics/log.dart';
 import 'domain/house.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/hub_controller.dart';
@@ -12,14 +14,47 @@ import 'ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  Log.installErrorHandlers();
+  Log.info('panel', 'start', {
+    'hub': _hubKind,
+    'mode': kReleaseMode
+        ? 'release'
+        : kProfileMode
+            ? 'profile'
+            : 'debug',
+    'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
+    'log': Log.level.name,
+  });
   // The House Plan (ADR-0004): generated geometry + hand-maintained devices.
-  final house = loadHouse(
+  final house = _loadHouse(
     houseYaml: await rootBundle.loadString('assets/house/house.yaml'),
     devicesYaml: await rootBundle.loadString('assets/house/devices.yaml'),
   );
   runApp(PanelApp(
     controller: HubController(house: house, hub: _hub(house)),
   ));
+}
+
+House _loadHouse({required String houseYaml, required String devicesYaml}) {
+  try {
+    final house = loadHouse(houseYaml: houseYaml, devicesYaml: devicesYaml);
+    final devices = [for (final floor in house.floors) ...floor.devices];
+    Log.info('house', 'loaded', {
+      'name': house.name,
+      'floors': house.floors.length,
+      'rooms': house.floors.fold<int>(0, (n, f) => n + f.rooms.length),
+      'devices': devices.length,
+      // Devices with no `entity:` can never show state — worth knowing at a
+      // glance, without hunting through devices.yaml.
+      'bound': devices.where((d) => d.entityId != null).length,
+    });
+    return house;
+  } catch (error, stack) {
+    // A malformed House Plan is fatal, and on the kiosk nobody is standing
+    // in front of the red screen. Leave one greppable line on the way out.
+    Log.error('house', 'invalid', error: error, stack: stack);
+    rethrow;
+  }
 }
 
 /// Which Hub the build talks to. Defaults to the in-memory [FakeHub]; pass
@@ -36,6 +71,9 @@ HubClient _hub(House house) {
   const url = String.fromEnvironment('HA_URL',
       defaultValue: 'http://localhost:8123');
   const token = String.fromEnvironment('HA_TOKEN');
+  // `set`, never the token itself: these lines end up in logs.
+  Log.info('hub', 'configured',
+      {'url': url, 'token': token.isEmpty ? 'absent' : 'set'});
   if (token.isEmpty) {
     throw ArgumentError('HUB=ha needs --dart-define=HA_TOKEN=<long-lived '
         'token>; keep it out of the repo (hub/dev/token)');

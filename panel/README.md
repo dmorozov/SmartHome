@@ -95,6 +95,7 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 - `lib/ui/` — theme, `HubController` (ChangeNotifier over `HubClient`),
   `dollhouse/` (iso projection, plan geometry, floor slab painter, stacking
   view), Popup
+- `lib/diagnostics/` — structured logging (below)
 - `tool/` — the Sweet Home 3D converter + fixtures
 
 ## Run
@@ -105,6 +106,86 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 | macOS desktop | `flutter run -d macos` | Mac — needs full Xcode (App Store) + CocoaPods, not just Command Line Tools |
 | Linux desktop | `flutter run -d linux` | the dev laptop (Ubuntu) — also the kiosk/cage path |
 
-Tests: `flutter test` (FakeHub semantics + widget interaction tests).
+Screenshot the web build without a visible browser (handy for checking the
+kiosk's real resolution, and for agents/CI):
+
+```sh
+flutter build web --profile && (cd build/web && python3 -m http.server 8100 &)
+tool/shot.sh http://localhost:8100/ /tmp/panel.png 1920 1080
+```
+
+## Diagnostics
+
+The Panel ends up on a wall with no keyboard and nobody watching a console,
+so it explains itself in one greppable line per event:
+
+A healthy start against the development Hub — verbatim from the browser
+console, from the `flutter build web` command above plus `--dart-define=LOG=info`:
+
+```
+[panel] I panel.start hub=ha mode=profile platform=web log=info
+[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33
+[panel] I hub.configured url=http://localhost:8123 token=set
+[panel] I hub.connecting url=ws://localhost:8123/api/websocket
+[panel] I hub.connected url=ws://localhost:8123/api/websocket devices=33
+[panel] I hub.snapshot entities=66 bound=33 missing=0
+```
+
+and the same run when it is not healthy:
+
+```
+[panel] W hub.missing_entities ids=sensor.oven,climate.ecobee
+[panel] W hub.state_unusable device=washer entity=sensor.lg_washer state=unavailable
+[panel] I hub.state_recovered device=washer entity=sensor.lg_washer
+[panel] W hub.reconnecting in_ms=4000 was_connected=true
+[panel] E hub.auth_invalid reason="Invalid access token or password"
+```
+
+Same lines everywhere the Panel runs: `flutter run`, the browser console
+(filter on the `[panel]` prefix), `journalctl -u panel` on the appliance.
+`hub.snapshot` / `hub.missing_entities` are the ones that earn their keep —
+a Device pin that never fills in is otherwise completely silent, and the
+cause is always an `entity:` the Hub has never heard of.
+
+Level is `debug` in debug builds and `info` in release; override with
+`--dart-define=LOG=debug|info|warn|error|off`. Debug adds every state
+change and every tap. `Log.installErrorHandlers()` routes framework and
+uncaught errors through the same channel, so a crash leaves a `[panel] E`
+line rather than only a red screen nobody is standing in front of.
+
+**Never log a secret** — the Hub token in particular. `main.dart` logs
+`token=set`, not the token. (Home Assistant's own websocket debug logging
+does not observe this; see `../hub/dev/README.md`.)
+
+## Tests
+
+`flutter test` — FakeHub semantics, the House Plan loader, the HA
+WebSocket protocol, widget interaction, and the goldens below.
 `FakeHub(house, driftEvery: Duration.zero)` disables the drift timer for
-deterministic tests.
+deterministic tests. `test/flutter_test_config.dart` quiets logging to
+warnings for the whole suite.
+
+`test/golden/` renders the whole Panel to PNGs — headlessly, no browser and
+no server — for four scenes: ground floor, upstairs selected, a Device
+Popup, and an unreachable Hub. They catch unintended changes to the
+dollhouse's shape, and on failure write `failures/*_isolatedDiff.png`
+showing exactly what moved.
+
+```sh
+flutter test test/golden                    # check
+flutter test --update-goldens test/golden   # regenerate, then look at them
+```
+
+Regenerating is also the fastest way to just *see* the Panel while working
+on it. Two things make the images faithful that flutter_test does not do by
+default: real fonts (loaded from the Flutter SDK's cache, so no font
+binaries in the repo) and real shadows (`debugDisableShadows`, without
+which the neumorphic look disappears).
+
+Matching is exact, and should stay close to it: at 1280×800 even a 1%
+tolerance is ~10,000 pixels while a whole 34px Device pin is only ~1,150,
+so a loose tolerance would let an entire pin change unnoticed. The images
+are host-rendered, so if they ever go permanently red on the Linux laptop
+rather than here, raise `tolerance` on `setUpPanelGoldens` as little as
+possible. Either way: regenerate and eyeball the diff, don't rubber-stamp
+a failure.

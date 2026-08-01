@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Golden-test failure output (master/test/diff PNGs) — reproduce with
+# `flutter test test/golden`, do not commit.
+test/**/failures/

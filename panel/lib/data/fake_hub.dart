@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
+import '../diagnostics/log.dart';
 import '../domain/device_state.dart';
 import '../domain/house.dart';
 import 'hub_client.dart';
@@ -19,6 +20,10 @@ class FakeHub implements HubClient {
     if (driftEvery > Duration.zero) {
       _driftTimer = Timer.periodic(driftEvery, (_) => _drift());
     }
+    // Says plainly which Hub the running build is on — the header badge can
+    // be missed, a log line cannot.
+    Log.info('hub', 'fake_ready',
+        {'devices': _states.length, 'drift_ms': driftEvery.inMilliseconds});
   }
 
   /// Always up: the fake Hub is in this process.

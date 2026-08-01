@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../diagnostics/log.dart';
 import '../../domain/device_state.dart';
 import '../../domain/house.dart';
 import '../device_popup.dart';
@@ -138,7 +139,7 @@ class _DollhouseViewState extends State<DollhouseView> {
                 child: GestureDetector(
                   onTap: floor.id == _expandedFloorId
                       ? null
-                      : () => setState(() => _expandedFloorId = floor.id),
+                      : () => _selectFloor(floor),
                   child: AnimatedScale(
                     duration: _anim,
                     curve: Curves.easeInOutCubic,
@@ -181,11 +182,25 @@ class _DollhouseViewState extends State<DollhouseView> {
     return Size(w, d);
   }
 
+  void _selectFloor(Floor floor) {
+    Log.debug('ui', 'floor', {'id': floor.id, 'level': floor.level});
+    setState(() => _expandedFloorId = floor.id);
+  }
+
   void _onDeviceTap(BuildContext context, Device device) {
     final state = widget.controller.stateOf(device.id);
     final isVideo = device.kind == DeviceKind.camera ||
         device.kind == DeviceKind.doorbell;
-    if (!isVideo && (state is SwitchState || state is GarageDoorState)) {
+    final toggles = !isVideo && (state is SwitchState || state is GarageDoorState);
+    // Which branch a pin takes depends on its live state, so a pin that
+    // "does the wrong thing" is really a state question.
+    Log.debug('ui', 'device', {
+      'id': device.id,
+      'kind': device.kind.name,
+      'action': toggles ? 'toggle' : 'popup',
+      'known': state != null,
+    });
+    if (toggles) {
       widget.controller.toggle(device.id);
     } else {
       showDevicePopup(context, device: device, state: state);

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../data/hub_client.dart';
+import '../diagnostics/log.dart';
 import '../domain/device_state.dart';
 import '../domain/house.dart';
 
@@ -38,8 +39,11 @@ class HubController extends ChangeNotifier {
   /// otherwise.
   Future<void> toggleRoomLights(Room room) async {
     final lit = isRoomLit(room);
-    for (final light
-        in room.devices.where((d) => d.kind == DeviceKind.light)) {
+    final lights =
+        room.devices.where((d) => d.kind == DeviceKind.light).toList();
+    Log.debug('ui', 'room_lights',
+        {'room': room.id, 'was_lit': lit, 'lights': lights.length});
+    for (final light in lights) {
       if (isOn(light.id) == lit) await _hub.toggle(light.id);
     }
   }
