@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/device_state.dart';
 import '../../domain/house.dart';
+import '../device_presentation.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
 import 'iso.dart';
@@ -101,7 +101,7 @@ class FloorView extends StatelessWidget {
       child: GestureDetector(
         key: ValueKey('pin-${device.id}'),
         onTap: () => onDeviceTap?.call(device),
-        child: _DevicePin(device: device, state: controller.stateOf(device.id)),
+        child: _DevicePin(presentation: controller.presentationOf(device)),
       ),
     );
   }
@@ -118,25 +118,14 @@ class FloorView extends StatelessWidget {
 }
 
 class _DevicePin extends StatelessWidget {
-  const _DevicePin({required this.device, required this.state});
+  const _DevicePin({required this.presentation});
 
-  final Device device;
-  final DeviceState? state;
+  final DevicePresentation presentation;
 
   @override
   Widget build(BuildContext context) {
-    final on = switch (state) {
-      SwitchState s => s.on,
-      GarageDoorState g => g.open,
-      _ => false,
-    };
-    final reading = switch (state) {
-      ThermostatState t => '${t.currentC.toStringAsFixed(1)}°',
-      PowerState p => p.watts >= 1000
-          ? '${(p.watts / 1000).toStringAsFixed(1)}kW'
-          : '${p.watts.round()}W',
-      _ => null,
-    };
+    final on = presentation.glows;
+    final reading = presentation.reading;
     return DecoratedBox(
       decoration: BoxDecoration(
         color: on ? PanelTheme.glow : PanelTheme.surfaceRaised,
@@ -146,7 +135,7 @@ class _DevicePin extends StatelessWidget {
       child: reading == null
           ? Center(
               child: Icon(
-                deviceIcon(device.kind),
+                presentation.icon,
                 size: 17,
                 color: on ? Colors.white : PanelTheme.ink,
               ),

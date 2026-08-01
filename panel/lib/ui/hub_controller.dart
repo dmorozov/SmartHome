@@ -6,6 +6,7 @@ import '../data/hub_client.dart';
 import '../diagnostics/log.dart';
 import '../domain/device_state.dart';
 import '../domain/house.dart';
+import 'device_presentation.dart';
 
 /// Presentation state: the House structure plus live Device state from the
 /// Hub, folded into one Listenable for the widget tree.
@@ -22,16 +23,14 @@ class HubController extends ChangeNotifier {
   final HubClient _hub;
   late final StreamSubscription<DeviceState> _sub;
 
-  DeviceState? stateOf(String deviceId) => _hub.states[deviceId];
-
-  bool isOn(String deviceId) => switch (stateOf(deviceId)) {
-        SwitchState s => s.on,
-        _ => false,
-      };
+  /// Everything the Dollhouse and the Popup need to render and act on
+  /// [device], derived from its kind and current live state.
+  DevicePresentation presentationOf(Device device) =>
+      DevicePresentation(device, _hub.states[device.id]);
 
   /// A Room is lit when any light in it is on.
-  bool isRoomLit(Room room) =>
-      room.devices.any((d) => d.kind == DeviceKind.light && isOn(d.id));
+  bool isRoomLit(Room room) => room.devices
+      .any((d) => d.kind == DeviceKind.light && presentationOf(d).glows);
 
   Future<void> toggle(String deviceId) => _hub.toggle(deviceId);
 
@@ -44,7 +43,7 @@ class HubController extends ChangeNotifier {
     Log.debug('ui', 'room_lights',
         {'room': room.id, 'was_lit': lit, 'lights': lights.length});
     for (final light in lights) {
-      if (isOn(light.id) == lit) await _hub.toggle(light.id);
+      if (presentationOf(light).glows == lit) await _hub.toggle(light.id);
     }
   }
 

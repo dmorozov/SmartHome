@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/fake_hub.dart';
+import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
@@ -66,4 +67,42 @@ void main() {
     expect(
         find.text('Live view placeholder — go2rtc stream'), findsOneWidget);
   });
+
+  testWidgets('tapping a light pin with unknown state attempts a toggle, '
+      'not a popup', (tester) async {
+    // Unknown state is normal: no entity bound yet, an unavailable entity,
+    // or the window before the Hub's first snapshot (ADR-0004). The pin's
+    // affordance follows the Device's kind, so it stays a light switch.
+    final house = loadTestHouse();
+    final hub = _UnknownStateHub();
+    await tester.pumpWidget(
+        PanelApp(controller: HubController(house: house, hub: hub)));
+
+    await tester.tap(find.byKey(const ValueKey('pin-light-hall')));
+    await tester.pumpAndSettle();
+
+    expect(hub.toggled, ['light-hall']);
+    expect(find.byType(Dialog), findsNothing);
+  });
+}
+
+/// A Hub that is up but has nothing to say about any Device: every state is
+/// unknown. Records the commands it is sent.
+class _UnknownStateHub implements HubClient {
+  final toggled = <String>[];
+
+  @override
+  final ValueNotifier<bool> connected = ValueNotifier(true);
+
+  @override
+  Map<String, DeviceState> get states => const {};
+
+  @override
+  Stream<DeviceState> get stateChanges => const Stream.empty();
+
+  @override
+  Future<void> toggle(String deviceId) async => toggled.add(deviceId);
+
+  @override
+  void dispose() => connected.dispose();
 }

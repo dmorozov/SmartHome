@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 
-import '../domain/device_state.dart';
 import '../domain/house.dart';
+import 'device_presentation.dart';
 import 'theme.dart';
 
 /// Popup — a transient overlay on the Panel (CONTEXT.md). Cameras and the
 /// doorbell show a live-view placeholder (the go2rtc stream lands there in
-/// phase 1); other Devices show their current state.
+/// phase 1); other Devices show their current state. Which body and what
+/// wording are the presentation module's call, not this file's.
 Future<void> showDevicePopup(
   BuildContext context, {
-  required Device device,
-  required DeviceState? state,
+  required DevicePresentation presentation,
 }) {
-  final isVideo =
-      device.kind == DeviceKind.camera || device.kind == DeviceKind.doorbell;
+  final device = presentation.device;
+  final isVideo = presentation.isVideo;
   final isLocal = device.connectivity == Connectivity.local;
   return showDialog<void>(
     context: context,
@@ -99,7 +99,7 @@ Future<void> showDevicePopup(
                 )
               else
                 Text(
-                  statusText(state),
+                  presentation.statusText,
                   style:
                       const TextStyle(fontSize: 15, color: PanelTheme.ink),
                 ),
@@ -118,15 +118,3 @@ Future<void> showDevicePopup(
     ),
   );
 }
-
-String statusText(DeviceState? state) => switch (state) {
-      SwitchState s => s.on ? 'On' : 'Off',
-      GarageDoorState g => g.open ? 'Open' : 'Closed',
-      ThermostatState t =>
-        '${t.currentC.toStringAsFixed(1)} °C now · target ${t.targetC.toStringAsFixed(1)} °C',
-      PowerState p => p.watts >= 1000
-          ? '${(p.watts / 1000).toStringAsFixed(2)} kW'
-          : '${p.watts.round()} W',
-      StatusState s => s.status,
-      null => 'Unknown',
-    };

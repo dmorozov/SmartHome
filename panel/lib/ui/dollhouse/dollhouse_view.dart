@@ -3,9 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../diagnostics/log.dart';
-import '../../domain/device_state.dart';
 import '../../domain/house.dart';
 import '../device_popup.dart';
+import '../device_presentation.dart';
 import '../hub_controller.dart';
 import 'floor_view.dart';
 import 'iso.dart';
@@ -188,22 +188,20 @@ class _DollhouseViewState extends State<DollhouseView> {
   }
 
   void _onDeviceTap(BuildContext context, Device device) {
-    final state = widget.controller.stateOf(device.id);
-    final isVideo = device.kind == DeviceKind.camera ||
-        device.kind == DeviceKind.doorbell;
-    final toggles = !isVideo && (state is SwitchState || state is GarageDoorState);
-    // Which branch a pin takes depends on its live state, so a pin that
-    // "does the wrong thing" is really a state question.
+    final presentation = widget.controller.presentationOf(device);
+    final toggles = presentation.tapBehaviour == DeviceTapBehaviour.toggle;
+    // The branch is the Device's kind, not its live state, so a pin always
+    // does the same thing; 'known' says whether the Hub had anything to say.
     Log.debug('ui', 'device', {
       'id': device.id,
       'kind': device.kind.name,
       'action': toggles ? 'toggle' : 'popup',
-      'known': state != null,
+      'known': presentation.state != null,
     });
     if (toggles) {
       widget.controller.toggle(device.id);
     } else {
-      showDevicePopup(context, device: device, state: state);
+      showDevicePopup(context, presentation: presentation);
     }
   }
 }
