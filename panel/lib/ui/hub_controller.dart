@@ -12,11 +12,11 @@ import 'device_presentation.dart';
 class HubController extends ChangeNotifier {
   HubController({required this.house, required HubClient hub}) : _hub = hub {
     _sub = hub.stateChanges.listen((_) => notifyListeners());
-    hub.connected.addListener(notifyListeners);
+    hub.status.addListener(notifyListeners);
   }
 
-  /// Whether the Panel currently has the Hub.
-  bool get connected => _hub.connected.value;
+  /// How the Panel's link to the Hub stands, for the badge.
+  HubStatus get status => _hub.status.value;
 
   final House house;
   final HubClient _hub;
@@ -50,7 +50,7 @@ class HubController extends ChangeNotifier {
   @override
   void dispose() {
     _sub.cancel();
-    _hub.connected.removeListener(notifyListeners);
+    _hub.status.removeListener(notifyListeners);
     _hub.dispose();
     super.dispose();
   }

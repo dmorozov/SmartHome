@@ -1,5 +1,20 @@
 # SH3D → Dollhouse: Architecture Spec — FINAL
 
+> **STATUS (2026-08-01): superseded as an implementation plan by
+> [`sh3d-import/`](sh3d-import/README.md)** — a phased, home-scale series
+> derived from a verified critical analysis of this document against the
+> repo, ADR-0004, plan 06, and the four real `.sh3d` files in
+> `docs/examples/`. This file stays as reference; where the two disagree,
+> the series' corrections table is authoritative. Known defects in this
+> document (do not build on them): §7's angle claim is **inverted — Home.xml
+> writes radians, not degrees** (measured, 1,412 values); §9's
+> `converted_at` breaks §12's own byte-identity rule; §1.2's authored
+> roomKey/levelKey have **no authoring mechanism in Sweet Home 3D** and no
+> backlog item; the §5 tier-2 binding table has no owner, schema, or parser;
+> the §6 registry library emits HA device ids as keys, violating §9's own
+> no-HA-IDs rule; §8.1's table names cross §1.2's. The full corrections
+> table (14 entries) and the empirical record live in the series README.
+
 **Supersedes v3.** Appendix A records the Home Assistant verification that
 prompted the one substantive correction (§1.2). §14 lists changes from v3.
 

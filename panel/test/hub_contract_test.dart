@@ -137,16 +137,18 @@ void runHubContract(String adapter, Future<HubWorld> Function() build) {
       expect(changes, ['light-hall']);
     });
 
-    test('connected falls when the Hub goes away and rises when it returns',
-        () async {
+    test('status falls to retrying when the Hub goes away and rises when it '
+        'returns', () async {
       await world.seed();
-      expect(world.hub.connected.value, isTrue);
+      expect(world.hub.status.value, HubStatus.up);
 
       await world.dropHub();
-      expect(world.hub.connected.value, isFalse);
+      // Retrying, not gaveUp: an absent Hub is the case that fixes itself,
+      // and the adapter must keep trying without being asked.
+      expect(world.hub.status.value, HubStatus.retrying);
 
       await world.returnHub();
-      expect(world.hub.connected.value, isTrue);
+      expect(world.hub.status.value, HubStatus.up);
     });
   });
 }
@@ -165,8 +167,8 @@ Future<HubWorld> _fakeWorld() async {
     },
     push: (state) async => hub.pushState(state),
     makeUnknown: (deviceId) async => hub.dropDevice(deviceId),
-    dropHub: () async => hub.setReachable(false),
-    returnHub: () async => hub.setReachable(true),
+    dropHub: () async => hub.setStatus(HubStatus.retrying),
+    returnHub: () async => hub.setStatus(HubStatus.up),
     dispose: () async => hub.dispose(),
   );
 }

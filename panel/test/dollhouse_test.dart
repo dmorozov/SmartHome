@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/fake_hub.dart';
+import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
@@ -92,15 +93,30 @@ void main() {
 
     expect(find.text('FAKE HUB'), findsOneWidget);
 
-    hub.setReachable(false);
+    hub.setStatus(HubStatus.retrying);
     await tester.pump();
 
     expect(find.text('FAKE HUB OFFLINE'), findsOneWidget);
 
-    hub.setReachable(true);
+    hub.setStatus(HubStatus.up);
     await tester.pump();
 
     expect(find.text('FAKE HUB'), findsOneWidget);
+  });
+
+  testWidgets('a rejected token reads differently from an absent Hub',
+      (tester) async {
+    // The whole point of the three-state status: one of these is fixed by
+    // waiting and the other by a person with a new token, and the badge is
+    // the only place the Panel can say which.
+    final (controller, hub) = makeController();
+    await tester.pumpWidget(PanelApp(controller: controller));
+
+    hub.setStatus(HubStatus.gaveUp);
+    await tester.pump();
+
+    expect(find.text('FAKE HUB NEEDS NEW TOKEN'), findsOneWidget);
+    expect(find.text('FAKE HUB OFFLINE'), findsNothing);
   });
 
   testWidgets('a state the Hub reports re-renders its pin', (tester) async {

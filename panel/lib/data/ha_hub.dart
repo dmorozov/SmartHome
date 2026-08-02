@@ -78,9 +78,11 @@ class HaHubClient implements HubClient {
   var _nextId = 1;
   var _disposed = false;
 
-  /// Up once the socket is open, authenticated and subscribed.
+  /// Up once the socket is open, authenticated and subscribed; retrying
+  /// from construction until then and after every drop; gaveUp only when
+  /// the Hub rejects the token.
   @override
-  final ValueNotifier<bool> connected = ValueNotifier(false);
+  final ValueNotifier<HubStatus> status = ValueNotifier(HubStatus.retrying);
 
   @override
   Map<String, DeviceState> get states => Map.unmodifiable(_states);
@@ -128,7 +130,7 @@ class HaHubClient implements HubClient {
     _subscription?.cancel();
     _channel?.sink.close();
     _changes.close();
-    connected.dispose();
+    status.dispose();
   }
 
   void _open() {
@@ -154,8 +156,8 @@ class HaHubClient implements HubClient {
 
   void _reconnect() {
     if (_disposed || _retryTimer != null) return;
-    final wasConnected = connected.value;
-    connected.value = false;
+    final wasConnected = status.value == HubStatus.up;
+    status.value = HubStatus.retrying;
     _subscription?.cancel();
     _subscription = null;
     _channel = null;
@@ -189,7 +191,7 @@ class HaHubClient implements HubClient {
         _send({'type': 'auth', 'access_token': _token});
       case 'auth_ok':
         _retryIn = Duration.zero;
-        connected.value = true;
+        status.value = HubStatus.up;
         Log.info('hub', 'connected', {'url': _url, 'devices': _byEntity.length});
         // Snapshot first, then the delta subscription. Both ids are ours;
         // HA echoes them back on the results.
@@ -200,14 +202,15 @@ class HaHubClient implements HubClient {
           'event_type': 'state_changed',
         });
       case 'auth_invalid':
-        // A bad token is not worth retrying — it will not fix itself.
+        // A bad token is not worth retrying — it will not fix itself. Stop,
+        // and say so where the wall can see it: a rejected token is a
+        // different problem from a Hub reboot, and only a human with a new
+        // token ends it. Setting _disposed halts the loop — the sink close
+        // below fires onDone, and _reconnect returns immediately on it.
         Log.error('hub', 'auth_invalid', fields: {'reason': message['message']});
-        connected.value = false;
         _disposed = true;
+        status.value = HubStatus.gaveUp;
         _channel?.sink.close();
-        throw StateError(
-            'Home Assistant rejected the token: ${message['message']}. '
-            'Create a new long-lived token and rebuild with --dart-define.');
       case 'result':
         if (message['success'] == false) {
           // A rejected command would otherwise vanish: the Panel would show

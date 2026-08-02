@@ -15,10 +15,10 @@ import 'hub_client.dart';
 /// disable the drift timer (deterministic tests).
 ///
 /// Past [HubClient] it exposes a driving surface — [pushState],
-/// [dropDevice], [setReachable] — so a test can stage any scene the wall
-/// might show (a Hub outage, a Device dropping to unknown, a reading
-/// arriving) without hand-rolling another adapter. Seeding and drift are
-/// simply the two scripts that ship with it.
+/// [dropDevice], [setStatus] — so a test can stage any scene the wall
+/// might show (a Hub outage, a rejected token, a Device dropping to
+/// unknown, a reading arriving) without hand-rolling another adapter.
+/// Seeding and drift are simply the two scripts that ship with it.
 class FakeHub implements HubClient {
   FakeHub(House house, {Duration driftEvery = const Duration(seconds: 3)}) {
     for (final device in house.floors.expand((f) => f.devices)) {
@@ -34,9 +34,9 @@ class FakeHub implements HubClient {
         {'devices': _states.length, 'drift_ms': driftEvery.inMilliseconds});
   }
 
-  /// In this process, so up unless a test says otherwise ([setReachable]).
+  /// In this process, so up unless a test says otherwise ([setStatus]).
   @override
-  final ValueNotifier<bool> connected = ValueNotifier(true);
+  final ValueNotifier<HubStatus> status = ValueNotifier(HubStatus.up);
 
   final _byId = <String, Device>{};
   final _states = <String, DeviceState>{};
@@ -77,7 +77,7 @@ class FakeHub implements HubClient {
   void dispose() {
     _driftTimer?.cancel();
     _changes.close();
-    connected.dispose();
+    status.dispose();
   }
 
   // ── Driving surface: how a test (or a built-in script) moves the world ──
@@ -96,8 +96,9 @@ class FakeHub implements HubClient {
     if (_states.remove(deviceId) != null) _changes.add(deviceId);
   }
 
-  /// The world drops or returns the Hub — the OFFLINE badge's whole story.
-  void setReachable(bool reachable) => connected.value = reachable;
+  /// The world drops, returns, or permanently refuses the Panel — the whole
+  /// story the badge tells, including the token no amount of waiting fixes.
+  void setStatus(HubStatus value) => status.value = value;
 
   void _drift() {
     for (final state in _states.values.toList()) {

@@ -1,5 +1,7 @@
 # Panel deepening plans — index
 
+> **Newer series:** [`sh3d-import/`](sh3d-import/README.md) (2026-08-01, written against `d01f290`) — four phases making the Sweet Home 3D drawing the source of Device placements, derived from the verified critical analysis of `sh3d-dollhouse-spec-final.md`. It **supersedes plan 06 in part** (see phase 3) and interacts with plans 07/08 only through `ha_hub.dart`/`main.dart` file-level merges (see its README's coordination section). Plans 01–05 below have landed.
+
 Eight self-contained deepening plans from the **2026-08-01 architecture review of `panel/`**, written against commit **`105610c`**. Each plan proposes one deep module (or one deepened interface) at a named seam, with the full evidence, decision points, step-by-step implementation, and test plan a fresh session needs — no plan depends on the review artifact surviving.
 
 **How to use this directory:**
@@ -89,3 +91,48 @@ cd panel && flutter analyze && flutter test
 - **Goldens** live in `panel/test/golden/goldens/`; iterate with `cd panel && flutter test test/golden`. Regenerate **only** when the plan you are executing explicitly predicts a golden change (07's new scene, 08's relabel): `cd panel && flutter test --update-goldens test/golden`, then eyeball the PNGs and `test/golden/failures/*_isolatedDiff.png` — never rubber-stamp.
 - **Live checks**: `cd panel && flutter run -d chrome` (web build, FakeHub by default). **This Mac has Flutter via brew but no Xcode — never `flutter run -d macos`.** Against the dev Hub: `--dart-define=HUB=ha --dart-define=HA_URL=... --dart-define=HA_TOKEN=...` per `hub/dev/README.md`.
 - Plan 04 additionally runs the Python side: `cd panel && python3 tool/test_sh3d_to_yaml.py` (and its cross-seam contract test must *skip*, not fail, where `python3` is absent).
+
+## Updated plan
+
+Recommended order
+
+┌─────┬───────────────────────┬────────────────────────────────────────────────────────────────────────────────────┬─────────────────────┐
+│  #  │         Work          │                                      Why here                                      │         Who         │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┼─────────────────────┤
+│     │                       │                                                                                    │ You — it's a GUI    │
+│ 1   │ Phase 0 — experiment  │ Gates phases 1–2 entirely, and decides what phase 3's parser targets. One sitting. │ task in Sweet Home  │
+│     │ gate                  │                                                                                    │ 3D; no agent can    │
+│     │                       │                                                                                    │ drive it            │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┼─────────────────────┤
+│     │                       │ Independent of the experiment outcome, so it's the right thing to run in an agent  │                     │
+│ 2   │ Plan 07 — three-state │ session while phase 0 is pending. Also the last remaining plan with a live         │ agent               │
+│     │  Hub status           │ production defect behind it (uncatchable StateError; a wall panel that can't tell  │                     │
+│     │                       │ a dead token from a rebooting Hub)                                                 │                     │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┼─────────────────────┤
+│ 3   │ Phase 1 — placements  │ Python + fixtures only, zero Dart blast radius, goldens frozen                     │ agent               │
+│     │ converter             │                                                                                    │                     │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┼─────────────────────┤
+│ 4   │ Phase 2 — bindings    │ This is where your manual step actually dies. Everything before it is groundwork   │ agent               │
+│     │ cutover               │                                                                                    │                     │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┼─────────────────────┤
+│     │ Phase 3 — Device      │ After phase 2 so the shared parser targets bindings.yaml once instead of being     │                     │
+│ 5   │ vocabulary (plan 06's │ written against devices.yaml and re-targeted                                       │ agent               │
+│     │  successor)           │                                                                                    │                     │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┼─────────────────────┤
+│ 6   │ Plan 08 — panel boot  │ Last, by its own instruction and more so now — it consolidates main.dart, the      │ agent               │
+│     │ module                │ badge, and the test fixture rig that steps 2, 4 and 5 all disturb                  │                     │
+└─────┴───────────────────────┴────────────────────────────────────────────────────────────────────────────────────┴─────────────────────┘
+
+If you'd rather not park an agent on plan 07 while you do the experiment, just drop it to position 5 (between phases 2 and 3) — it collides with nothing either way.
+
+Are 06 / 07 / 08 obsolete?
+
+Plan 06 — partly. Its premises are dead (closed vocabulary as sole input, devices.yaml as position source, entity-id binding, the hand-transcribed slug lists). Five deliverables are not, and phase 3 carries them by name — the biggest being the dev-Hub stand-in pipeline, which has zero analogue in the spec and stays load-bearing as long as hardware is in boxes. The document is now phase 3's base, not something to implement from; I've marked it so.
+
+Plan 07 — not obsolete, fully orthogonal. The analysis checked this specifically: the spec's three failure states are per-marker (Unbound/Unavailable/Stale), plan 07's are per-link (up/retrying/gaveUp). Different axes, and the sh3d series explicitly declines the per-marker set. Two stale details to fix when you run it, both caused by plan 02 landing: it still describes _OfflineHub in the golden test (deleted — that scene now scripts through FakeHub.setReachable), and it plans to create test/fake_channel.dart (already exists at test/support/fake_channel.dart — add FakeHubServer beside it, never a second one).
+
+Plan 08 — not obsolete, but genuinely needs re-baselining, and its "go last" instruction is now stronger. Its boot module's stated input contract is "the two House Plan YAML texts" and it cites loadHouse({houseYaml, devicesYaml}) — phase 2 changes exactly that signature and retires that file. Run after phase 2 and the contract becomes houseYaml + bindingsYaml, a one-line adjustment; run before and you write it twice. It also deletes the makeController()/fakeHub() factories that phases 2 and plan 07 both touch, so landing it last means its hub_offline.png regeneration happens once, on top of everything.
+
+The one branch
+
+If E3 fails — stock Sweet Home 3D drops unknown <property> elements on save — phases 1 and 2 are dead, and the honest path is: record it in ADR-0004 as a confirmation of its original rejection, then run plan 07 → phase 3 (targeting devices.yaml as it stands) → plan 08. That still gets you the vocabulary table, the seed-triplication kill, and the testable generator core; you just keep typing positions. Worth knowing before you invest a session in phase 1.

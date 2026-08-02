@@ -5,6 +5,7 @@
 //       --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/ha_hub.dart';
+import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
 
 import 'test_house.dart';
@@ -27,7 +28,7 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 100));
     }
 
-    expect(hub.connected.value, isTrue, reason: 'never authenticated');
+    expect(hub.status.value, HubStatus.up, reason: 'never authenticated');
     // The generated stand-ins seed these exact values (hub/dev/README.md).
     expect((hub.states['energy-monitor'] as PowerState).watts, 812);
     final thermostat = hub.states['thermostat'] as ThermostatState;

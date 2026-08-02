@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/fake_hub.dart';
+import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:panel/domain/house.dart';
 import 'package:panel/ui/hub_controller.dart';
@@ -110,13 +111,13 @@ void main() {
     expect(notifications, 1);
   });
 
-  test('notifies listeners when the Hub connection flips', () {
+  test('notifies listeners when the Hub link changes status', () {
     var notifications = 0;
     controller.addListener(() => notifications++);
 
-    hub.connected.value = false;
+    hub.setStatus(HubStatus.retrying);
 
     expect(notifications, 1);
-    expect(controller.connected, isFalse);
+    expect(controller.status, HubStatus.retrying);
   });
 }

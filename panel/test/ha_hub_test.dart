@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/ha_hub.dart';
+import 'package:panel/data/hub_client.dart';
 import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/device_state.dart';
 
@@ -36,7 +37,7 @@ void main() {
     expect(channel.sent[1]['type'], 'get_states');
     expect(channel.sent[2]['type'], 'subscribe_events');
     expect(channel.sent[2]['event_type'], 'state_changed');
-    expect(hub.connected.value, isTrue);
+    expect(hub.status.value, HubStatus.up);
   });
 
   test('folds entity states down to Device states by kind', () async {
@@ -153,27 +154,9 @@ void main() {
     expect(records.map((r) => r.event), contains('missing_entities'));
   });
 
-  test('a dropped connection is retried', () async {
-    await connectAndSeed(channel, [entityFrame('input_boolean.light_hall', 'on')]);
-    var connects = 1;
-    // Re-point the factory at a fresh channel for the reconnect.
-    final reconnected = FakeChannel();
-    hub.dispose();
-    hub = HaHubClient(
-      house: loadTestHouse(),
-      url: Uri.parse('ws://test/api/websocket'),
-      token: 'test-token',
-      connect: (_) {
-        connects++;
-        return reconnected;
-      },
-      retryFloor: const Duration(milliseconds: 1),
-      retryCeiling: const Duration(milliseconds: 2),
-    );
-    reconnected.serverDrops();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-
-    expect(connects, greaterThan(1));
-    expect(hub.connected.value, isFalse);
-  });
+  // Reconnection lives in ha_hub_recovery_test.dart, where a fake clock and
+  // a fresh socket per attempt let it assert what actually happens. The
+  // wall-clock test that used to sit here counted connect attempts against
+  // one single-subscription channel, so every retry crashed in listen() and
+  // was swallowed — it never replayed a handshake, and passed anyway.
 }

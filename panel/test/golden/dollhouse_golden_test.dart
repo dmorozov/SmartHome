@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/fake_hub.dart';
+import 'package:panel/data/hub_client.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 
@@ -71,10 +72,27 @@ void main() {
     for (final device in house.floors.expand((f) => f.devices)) {
       hub.dropDevice(device.id);
     }
-    hub.setReachable(false);
+    hub.setStatus(HubStatus.retrying);
     await pumpPanel(tester, HubController(house: house, hub: hub));
 
     await expectLater(find.byType(PanelApp),
         matchesGoldenFile('goldens/hub_offline.png'));
+  });
+
+  /// The same wall, one word different — and the difference is everything:
+  /// the Hub above comes back on its own, this one never does until someone
+  /// mints a new token. In real life it happens about once a decade, which
+  /// is exactly why nobody would ever stage it by hand.
+  goldenTest('hub gave up: token rejected', (tester) async {
+    final house = loadTestHouse();
+    final hub = FakeHub(house, driftEvery: Duration.zero);
+    for (final device in house.floors.expand((f) => f.devices)) {
+      hub.dropDevice(device.id);
+    }
+    hub.setStatus(HubStatus.gaveUp);
+    await pumpPanel(tester, HubController(house: house, hub: hub));
+
+    await expectLater(find.byType(PanelApp),
+        matchesGoldenFile('goldens/hub_gave_up.png'));
   });
 }

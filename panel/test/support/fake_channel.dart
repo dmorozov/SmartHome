@@ -46,6 +46,29 @@ class _FakeSink implements WebSocketSink {
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// The Hub's side of the socket across reconnects: a fresh [FakeChannel]
+/// per connect attempt, the way a real server hands out a new socket every
+/// time.
+///
+/// A [FakeChannel]'s stream is single-subscription, so handing the same one
+/// back on every attempt turns each retry into a `listen()` crash that the
+/// client's blanket handler swallows and retries — a connect-crash loop
+/// that looks exactly like a working reconnect from the outside, and never
+/// replays a handshake. Keeping the attempts is also how a test asserts
+/// backoff: [attempts] grows once per attempt, at the moment it happens.
+class FakeHubServer {
+  final attempts = <FakeChannel>[];
+
+  /// The socket of the latest connect attempt.
+  FakeChannel get current => attempts.last;
+
+  WebSocketChannel connect(Uri _) {
+    final channel = FakeChannel();
+    attempts.add(channel);
+    return channel;
+  }
+}
+
 /// One entity as the Hub reports it — the shape carried by both the
 /// `get_states` snapshot and a `state_changed` event.
 Map<String, dynamic> entityFrame(String id, String state,

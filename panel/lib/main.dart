@@ -118,7 +118,7 @@ class PanelApp extends StatelessWidget {
                       listenable: controller,
                       builder: (context, _) => _HubBadge(
                         label: _hubKind == 'fake' ? 'FAKE HUB' : 'HUB',
-                        connected: controller.connected,
+                        status: controller.status,
                       ),
                     ),
                   ],
@@ -147,12 +147,13 @@ class PanelApp extends StatelessWidget {
 
 /// Hub reachability, always visible: a wall display has nobody watching a
 /// console, so "these readings are frozen" must be legible from across the
-/// room.
+/// room — and so must the difference between a Hub that will come back on
+/// its own and a token only a human can replace.
 class _HubBadge extends StatelessWidget {
-  const _HubBadge({required this.label, required this.connected});
+  const _HubBadge({required this.label, required this.status});
 
   final String label;
-  final bool connected;
+  final HubStatus status;
 
   @override
   Widget build(BuildContext context) {
@@ -171,14 +172,23 @@ class _HubBadge extends StatelessWidget {
             height: 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: connected
+              // One dot colour per severity, so the across-the-room read
+              // stays binary: green = live, red = stale. Which kind of
+              // stale is what the text is for.
+              color: status == HubStatus.up
                   ? const Color(0xFF4CAF50)
                   : const Color(0xFFE05A5A),
             ),
           ),
           const SizedBox(width: 8),
           Text(
-            connected ? label : '$label OFFLINE',
+            switch (status) {
+              HubStatus.up => label,
+              HubStatus.retrying => '$label OFFLINE',
+              // Names the action, not the diagnosis: whoever is standing
+              // there needs to know what to do, and nothing else will.
+              HubStatus.gaveUp => '$label NEEDS NEW TOKEN',
+            },
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
