@@ -1,19 +1,18 @@
-import 'dart:ui';
+part of 'house.dart';
 
-import '../../domain/house.dart';
+/// Plan-space geometry over a Floor's Rooms, sunk beneath [Floor]'s
+/// interface: callers ask the Floor, never these functions. Rooms tile the
+/// Floor (ADR-0004), so the Floor's outer outline is exactly the set of
+/// room-edge intervals that no other room touches from the far side.
 
-/// Plan-space geometry over a Floor's Rooms. Rooms tile the Floor
-/// (ADR-0004), so the Floor's outer outline is exactly the set of room-edge
-/// intervals that no other room touches from the far side.
-
-/// One axis-aligned interval of the Floor outline.
+/// One axis-aligned interval of a Floor's outer outline.
 class OutlineSeg {
   const OutlineSeg({
     required this.horizontal,
     required this.c,
     required this.lo,
     required this.hi,
-    required this.outwardPositive,
+    required this.outward,
   });
 
   final bool horizontal;
@@ -23,9 +22,9 @@ class OutlineSeg {
   final double lo;
   final double hi;
 
-  /// Whether the outside of the house lies on the +axis side (south for
-  /// horizontal, east for vertical).
-  final bool outwardPositive;
+  /// Which side of this segment is outside the Floor: north or south for a
+  /// horizontal segment, west or east for a vertical one.
+  final PlanDirection outward;
 
   Offset get a => horizontal ? Offset(lo, c) : Offset(c, lo);
   Offset get b => horizontal ? Offset(hi, c) : Offset(c, hi);
@@ -35,7 +34,7 @@ const _eps = 0.005; // m — converter emits mm-rounded coords
 
 /// The Floor's outer outline as axis-aligned intervals: each room edge minus
 /// every collinear edge of the other rooms.
-List<OutlineSeg> outlineSegments(List<Room> rooms) {
+List<OutlineSeg> _outlineSegments(List<Room> rooms) {
   final edges = <({int room, bool horizontal, double c, double lo, double hi,
       bool interiorPositive})>[];
   for (var r = 0; r < rooms.length; r++) {
@@ -89,20 +88,25 @@ List<OutlineSeg> outlineSegments(List<Room> rooms) {
         c: e.c,
         lo: lo,
         hi: hi,
-        outwardPositive: !e.interiorPositive,
+        // Interior on the +axis side puts the outside on the −axis side.
+        outward: e.horizontal
+            ? (e.interiorPositive ? PlanDirection.north : PlanDirection.south)
+            : (e.interiorPositive ? PlanDirection.west : PlanDirection.east),
       ));
     }
   }
   return out;
 }
 
-/// Which side of the axis-aligned wall [a]→[b] lies outside every Room:
-/// -1 (the −axis side: north / west), 1 (the +axis side: south / east),
-/// 0 (interior wall — rooms on both sides).
-int wallOutsideSide(List<Room> rooms, Offset a, Offset b) {
+/// Which side of the axis-aligned [wall] lies outside every Room, or null
+/// for an interior Wall (Rooms on both sides). Sampled a short way to each
+/// side of the wall's midpoint.
+PlanDirection? _wallOutsideSide(List<Room> rooms, Wall wall) {
   const off = 0.15; // m — clears the wall's own thickness
+  final a = wall.a;
+  final b = wall.b;
   final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
-  final horizontal = (a.dy - b.dy).abs() <= _eps;
+  final horizontal = wall.horizontal;
   final neg = horizontal
       ? Offset(mid.dx, mid.dy - off)
       : Offset(mid.dx - off, mid.dy);
@@ -111,7 +115,11 @@ int wallOutsideSide(List<Room> rooms, Offset a, Offset b) {
       : Offset(mid.dx + off, mid.dy);
   final negInside = rooms.any((r) => r.contains(neg));
   final posInside = rooms.any((r) => r.contains(pos));
-  if (negInside && !posInside) return 1;
-  if (posInside && !negInside) return -1;
-  return 0;
+  if (negInside && !posInside) {
+    return horizontal ? PlanDirection.south : PlanDirection.east;
+  }
+  if (posInside && !negInside) {
+    return horizontal ? PlanDirection.north : PlanDirection.west;
+  }
+  return null;
 }

@@ -4,12 +4,15 @@ import '../../domain/house.dart';
 import '../device_presentation.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
+import 'floor_scene.dart';
 import 'iso.dart';
-import 'plan_geometry.dart';
 
 /// One Floor as an isometric slab: rooms behind full-height translucent
 /// "glass" walls, warm glow on lit Rooms, and — when [expanded] — room
 /// labels plus tappable Device pins.
+///
+/// Shape is [FloorScene]'s call, style is this file's: the scene decides
+/// what is drawn and what a tap hits, the painter decides what colour it is.
 class FloorView extends StatelessWidget {
   const FloorView({
     super.key,
@@ -29,13 +32,21 @@ class FloorView extends StatelessWidget {
   final ValueChanged<Device>? onDeviceTap;
 
   /// Pixel extrusion below the slab (the visible "walls").
-  static const wallDepth = 22.0;
+  static const wallDepth = FloorScene.wallDepth;
 
   static const _pinSize = 34.0;
 
   @override
   Widget build(BuildContext context) {
     final size = projection.size;
+    final scene = FloorScene(
+      floor: floor,
+      projection: projection,
+      litRooms: {
+        for (final room in floor.rooms)
+          if (controller.isRoomLit(room)) room.id,
+      },
+    );
     // Room labels go straight onto the canvas, so they do not inherit the
     // app's text style the way a Text widget does. Without this they render
     // in whatever font the engine happens to default to — a different one
@@ -56,16 +67,12 @@ class FloorView extends StatelessWidget {
             // bounding boxes (a neighbour sits in the selected Floor's empty
             // isometric corner), so only the slab itself may take a tap.
             behavior: HitTestBehavior.deferToChild,
-            onTapUp: expanded ? (d) => _handleTap(d.localPosition) : null,
+            onTapUp:
+                expanded ? (d) => _handleTap(scene, d.localPosition) : null,
             child: CustomPaint(
               size: Size(size.width, size.height + wallDepth),
               painter: _FloorPainter(
-                floor: floor,
-                projection: projection,
-                litRooms: {
-                  for (final r in floor.rooms)
-                    if (controller.isRoomLit(r)) r.id,
-                },
+                scene: scene,
                 showLabels: expanded,
                 labelStyle: labelStyle,
               ),
@@ -106,14 +113,11 @@ class FloorView extends StatelessWidget {
     );
   }
 
-  void _handleTap(Offset local) {
-    final plan = projection.unproject(local);
-    for (final room in floor.rooms) {
-      if (room.contains(plan)) {
-        onRoomTap?.call(room);
-        return;
-      }
-    }
+  /// The same answer the painter claimed the tap with — a point the Floor
+  /// takes out of the gesture arena always acts on a Room.
+  void _handleTap(FloorScene scene, Offset local) {
+    final room = scene.roomAtLocal(local);
+    if (room != null) onRoomTap?.call(room);
   }
 }
 
@@ -158,82 +162,66 @@ class _DevicePin extends StatelessWidget {
   }
 }
 
+/// Strokes and fills a decided [FloorScene]. Every geometric choice was made
+/// before this class saw it; what is left is the palette and the order.
 class _FloorPainter extends CustomPainter {
   _FloorPainter({
-    required this.floor,
-    required this.projection,
-    required this.litRooms,
+    required this.scene,
     required this.showLabels,
     required this.labelStyle,
   });
 
-  final Floor floor;
-  final IsoProjection projection;
-  final Set<String> litRooms;
+  final FloorScene scene;
   final bool showLabels;
   final TextStyle labelStyle;
 
   @override
   void paint(Canvas canvas, Size size) {
-    const depth = Offset(0, FloorView.wallDepth);
-
-    // Rooms tile the Floor, so the slab is the union of their footprints —
-    // there is no house-perimeter concept (partial upper floors and the
-    // protruding garage just work).
-    Path? slab;
-    for (final room in floor.rooms) {
-      final path = projection.projectPolygon(room.footprint);
-      slab = slab == null ? path : Path.combine(PathOperation.union, slab, path);
-    }
-    if (slab == null) return;
+    if (scene.roomShapes.isEmpty) return;
+    const depth = Offset(0, FloorScene.wallDepth);
 
     canvas.drawShadow(
-        slab.shift(depth), const Color(0xFF7A849C), 6, false);
+        scene.slab.shift(depth), const Color(0xFF7A849C), 6, false);
 
-    // Plinth: extrude the viewer-facing outline edges (south + east).
-    for (final seg in outlineSegments(floor.rooms)) {
-      if (!seg.outwardPositive) continue;
-      final a = projection.project(seg.a);
-      final b = projection.project(seg.b);
+    // Plinth: the viewer-facing outline edges, extruded.
+    for (final face in scene.plinthFaces) {
       canvas.drawPath(
-        Path()..addPolygon([a, b, b + depth, a + depth], true),
+        face.quad,
         Paint()
-          ..color = seg.horizontal
+          ..color = face.facing == WallFacing.facing
               ? const Color(0xFFCBD2E0)
               : const Color(0xFFBFC7D8),
       );
     }
 
-    canvas.drawPath(slab, Paint()..color = PanelTheme.surfaceRaised);
+    canvas.drawPath(scene.slab, Paint()..color = PanelTheme.surfaceRaised);
 
     final wallPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.4
       ..color = PanelTheme.inkFaint.withValues(alpha: .55);
 
-    for (final room in floor.rooms) {
-      final path = projection.projectPolygon(room.footprint);
-      if (litRooms.contains(room.id)) {
-        final center = projection.project(room.bounds.center);
-        final radius = room.bounds.longestSide * projection.scale;
+    for (final shape in scene.roomShapes) {
+      final glow = shape.glow;
+      if (glow != null) {
         canvas.save();
-        canvas.clipPath(path);
+        canvas.clipPath(shape.outline);
         canvas.drawPath(
-          path,
+          shape.outline,
           Paint()
             ..shader = RadialGradient(colors: [
               PanelTheme.glow.withValues(alpha: .5),
               PanelTheme.glow.withValues(alpha: .05),
-            ]).createShader(
-                Rect.fromCircle(center: center, radius: radius)),
+            ]).createShader(Rect.fromCircle(
+                center: glow.center, radius: glow.radius)),
         );
         canvas.restore();
       }
-      canvas.drawPath(path, wallPaint);
+      canvas.drawPath(shape.outline, wallPaint);
     }
 
     canvas.drawPath(
-      slab,
+      scene.slab,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.8
@@ -243,10 +231,8 @@ class _FloorPainter extends CustomPainter {
     _paintGlassWalls(canvas);
 
     if (showLabels) {
-      for (final room in floor.rooms) {
-        // Above the room center — ceiling lights tend to sit exactly there.
-        _label(canvas, room.name,
-            projection.project(room.bounds.center) - const Offset(0, 24));
+      for (final shape in scene.roomShapes) {
+        _label(canvas, shape.room.name, shape.labelAnchor);
       }
     }
   }
@@ -255,30 +241,18 @@ class _FloorPainter extends CustomPainter {
   /// candidates live on the prototype/dollhouse-walls branch). Drawn from
   /// the Floor's Wall data as-is: an undrawn boundary is an open passage
   /// (ADR-0004).
-  static const _wallHeightM = 1.5;
-
   void _paintGlassWalls(Canvas canvas) {
-    // Painter's algorithm: back-to-front by plan depth.
-    final walls = [...floor.walls]..sort((w1, w2) =>
-        (w1.a.dx + w1.a.dy + w1.b.dx + w1.b.dy)
-            .compareTo(w2.a.dx + w2.a.dy + w2.b.dx + w2.b.dy));
-    for (final wall in walls) {
-      final pa = projection.project(wall.a);
-      final pb = projection.project(wall.b);
-      final up = Offset(0, -_wallHeightM * projection.scale);
-      final quad = Path()
-        ..addPolygon([pa, pb, pb + up, pa + up], true);
+    for (final wall in scene.wallQuads) {
       // x-running walls face the viewer, y-running walls sit in shade; the
       // viewer-far exterior walls (outside to the north/west) are more
       // opaque so the shell reads.
-      final face =
-          wall.horizontal ? const Color(0xFFE2E7F0) : const Color(0xFFC7CFE0);
-      final backExterior =
-          wallOutsideSide(floor.rooms, wall.a, wall.b) == -1;
-      final alpha = backExterior ? .5 : .26;
-      canvas.drawPath(quad, Paint()..color = face.withValues(alpha: alpha));
+      final face = wall.facing == WallFacing.facing
+          ? const Color(0xFFE2E7F0)
+          : const Color(0xFFC7CFE0);
+      final alpha = wall.viewerFarExterior ? .5 : .26;
+      canvas.drawPath(wall.quad, Paint()..color = face.withValues(alpha: alpha));
       canvas.drawPath(
-        quad,
+        wall.quad,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 0.8
@@ -286,8 +260,8 @@ class _FloorPainter extends CustomPainter {
       );
       // Bright top cap catches the light.
       canvas.drawLine(
-        pa + up,
-        pb + up,
+        wall.capA,
+        wall.capB,
         Paint()
           ..color = Colors.white.withValues(alpha: alpha + .15)
           ..strokeWidth = 2,
@@ -303,27 +277,20 @@ class _FloorPainter extends CustomPainter {
     tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
   }
 
-  /// Only the slab (and the plinth extruded below it) belongs to this
-  /// Floor; a tap anywhere else in the box falls through to whatever sits
-  /// behind — normally the neighbouring Floor tucked into the corner.
+  /// Only the slab (and the plinth extruded below it) belongs to this Floor;
+  /// a tap anywhere else in the box falls through to whatever sits behind —
+  /// normally the neighbouring Floor tucked into the corner. This is the
+  /// same answer [FloorView] acts on, so the Floor cannot claim a tap it
+  /// would then swallow.
   @override
-  bool hitTest(Offset position) {
-    for (final offset in const [Offset.zero, Offset(0, -FloorView.wallDepth)]) {
-      final plan = projection.unproject(position + offset);
-      for (final room in floor.rooms) {
-        if (room.contains(plan)) return true;
-      }
-    }
-    return false;
-  }
+  bool hitTest(Offset position) => scene.roomAtLocal(position) != null;
 
   @override
   bool shouldRepaint(_FloorPainter oldDelegate) =>
-      oldDelegate.floor != floor ||
-      oldDelegate.litRooms.length != litRooms.length ||
-      !oldDelegate.litRooms.containsAll(litRooms) ||
+      oldDelegate.scene.floor != scene.floor ||
+      oldDelegate.scene.litRooms.length != scene.litRooms.length ||
+      !oldDelegate.scene.litRooms.containsAll(scene.litRooms) ||
       oldDelegate.showLabels != showLabels ||
       oldDelegate.labelStyle != labelStyle ||
-      oldDelegate.projection.scale != projection.scale;
+      oldDelegate.scene.projection.scale != scene.projection.scale;
 }
-

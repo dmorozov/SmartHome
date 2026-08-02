@@ -87,8 +87,7 @@ class _DollhouseViewState extends State<DollhouseView> {
         constraints.maxWidth * 0.78,
         math.max(200.0, (heightBudget - FloorView.wallDepth) * 2),
       );
-      final projection =
-          IsoProjection.fitWidth(_unionPlanSize(house), isoWidth);
+      final projection = IsoProjection.fitWidth(house.planExtent, isoWidth);
       final floorH = projection.size.height + FloorView.wallDepth;
       final planW = projection.size.width;
       final left = (constraints.maxWidth - planW) / 2;
@@ -169,17 +168,6 @@ class _DollhouseViewState extends State<DollhouseView> {
         ],
       );
     });
-  }
-
-  Size _unionPlanSize(House house) {
-    var w = 0.0, d = 0.0;
-    for (final floor in house.floors) {
-      for (final room in floor.rooms) {
-        w = math.max(w, room.bounds.right);
-        d = math.max(d, room.bounds.bottom);
-      }
-    }
-    return Size(w, d);
   }
 
   void _selectFloor(Floor floor) {

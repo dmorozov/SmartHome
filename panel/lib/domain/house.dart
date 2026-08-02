@@ -1,11 +1,14 @@
 import 'dart:ui';
 
+part 'plan_geometry.dart';
+
 /// Static structure of the house, as the Panel draws it. This is Panel-side
 /// configuration — the Hub knows devices, not geometry.
 ///
 /// Plan coordinates are meters: x grows east (screen down-right in the
-/// isometric projection), y grows south (screen down-left). Each Floor has
-/// its own plan origin at its north-west corner.
+/// isometric projection), y grows south (screen down-left). All Floors share
+/// one plan origin — the house's NW corner (ADR-0004) — which is what lets a
+/// single projection over [House.planExtent] draw every Floor.
 class House {
   const House({required this.name, required this.floors});
 
@@ -13,7 +16,24 @@ class House {
 
   /// Ordered lowest level first.
   final List<Floor> floors;
+
+  /// Union plan extent across all Floors — the box every Floor projects
+  /// within, so one IsoProjection serves the whole Dollhouse. Measured from
+  /// the shared origin, so a partial upper Floor contributes its far edge,
+  /// not its width.
+  Size get planExtent {
+    var w = 0.0, d = 0.0;
+    for (final floor in floors) {
+      final extent = floor.planExtent;
+      if (extent.width > w) w = extent.width;
+      if (extent.height > d) d = extent.height;
+    }
+    return Size(w, d);
+  }
 }
+
+/// Compass direction in plan space: x grows east, y grows south (ADR-0004).
+enum PlanDirection { north, south, east, west }
 
 /// One level of the house in the Dollhouse. Floors stack; tapping one
 /// expands it. A Floor need not span the whole house footprint.
@@ -38,6 +58,40 @@ class Floor {
   final List<Wall> walls;
 
   Iterable<Device> get devices => rooms.expand((r) => r.devices);
+
+  /// The Floor's outer outline as axis-aligned segments. Rooms tile the
+  /// Floor (ADR-0004; the converter enforces that — the Panel trusts it), so
+  /// the outline is each room edge minus every collinear edge of the other
+  /// rooms. There is no perimeter concept: the protruding garage and a
+  /// partial upper Floor both fall out of the union.
+  List<OutlineSeg> outline() => _outlineSegments(rooms);
+
+  /// The Room containing plan-space point [p], or null when [p] is outside
+  /// the Floor's footprint. Rooms tile the Floor, so at most one matches.
+  /// The single authority for "what is at this plan point".
+  Room? roomAt(Offset p) {
+    for (final room in rooms) {
+      if (room.contains(p)) return room;
+    }
+    return null;
+  }
+
+  /// Which side of [wall] lies outside every Room, or null for an interior
+  /// Wall (Rooms on both sides).
+  PlanDirection? outsideOf(Wall wall) => _wallOutsideSide(rooms, wall);
+
+  /// This Floor's extent measured from the one plan origin shared by all
+  /// Floors: the house's NW corner (ADR-0004). A partial upper Floor whose
+  /// rooms start at x=6 still reports its extent from x=0.
+  Size get planExtent {
+    var w = 0.0, d = 0.0;
+    for (final room in rooms) {
+      final bounds = room.bounds;
+      if (bounds.right > w) w = bounds.right;
+      if (bounds.bottom > d) d = bounds.bottom;
+    }
+    return Size(w, d);
+  }
 }
 
 /// A Wall segment on a Floor, meters in plan space. Axis-aligned.
@@ -47,7 +101,11 @@ class Wall {
   final Offset a;
   final Offset b;
 
-  bool get horizontal => a.dy == b.dy;
+  /// One convention for "runs east–west", shared with the outline algorithm:
+  /// the converter emits mm-rounded coordinates, so exact equality would let
+  /// a Wall read as horizontal for its face shading and near-horizontal for
+  /// its exterior classification.
+  bool get horizontal => (a.dy - b.dy).abs() <= _eps;
 }
 
 /// A named area on a Floor. Rooms tile their Floor completely — every point
