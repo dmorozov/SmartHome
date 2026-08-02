@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/fake_hub.dart';
-import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 
 import 'test_house.dart';
 
+/// The Dollhouse as the wall shows it. Every scene the Hub has a hand in is
+/// staged through FakeHub's driving surface — the same adapter dev builds
+/// run — rather than through a stand-in written for one test.
 void main() {
   (HubController, FakeHub) makeController() {
     final house = loadTestHouse();
@@ -73,36 +75,63 @@ void main() {
     // Unknown state is normal: no entity bound yet, an unavailable entity,
     // or the window before the Hub's first snapshot (ADR-0004). The pin's
     // affordance follows the Device's kind, so it stays a light switch.
-    final house = loadTestHouse();
-    final hub = _UnknownStateHub();
-    await tester.pumpWidget(
-        PanelApp(controller: HubController(house: house, hub: hub)));
+    final (controller, hub) = makeController();
+    await tester.pumpWidget(PanelApp(controller: controller));
 
+    hub.dropDevice('light-hall');
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('pin-light-hall')));
     await tester.pumpAndSettle();
 
-    expect(hub.toggled, ['light-hall']);
     expect(find.byType(Dialog), findsNothing);
+    expect((hub.states['light-hall'] as SwitchState).on, isTrue);
   });
-}
 
-/// A Hub that is up but has nothing to say about any Device: every state is
-/// unknown. Records the commands it is sent.
-class _UnknownStateHub implements HubClient {
-  final toggled = <String>[];
+  testWidgets('the OFFLINE badge follows the Hub away and back',
+      (tester) async {
+    final (controller, hub) = makeController();
+    await tester.pumpWidget(PanelApp(controller: controller));
 
-  @override
-  final ValueNotifier<bool> connected = ValueNotifier(true);
+    expect(find.text('FAKE HUB'), findsOneWidget);
 
-  @override
-  Map<String, DeviceState> get states => const {};
+    hub.setReachable(false);
+    await tester.pump();
 
-  @override
-  Stream<DeviceState> get stateChanges => const Stream.empty();
+    expect(find.text('FAKE HUB OFFLINE'), findsOneWidget);
 
-  @override
-  Future<void> toggle(String deviceId) async => toggled.add(deviceId);
+    hub.setReachable(true);
+    await tester.pump();
 
-  @override
-  void dispose() => connected.dispose();
+    expect(find.text('FAKE HUB'), findsOneWidget);
+  });
+
+  testWidgets('a state the Hub reports re-renders its pin', (tester) async {
+    final (controller, hub) = makeController();
+    await tester.pumpWidget(PanelApp(controller: controller));
+
+    expect(find.text('21.4°'), findsOneWidget);
+
+    hub.pushState(
+        const ThermostatState('thermostat', currentC: 23.0, targetC: 21.0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('23.0°'), findsOneWidget);
+    expect(find.text('21.4°'), findsNothing);
+  });
+
+  testWidgets('a Device the Hub loses re-renders as unknown', (tester) async {
+    final (controller, hub) = makeController();
+    await tester.pumpWidget(PanelApp(controller: controller));
+
+    // A pin with a reading wears it; with nothing to report it falls back
+    // to its kind's icon — the difference between "812 W" and "who knows".
+    expect(find.text('812W'), findsOneWidget);
+    expect(find.byIcon(Icons.bolt), findsNothing);
+
+    hub.dropDevice('energy-monitor');
+    await tester.pumpAndSettle();
+
+    expect(find.text('812W'), findsNothing);
+    expect(find.byIcon(Icons.bolt), findsOneWidget);
+  });
 }

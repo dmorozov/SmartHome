@@ -6,6 +6,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../diagnostics/log.dart';
 import '../domain/device_state.dart';
+import '../domain/device_traits.dart';
 import '../domain/house.dart';
 import 'hub_client.dart';
 
@@ -38,6 +39,7 @@ class HaHubClient implements HubClient {
         _token = token,
         _connect = connect ?? WebSocketChannel.connect {
     for (final device in house.floors.expand((f) => f.devices)) {
+      _byId[device.id] = device;
       final entityId = device.entityId;
       if (entityId != null) _byEntity[entityId] = device;
     }
@@ -60,13 +62,14 @@ class HaHubClient implements HubClient {
   final Duration retryFloor;
   final Duration retryCeiling;
 
+  final _byId = <String, Device>{};
   final _byEntity = <String, Device>{};
   final _states = <String, DeviceState>{};
 
   /// Devices currently reporting an unusable state, so the warning is
   /// logged once per outage rather than once per message.
   final _unusable = <String>{};
-  final _changes = StreamController<DeviceState>.broadcast();
+  final _changes = StreamController<String>.broadcast();
 
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
@@ -83,12 +86,22 @@ class HaHubClient implements HubClient {
   Map<String, DeviceState> get states => Map.unmodifiable(_states);
 
   @override
-  Stream<DeviceState> get stateChanges => _changes.stream;
+  Stream<String> get stateChanges => _changes.stream;
+
+  @override
+  bool togglable(String deviceId) => _byId[deviceId]?.kind.toggles ?? false;
 
   @override
   Future<void> toggle(String deviceId) async {
-    final device = _byEntity.values.where((d) => d.id == deviceId).firstOrNull;
-    final entityId = device?.entityId;
+    final device = _byId[deviceId];
+    if (device == null || !device.kind.toggles) {
+      // `homeassistant.toggle` delegates per domain, so on `climate.*` it
+      // would flip the real HVAC. The Panel refuses rather than find out.
+      Log.warn('hub', 'toggle_refused',
+          {'device': deviceId, 'kind': device?.kind.name});
+      return;
+    }
+    final entityId = device.entityId;
     if (entityId == null) {
       // A pin that does nothing when tapped, silently, is the worst kind of
       // bug to chase on a wall panel.
@@ -250,7 +263,7 @@ class HaHubClient implements HubClient {
     if (state == null) {
       // 'unavailable'/'unknown', or a reading we could not parse: drop the
       // Device back to unknown rather than showing a stale value.
-      _states.remove(device.id);
+      final wasKnown = _states.remove(device.id) != null;
       // One line per *entry* into the unusable state. Logging every message
       // would put a permanently-unavailable entity into journald forever.
       if (_unusable.add(device.id)) {
@@ -260,6 +273,11 @@ class HaHubClient implements HubClient {
           'state': entity['state'],
         });
       }
+      // A drop is a change like any other — without this the pin keeps its
+      // stale reading until some unrelated Device happens to repaint it.
+      // Only when something actually left: a permanently-unavailable entity
+      // reports on every message, and those repaints say nothing new.
+      if (wasKnown && !_changes.isClosed) _changes.add(device.id);
       return true;
     }
     if (_unusable.remove(device.id)) {
@@ -274,7 +292,7 @@ class HaHubClient implements HubClient {
         'state': entity['state'],
       });
     }
-    if (!_changes.isClosed) _changes.add(state);
+    if (!_changes.isClosed) _changes.add(device.id);
     return true;
   }
 

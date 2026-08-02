@@ -1,69 +1,14 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/ha_hub.dart';
 import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/device_state.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'support/fake_channel.dart';
 import 'test_house.dart';
-
-/// A WebSocketChannel the test drives by hand: [fromServer] plays frames at
-/// the client, [sent] records what the client wrote back.
-class FakeChannel implements WebSocketChannel {
-  final _fromServer = StreamController<dynamic>();
-  final sent = <Map<String, dynamic>>[];
-  var closed = false;
-
-  void serverSays(Map<String, dynamic> message) =>
-      _fromServer.add(jsonEncode(message));
-
-  void serverDrops() => _fromServer.close();
-
-  @override
-  Stream<dynamic> get stream => _fromServer.stream;
-
-  @override
-  WebSocketSink get sink => _FakeSink(this);
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-class _FakeSink implements WebSocketSink {
-  _FakeSink(this.channel);
-  final FakeChannel channel;
-
-  @override
-  void add(dynamic data) =>
-      channel.sent.add(jsonDecode(data as String) as Map<String, dynamic>);
-
-  @override
-  Future<void> close([int? closeCode, String? closeReason]) async =>
-      channel.closed = true;
-
-  @override
-  noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
-}
-
-Map<String, dynamic> _entity(String id, String state,
-        [Map<String, dynamic> attributes = const {}]) =>
-    {'entity_id': id, 'state': state, 'attributes': attributes};
 
 void main() {
   late FakeChannel channel;
   late HaHubClient hub;
-
-  /// Runs the handshake up to the point HA has answered `get_states`.
-  Future<void> connectAndSeed(List<Map<String, dynamic>> entities) async {
-    channel.serverSays({'type': 'auth_required', 'ha_version': '2026.7'});
-    await pumpEventQueue();
-    channel.serverSays({'type': 'auth_ok', 'ha_version': '2026.7'});
-    await pumpEventQueue();
-    channel.serverSays({'id': 1, 'type': 'result', 'success': true, 'result': entities});
-    await pumpEventQueue();
-  }
 
   setUp(() {
     channel = FakeChannel();
@@ -95,13 +40,13 @@ void main() {
   });
 
   test('folds entity states down to Device states by kind', () async {
-    await connectAndSeed([
-      _entity('input_boolean.light_hall', 'on'),
-      _entity('climate.ecobee', 'heat',
+    await connectAndSeed(channel, [
+      entityFrame('input_boolean.light_hall', 'on'),
+      entityFrame('climate.ecobee', 'heat',
           {'current_temperature': 21.4, 'temperature': 21.0}),
-      _entity('sensor.emporia_vue', '812.5'),
-      _entity('sensor.lg_washer', 'Idle'),
-      _entity('input_boolean.garage_door', 'off'),
+      entityFrame('sensor.emporia_vue', '812.5'),
+      entityFrame('sensor.lg_washer', 'Idle'),
+      entityFrame('input_boolean.garage_door', 'off'),
     ]);
 
     expect((hub.states['light-hall'] as SwitchState).on, isTrue);
@@ -114,54 +59,43 @@ void main() {
   });
 
   test('ignores entities no Device binds to', () async {
-    await connectAndSeed([_entity('light.someone_elses_lamp', 'on')]);
+    await connectAndSeed(channel, [entityFrame('light.someone_elses_lamp', 'on')]);
     expect(hub.states, isEmpty);
   });
 
   test('state_changed events update state and reach the stream', () async {
-    await connectAndSeed([_entity('input_boolean.light_hall', 'off')]);
-    final changes = <DeviceState>[];
+    await connectAndSeed(channel, [entityFrame('input_boolean.light_hall', 'off')]);
+    final changes = <String>[];
     hub.stateChanges.listen(changes.add);
 
-    channel.serverSays({
-      'type': 'event',
-      'event': {
-        'event_type': 'state_changed',
-        'data': {
-          'entity_id': 'input_boolean.light_hall',
-          'new_state': _entity('input_boolean.light_hall', 'on'),
-        },
-      },
-    });
+    channel.serverSays(
+        stateChangedFrame(entityFrame('input_boolean.light_hall', 'on')));
     await pumpEventQueue();
 
     expect((hub.states['light-hall'] as SwitchState).on, isTrue);
-    expect((changes.single as SwitchState).on, isTrue);
+    expect(changes.single, 'light-hall');
   });
 
   test('unavailable drops the Device back to unknown, not a stale value',
       () async {
-    await connectAndSeed([_entity('sensor.emporia_vue', '812')]);
+    await connectAndSeed(channel, [entityFrame('sensor.emporia_vue', '812')]);
     expect(hub.states.containsKey('energy-monitor'), isTrue);
+    final changes = <String>[];
+    hub.stateChanges.listen(changes.add);
 
-    channel.serverSays({
-      'type': 'event',
-      'event': {
-        'event_type': 'state_changed',
-        'data': {
-          'entity_id': 'sensor.emporia_vue',
-          'new_state': _entity('sensor.emporia_vue', 'unavailable'),
-        },
-      },
-    });
+    channel.serverSays(
+        stateChangedFrame(entityFrame('sensor.emporia_vue', 'unavailable')));
     await pumpEventQueue();
 
     expect(hub.states.containsKey('energy-monitor'), isFalse);
+    // The drop has to be announced like any other change, or the pin keeps
+    // its stale reading until some unrelated Device repaints the Dollhouse.
+    expect(changes.single, 'energy-monitor');
   });
 
   test('toggle calls the domain-agnostic homeassistant.toggle service',
       () async {
-    await connectAndSeed([_entity('input_boolean.light_hall', 'off')]);
+    await connectAndSeed(channel, [entityFrame('input_boolean.light_hall', 'off')]);
     channel.sent.clear();
 
     await hub.toggle('light-hall');
@@ -171,6 +105,30 @@ void main() {
     expect(channel.sent.single['service'], 'toggle');
     expect(channel.sent.single['target'],
         {'entity_id': 'input_boolean.light_hall'});
+  });
+
+  test('refuses to toggle the thermostat — nothing reaches the Hub',
+      () async {
+    final records = <LogRecord>[];
+    Log.sink = records.add;
+    addTearDown(() => Log.sink = Log.printRecord);
+
+    await connectAndSeed(channel, [
+      entityFrame('climate.ecobee', 'heat',
+          {'current_temperature': 21.4, 'temperature': 21.0}),
+    ]);
+    channel.sent.clear();
+
+    await hub.toggle('thermostat');
+
+    // `homeassistant.toggle` delegates per domain, and on `climate.*` that
+    // is `climate.toggle` — it would flip the real HVAC. Nothing but the
+    // seam's refusal stands between a mis-tap and a cold house.
+    expect(channel.sent, isEmpty);
+    final refused = records.singleWhere((r) => r.event == 'toggle_refused');
+    expect(refused.level, LogLevel.warn);
+    expect(refused.area, 'hub');
+    expect(refused.fields, {'device': 'thermostat', 'kind': 'thermostat'});
   });
 
   test('reports how much of the House the snapshot actually covered',
@@ -183,7 +141,7 @@ void main() {
       Log.level = LogLevel.warn;
     });
 
-    await connectAndSeed([_entity('input_boolean.light_hall', 'on')]);
+    await connectAndSeed(channel, [entityFrame('input_boolean.light_hall', 'on')]);
 
     final snapshot = records.firstWhere((r) => r.event == 'snapshot').fields!;
     expect(snapshot['entities'], 1);
@@ -196,7 +154,7 @@ void main() {
   });
 
   test('a dropped connection is retried', () async {
-    await connectAndSeed([_entity('input_boolean.light_hall', 'on')]);
+    await connectAndSeed(channel, [entityFrame('input_boolean.light_hall', 'on')]);
     var connects = 1;
     // Re-point the factory at a fresh channel for the reconnect.
     final reconnected = FakeChannel();

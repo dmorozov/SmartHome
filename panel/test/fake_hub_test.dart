@@ -4,6 +4,9 @@ import 'package:panel/domain/device_state.dart';
 
 import 'test_house.dart';
 
+/// What the fake Hub does beyond the shared HubClient contract
+/// (hub_contract_test.dart): the seeding script, and the one behaviour only
+/// it can have — inventing the state a real Hub would have known.
 void main() {
   test('seeds a state for every device in the demo house', () {
     final house = loadTestHouse();
@@ -20,18 +23,24 @@ void main() {
     final before = (hub.states[id] as SwitchState).on;
     final emitted = hub.stateChanges.first;
     await hub.toggle(id);
-    final change = await emitted as SwitchState;
-    expect(change.deviceId, id);
-    expect(change.on, !before);
+    expect(await emitted, id);
     expect((hub.states[id] as SwitchState).on, !before);
     hub.dispose();
   });
 
-  test('toggle is a no-op for devices without a binary state', () async {
+  test('toggling a light with unknown state seeds it on', () async {
     final hub = FakeHub(loadTestHouse(), driftEvery: Duration.zero);
-    final before = hub.states['thermostat'];
-    await hub.toggle('thermostat');
-    expect(hub.states['thermostat'], same(before));
+    hub.dropDevice('light-hall');
+    expect(hub.states.containsKey('light-hall'), isFalse);
+
+    final emitted = hub.stateChanges.first;
+    await hub.toggle('light-hall');
+
+    // The real Hub knows the Device even when the Panel's knowledge has
+    // lapsed, so the fake models the command landing rather than vanishing
+    // — otherwise a tap on an unknown-state pin would be untestable.
+    expect(await emitted, 'light-hall');
+    expect((hub.states['light-hall'] as SwitchState).on, isTrue);
     hub.dispose();
   });
 }

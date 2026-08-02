@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/fake_hub.dart';
-import 'package:panel/data/hub_client.dart';
-import 'package:panel/domain/device_state.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 
@@ -61,31 +59,21 @@ void main() {
         matchesGoldenFile('goldens/device_popup.png'));
   });
 
+  /// What the wall shows on a cold start with the Hub down: red badge, and
+  /// every Device unknown rather than frozen on its last reading. The most
+  /// important scene to recognise at a glance, and the hardest to reach by
+  /// hand — so it is scripted through the same adapter dev builds run,
+  /// rather than through a stand-in that only this file knows about.
   goldenTest('hub unreachable', (tester) async {
     final house = loadTestHouse();
-    await pumpPanel(tester, HubController(house: house, hub: _OfflineHub()));
+    final hub = FakeHub(house, driftEvery: Duration.zero);
+    for (final device in house.floors.expand((f) => f.devices)) {
+      hub.dropDevice(device.id);
+    }
+    hub.setReachable(false);
+    await pumpPanel(tester, HubController(house: house, hub: hub));
 
     await expectLater(find.byType(PanelApp),
         matchesGoldenFile('goldens/hub_offline.png'));
   });
-}
-
-/// What the wall shows when the Hub is down: red badge, and every Device
-/// unknown rather than frozen on its last reading. The most important scene
-/// to be able to recognise at a glance, and the hardest to reach by hand.
-class _OfflineHub implements HubClient {
-  @override
-  final ValueNotifier<bool> connected = ValueNotifier(false);
-
-  @override
-  Map<String, DeviceState> get states => const {};
-
-  @override
-  Stream<DeviceState> get stateChanges => const Stream.empty();
-
-  @override
-  Future<void> toggle(String deviceId) async {}
-
-  @override
-  void dispose() => connected.dispose();
 }

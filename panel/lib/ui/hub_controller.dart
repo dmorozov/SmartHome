@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../data/hub_client.dart';
 import '../diagnostics/log.dart';
-import '../domain/device_state.dart';
 import '../domain/house.dart';
 import 'device_presentation.dart';
 
@@ -21,7 +20,8 @@ class HubController extends ChangeNotifier {
 
   final House house;
   final HubClient _hub;
-  late final StreamSubscription<DeviceState> _sub;
+  /// Changed-Device ids, ignored: any change repaints the whole Dollhouse.
+  late final StreamSubscription<String> _sub;
 
   /// Everything the Dollhouse and the Popup need to render and act on
   /// [device], derived from its kind and current live state.
