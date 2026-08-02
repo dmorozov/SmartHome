@@ -106,54 +106,11 @@ Live demo: https://demo.home-assistant.io/#/lovelace/home
 
 ### Create a house
 
-Phase 0 is rewritten around the corrected design, and docs/plans/sh3d-import/sh3d-lab.py is the instrument — self-tested against all four of your example files (it reproduced every measurement from the analysis: 216 furniture elements incl. shelfUnit, 4 unnamed rooms, floorVisible=false, radians) and both inject paths verified round-trip, preserving all 473 zip entries.
+0. Install Seet Home 3D
 
-Do this — ~20 minutes
+You can use free version or install from the App Store (OSX):
 
-1 · Draw a test house (5 min, Sweet Home 3D — brew install --cask sweet-home3d if needed)
+```bash
+brew install --cask sweet-home3d
+```
 
-- Plan → Create walls: two adjoining rectangular rooms, one north of the other. Double-click to end each run.
-- Plan → Create rooms: double-click inside each area. Double-click each → Name = North Room / South Room.
-- Drag in three pieces of furniture: one clearly in the north room, one in the south room, one anywhere. Kind is irrelevant — they stand in for Device markers.
-- File → Save as ~/sh3d-lab/test-house.sh3d
-
-2 · Baseline — paste me the output:
-
-cd ~/Work/ITConsulting/SmartHome
-python3 docs/plans/sh3d-import/sh3d-lab.py inspect ~/sh3d-lab/test-house.sh3d
-
-3 · Inject keys, then paste the output:
-
-python3 docs/plans/sh3d-import/sh3d-lab.py inject \
-    ~/sh3d-lab/test-house.sh3d -o ~/sh3d-lab/test-keyed.sh3d
-python3 docs/plans/sh3d-import/sh3d-lab.py inspect ~/sh3d-lab/test-keyed.sh3d
-
-4 · THE GATE — in Sweet Home 3D:
-
-- File → Open ~/sh3d-lab/test-keyed.sh3d
-- Move one piece a few centimetres (just make the file dirty)
-- File → Save — overwrite, not Save as
-- Then paste:
-
-python3 docs/plans/sh3d-import/sh3d-lab.py inspect ~/sh3d-lab/test-keyed.sh3d
-
-Properties still listed → V1 passes, phases 1–2 are alive. Gone → the stop rule fires and we pivot to plan 07 → phase 3 → plan 08 with today's two-file pipeline intact.
-
-Two retry knobs if it misbehaves: SH3D refuses to open the file → re-run inject with --props-first. It opens fine but the properties vanish at step 4 → re-run with --drop-legacy (the archive also carries a legacy Java-serialized Home entry that may win over Home.xml on load — worth knowing either way).
-
-5 · Copy-paste (30 seconds, same file): select a keyed piece, ⌘C ⌘V, drag the copy aside, Save, inspect once more and paste. Tells us whether duplicate keys are the common accident or an edge case.
-
-6 · Two visual checks — just tell me yes/no:
-
-- Double-click a room: any field for custom/additional properties (not Name, not the display toggles)?
-- Double-click a level tab: same question.
-
-Expected "no" for both — that ratifies keeping slug-of-name identity for Rooms and Floors and records the spec's authored roomKey as unimplementable in the tool. I.e. say something like: "V1 passed, properties survived the re-save".
-
-What I'll read out of it without you doing anything
-
-The baseline inspect already answers the y-direction question (north piece's y vs south piece's — smaller means y grows south, which is what ADR-0004 assumes), prints an angle-unit verdict, and reports whether SH3D wrote a <level> element for a one-level drawing (no example or fixture has ever exercised the zero-level path).
-
-Deliberately not yet
-
-The Furniture Library Editor work — building a .sh3f marker library, checking whether catalog properties propagate onto placed pieces. That's the ergonomics question, and it only matters once survival is known. If V1 passes, we pick the cheapest authoring path then: native fields via a launcher flag, a marker library, or just keeping the injection script (name pieces in SH3D, run one command). Phase 1 reads the key from the same place regardless, so none of it blocks the converter work.

@@ -1,0 +1,57 @@
+<?xml version='1.0'?>
+<!-- Device markers as Sweet Home 3D 7.5 writes them — phase 0's E6b result,
+     and the ground truth phase 1 codes its parser against.
+
+     The first <pieceOfFurniture> is verbatim from ~/sh3d-lab/test-markers.sh3d:
+     a marker dragged in from SmartHome.sh3f (tool/sh3d_marker_library.py) whose
+     placementKey was typed into the Modify properties dialog and saved by the
+     application. Note what that proves: <property> children survive a stock
+     save, they sort alphabetically, catalogId carries the SmartHome# creator
+     prefix that identifies a marker, and an unrotated piece has no angle
+     attribute at all. Width 9.8425 is 10 cm rounded to the nearest 1/8 inch,
+     the display unit — sizes are advisory, positions are not.
+
+     The Camera and Thermostat markers and the Hall were added by hand in the
+     same shape, so membership across two rooms is exercised. The Kitchen is
+     the L-shaped six-point room actually drawn: rectilinear, not rectangular.
+
+     Zero <level> elements, and no object carries a level attribute — a
+     one-storey drawing is exactly what SH3D 7.5 emits (see no-levels).
+-->
+<home version='7400' name='Marker House' camera='topCamera' wallHeight='243.84'>
+  <pieceOfFurniture id='pieceOfFurniture-08d9633e-e987-4552-95cc-1568c3912a39' catalogId='SmartHome#light' name='Light' creator='SmartHome' model='1' icon='0' x='988.5' y='696.5602' width='9.8425' depth='9.8425' height='9.8425' modelSize='179' description='Device marker — set placementKey in Other properties'>
+    <property name='kind' value='light'/>
+    <property name='placementKey' value='light_kitchen_1'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-2b6f1c04-7a55-4f10-9c31-0d4e2a77b510' catalogId='SmartHome#camera' name='Camera' creator='SmartHome' model='1' icon='0' x='1700.0' y='700.0' width='9.8425' depth='9.8425' height='9.8425' modelSize='179' description='Device marker — set placementKey in Other properties'>
+    <property name='kind' value='camera'/>
+    <property name='placementKey' value='camera_kitchen_1'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-9d3a7e52-11cb-4a86-b0f7-6c5e8f0a2d43' catalogId='SmartHome#thermostat' name='Thermostat' creator='SmartHome' model='1' icon='0' x='1000.0' y='250.0' width='9.8425' depth='9.8425' height='9.8425' modelSize='179' description='Device marker — set placementKey in Other properties'>
+    <property name='kind' value='thermostat'/>
+    <property name='placementKey' value='thermostat_hall_1'/>
+  </pieceOfFurniture>
+  <wall id='wall-hall-n' xStart='523.5' yStart='96.2' xEnd='2039.88' yEnd='96.2' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-hall-e' xStart='2039.88' yStart='96.2' xEnd='2039.88' yEnd='399.56018' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-hall-w' xStart='523.5' yStart='399.56018' xEnd='523.5' yEnd='96.2' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-dcb0575d-1216-42b8-8567-439dda1bf335' wallAtStart='wall-465c3f1d-9cf3-4b58-b523-38a0627b8c3d' wallAtEnd='wall-6ff73baa-832f-4cd6-a18f-97758bc0c11a' xStart='523.5' yStart='399.56018' xEnd='2039.88' yEnd='399.56018' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-6ff73baa-832f-4cd6-a18f-97758bc0c11a' wallAtStart='wall-dcb0575d-1216-42b8-8567-439dda1bf335' wallAtEnd='wall-12a1f9b6-01d1-49cb-acd8-37025d70d713' xStart='2039.88' yStart='399.56018' xEnd='2039.88' yEnd='976.1402' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-12a1f9b6-01d1-49cb-acd8-37025d70d713' wallAtStart='wall-6ff73baa-832f-4cd6-a18f-97758bc0c11a' wallAtEnd='wall-12dfc4a9-9cd8-4d5b-9d22-9fd60a91b238' xStart='2039.88' yStart='976.1402' xEnd='1300.74' yEnd='976.1402' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-12dfc4a9-9cd8-4d5b-9d22-9fd60a91b238' wallAtStart='wall-12a1f9b6-01d1-49cb-acd8-37025d70d713' wallAtEnd='wall-b99f86bf-e209-4d3d-beee-438f90b11ad1' xStart='1300.74' yStart='976.1402' xEnd='1300.74' yEnd='1316.5002' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-b99f86bf-e209-4d3d-beee-438f90b11ad1' wallAtStart='wall-12dfc4a9-9cd8-4d5b-9d22-9fd60a91b238' wallAtEnd='wall-465c3f1d-9cf3-4b58-b523-38a0627b8c3d' xStart='1300.74' yStart='1316.5002' xEnd='523.5' yEnd='1316.5004' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <wall id='wall-465c3f1d-9cf3-4b58-b523-38a0627b8c3d' wallAtStart='wall-b99f86bf-e209-4d3d-beee-438f90b11ad1' wallAtEnd='wall-dcb0575d-1216-42b8-8567-439dda1bf335' xStart='523.5' yStart='1316.5004' xEnd='523.5' yEnd='399.56018' height='243.84' thickness='7.62' pattern='hatchUp'/>
+  <room id='room-hall' name='Hall' areaVisible='true' ceilingFlat='true'>
+    <point x='527.31' y='100.01'/>
+    <point x='2036.07' y='100.01'/>
+    <point x='2036.07' y='395.75'/>
+    <point x='527.31' y='395.75'/>
+  </room>
+  <room id='room-653d482d-c4e6-4336-bb6d-6c09811252cf' name='Kitchen' areaVisible='true' ceilingFlat='true'>
+    <point x='2036.07' y='403.37018'/>
+    <point x='2036.07' y='972.3302'/>
+    <point x='1296.9299' y='972.3302'/>
+    <point x='1296.9299' y='1312.6902'/>
+    <point x='527.31' y='1312.6903'/>
+    <point x='527.31' y='403.37018'/>
+  </room>
+</home>

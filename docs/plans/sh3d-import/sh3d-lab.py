@@ -109,6 +109,18 @@ def cmd_inspect(args):
         print(f'      catalogId={e.get("catalogId")!r}  x={e.get("x")} '
               f'y={e.get("y")}  angle={e.get("angle")}')
         print(f'      PROPS {props_of(e)}')
+    # Native text fields, listed whether or not the properties survived:
+    # they are the only key carriers a designer can reach from the furniture
+    # dialog, so they are the fallback worth measuring in the same re-save.
+    described = [(e, lv) for e, lv, _ in pieces
+                 if e.get('description') or e.get('information')]
+    print(f'          carrying native text (description/information): '
+          f'{len(described)}')
+    for e, lv in described:
+        print(f'  <{e.tag}> name={e.get("name")!r} '
+              f'description={e.get("description")!r} '
+              f'information={e.get("information")!r}')
+
     if args.all_furniture:
         print('\n  --- every piece (name / catalogId / x / y / angle) ---')
         for e, lv, depth in pieces:

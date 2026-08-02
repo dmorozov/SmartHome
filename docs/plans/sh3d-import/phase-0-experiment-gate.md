@@ -2,7 +2,7 @@
 
 One sitting of Sweet Home 3D experiments that settles every unknown the placements pipeline depends on, plus the missing test fixtures. **No production code changes.** Everything later phases assume is either already measured (recorded below with evidence) or answered here.
 
-Status: proposed · Gate for: phases 1–2 · Written against commit `d01f290` (2026-08-01).
+Status: **run 2026-08-02 — V1 PASSED, the gate is open** (results in §5) · Gate for: phases 1–2 · Written against commit `d01f290` (2026-08-01).
 
 ---
 
@@ -107,16 +107,28 @@ Expected: **no mechanism** — SH3D user properties are furniture-only. That rat
 
 Now that survival is known, pick how keys get typed. In rough order of cost:
 
-- **(a) Native fields.** Launch SH3D with the additional-properties system property and see whether the *Modify furniture* dialog grows editable rows:
-  ```sh
-  JAVA_TOOL_OPTIONS="-Dcom.eteks.sweethome3d.additionalFurnitureProperties=placementKey,kind" \
-      open -a "Sweet Home 3D"
-  ```
-  (If `open -a` does not pass the environment through, run the binary inside the bundle directly: `"/Applications/Sweet Home 3D.app/Contents/MacOS/SweetHome3D"`.) Report whether the fields appear and whether typing into them writes `<property>` children — that is V8, and it makes authoring a one-line alias.
-- **(b) Marker library.** Furniture Library Editor (same download page): three entries — SmartHome Light / Thermostat / Camera — each carrying `kind` as a catalog property, creator `SmartHome`. Import, place, save, inspect: do the catalog properties land on the *placed* piece (**V2**), and what `catalogId` dialect appears (**V3**)? Also unzip the `.sh3f` and paste its `PluginFurnitureCatalog.properties` (**V9**). Per EX-V3 never assume the `Creator#id` shape — three dialects exist in the wild.
-- **(c) Injection script.** What E2 already does, kept as a permanent tool: name pieces in SH3D, run one command, keys land. Zero UI work, zero library maintenance — the honest fallback if (a) and (b) are both awkward.
+- **(a) Native fields — the launch flag, and it is required.** *Settled 2026-08-02, after one wrong turn in each direction.* SH3D 7.5 does ship the editor — `HomeFurniturePanel.additionalPropertiesButton.text=Other properties...` opening an `AdditionalPropertiesPanel` (a Name/Value table titled *Modify properties*) — but it renders `home.getFurnitureAdditionalProperties()`, a list that lives on the **Home** and is populated at startup from
 
-Phase 1 only needs *one* of these to work, and it reads the key from the same place regardless.
+  ```sh
+  panel/tool/sh3d.sh            # wraps the flag below
+  JAVA_TOOL_OPTIONS="-Dcom.eteks.sweethome3d.additionalFurnitureProperties=placementKey,kind" \
+      "/Applications/Sweet Home 3D.app/Contents/MacOS/SweetHome3D"
+  ```
+
+  Declaring the properties in a catalog entry is *not* enough — measured, not reasoned: with `SmartHome.sh3f` imported and a marker placed, the dialog has no such button. The catalog sets property **values** on the piece; only the flag tells the Home the properties exist. The two are complementary, so the authoring setup is **library + launcher**, and (c) survives only for pieces from someone else's catalog.
+
+  Use **bare names**. `fromDescription` defaults displayable/modifiable/exportable to true, and its attribute parser is off by one (`substring("modifiable=".length() + 1)` → `"rue"`), so writing `modifiable=true` sets it false.
+- **(b) Marker library — CHOSEN, and built.** No Furniture Library Editor needed: `panel/tool/sh3d_marker_library.py` generates `SmartHome.sh3f` directly, because V9's syntax was read out of the 7.5 sources rather than guessed. Fourteen entries, one per Device kind, category *Smart Home*, creator `SmartHome`, `id#i=SmartHome#<kind>`. Each declares two additional properties:
+
+  ```properties
+  placementKey#1\:STRING=
+  kind#1\:STRING=light
+  ```
+
+  Because catalog-declared properties are modifiable by construction, the *Modify furniture* dialog grows an **Other properties…** button holding an editable `placementKey`, and the property also becomes available under *Furniture → Display column*. `kind` arrives pre-filled, so the author types exactly one thing per Device. Eleven tests cover it (`tool/test_sh3d_marker_library.py`), including a drift test that reads `house_loader.dart`'s `_kind()` switch — the failure mode nothing else catches is a marker kind the Panel's loader rejects.
+- **(c) Injection script.** Demoted to a bootstrap: `sh3d-lab.py inject` still keys pieces that were placed before the library existed, and remains the only path for a piece from someone else's catalog.
+
+Phase 1 reads the key from the same place regardless, and additionally gains a second, independent way to recognise a marker: `catalogId` beginning `SmartHome#`. That is strictly better than a property-presence test, since it cannot be produced by accident.
 
 ### E7 — V23, the one Hub-side unknown (10 minutes, dev Hub)
 
@@ -150,11 +162,13 @@ Record whether the initial `subscribe_entities` snapshot carries attributes (`a`
 
 ## 4. Fixtures to land in the repo (the phase's code deliverable)
 
-All under `panel/tool/fixtures/`, hand-written or produced by the experiments — these close coverage holes the corpus proved (no repo fixture exercises any of them today):
+**LANDED 2026-08-02**, all three under `panel/tool/fixtures/`, each carrying a comment header recording its provenance. They close coverage holes the corpus proved, and none of them existed before:
 
-1. **`marker-props.Home.xml`** — the E2/E3 output (trimmed: the two rooms, three markers with properties). Phase 1's primary parser fixture; its exact `<property>` syntax is the ground truth phase 1 codes against.
-2. **`no-levels.Home.xml`** — a single-storey home with **zero `<level>` elements** (rooms/walls/furniture without `level` attributes). The spec §8 is right that this is what anyone tests first; no example or fixture has it. Easiest made by drawing a one-level home in SH3D and checking whether 7.4 even omits `<level>` — if 7.4 always writes one, record that and the fixture instead pins the one-level path.
-3. **`negative-origin.Home.xml`** — a copy of the placeholder fixture translated by (−300 cm, −200 cm) (script it; every `x`/`y`/`xStart`… attribute shifts). Pins the shared-origin min-shift against the wild norm (EX-3).
+1. **`marker-props.Home.xml`** — 2 rooms, 3 markers, zero levels. The first `<pieceOfFurniture>` is **verbatim from `~/sh3d-lab/test-markers.sh3d`**: a marker dragged from `SmartHome.sh3f`, keyed in the Modify properties dialog, saved by the application. That is the ground truth phase 1 codes against, and it fixes four details at once — `<property>` children sort alphabetically, `catalogId='SmartHome#light'` carries the creator prefix, an unrotated piece has **no `angle` attribute at all**, and `width='9.8425'` is our declared 10 cm rounded to the nearest ⅛ inch (the display unit — sizes are advisory, positions are not). The Camera/Thermostat markers and the Hall were added by hand in the same shape so membership across two rooms is exercised; the Kitchen is the authentic L-shaped six-point room (rectilinear, not rectangular).
+2. **`no-levels.Home.xml`** — the drawn one-storey home, injected properties stripped so it has one subject. **Zero `<level>` elements and no `level` attribute anywhere.** Also keeps a zero-length wall (a mis-click SH3D saved without complaint) — 8 walls in, 7 out, dropped silently.
+3. **`negative-origin.Home.xml`** — `placeholder-house.Home.xml` translated by (−300 cm, −200 cm), every `x`/`y`/`xStart`… on the only two elements here that carry coordinates.
+
+**Measured while landing them, and it revises an assumption in this series:** today's converter already handles **both** zero-level fixtures — `1 floor(s), 2 room(s)` for each — so the synthesize-a-default-Floor path was *untested*, not missing. And converting `negative-origin` produces YAML **identical to the original's, except the provenance comment naming the source file**; the min-shift genuinely erases the offset. Phase 1 inherits two working behaviours it was budgeting to build.
 
 Do not modify `placeholder-house.Home.xml` in this phase — phase 1 owns its marker enrichment.
 
@@ -162,22 +176,36 @@ Do not modify `placeholder-house.Home.xml` in this phase — phase 1 owns its ma
 
 Fill the table below **in this file** (it is the series' verification record, mirroring the spec's Appendix A discipline: every answer with its method):
 
+Run on 2026-08-02 against Sweet Home 3D 7.4 (`<home version="7400">`) on macOS, drawing `~/sh3d-lab/test-house.sh3d`: two named rooms (North/South), 8 walls, 13 furniture elements (7 `pieceOfFurniture`, 6 `doorOrWindow`), one level.
+
 | Item | Experiment | Result | Evidence |
 |---|---|---|---|
-| **V1 property round-trip (stock save)** | E2 | *pending* | |
-| V6 y-direction | E3 | *pending* | |
-| V4 copy-paste preserves key | E4 | *pending* | |
-| Room/level property mechanism (SI-3) | E5 | *pending* | |
-| V8 additional-properties fields | E6a | *pending* | |
-| V2 catalog→piece propagation | E6b | *pending* | |
-| V3 catalogId dialect on own library | E6b | *pending* | |
-| V9 .sh3f property syntax | E6b | *pending* | |
-| Chosen authoring path | E6 | *pending* | |
-| V23 subscribe_entities snapshot | E7 | *pending* | |
-| V19 arcExtent sign | E8 | *pending* | |
-| Zero-`<level>` case exists? | E8 | *pending* | |
+| **V1 property round-trip (stock save)** | E2 | **PASS — the gate is open.** SH3D 7.4 preserves unknown `<property>` children through open → edit → Save | 13/13 keyed pieces kept both `placementKey` and `kind`. Order flipped (`placementKey,kind` in → `kind,placementKey` out) ⇒ SH3D parsed them into its own model and re-serialised, rather than passing bytes through — stronger than mere preservation. `Bed.x` 587.8 → 581.8 proves `Home.xml` itself was rewritten. The legacy `Home` entry was present all along and did **not** shadow it; neither retry knob (`--props-first`, `--drop-legacy`) was needed |
+| V6 y-direction | E3 | **PASS — y increases southward.** ADR-0004 maps 1:1; no negation anywhere; the spec's §7 Y-flip is dropped (README correction #2) | North Room y ∈ [7.37, 416.31], South Room y ∈ [423.93, 1094.49] |
+| **UI→file round trip (the E6 gate)** | E6 | **PASS.** `placementKey` typed into *Modify properties*, saved, read back out of `Home.xml`: `PROPS {'kind': 'light', 'placementKey': 'light_kitchen_1'}` on a piece carrying `catalogId='SmartHome#light'`. This is E2's proof in reverse — E2 showed SH3D preserves what we write, this shows it writes what the author types | `~/sh3d-lab/test-markers.sh3d`, now the basis of `marker-props.Home.xml` |
+| Key spelling is unconstrained | E6 | The author naturally typed `light_kitchen_1` — **underscores**, where every id in `devices.yaml` and ADR-0004 is kebab-case (`light-hall`). Nothing in SH3D constrains the field. **Phase 1 decision:** accept both, normalise, or reject with a message. Cheapest defensible answer is to validate against the same slug pattern the loader already requires, so the failure lands in the drawing rather than in the Panel | user-typed value, first use |
+| V4 copy-paste preserves key | E4 | *not run — and largely moot.* Duplicate keys are the **default**, not an accident | SH3D names each piece after its catalog entry, so 13 pieces yielded 6 distinct slugs: 4× `kitchen-cabinet`, 4× `fixed-window`, 2× `door`. Phase 1's D2 (error naming both locations) is reinforced, not weakened — copy-paste was never needed to produce the collision |
+| Room/level property mechanism (SI-3) | E5 | **NONE — closed, both sides.** Slug-of-name identity for Rooms and Floors is ratified (phase 1 D4); the spec's authored `roomKey`/`levelKey` is unimplementable in the authoring tool | File side: both rooms report `props={}` across all three inspects, and there is no `<level>` element to carry properties at all. UI side (SH3D 7.5): the Modify rooms dialog offers no additional-properties control |
+| **Zero-`<level>` case exists?** | E8 | **YES — confirmed.** A one-level 7.4 drawing writes **no `<level>` element**, and no object carries a `level` attribute | `LEVELS 0`; `level=None` on both rooms and all 13 pieces. Fixture #2 (`no-levels.Home.xml`) pins the zero-level path as written, and the synthesize-a-default-Floor path is real |
+| V5 angle unit (re-confirmed) | E1 | **RADIANS**, on a file authored fresh rather than mined from the corpus | 10 angles, min 1.5708 = π/2, max 6.2832 = 2π. Three pieces carry **no `angle` attribute at all** (unrotated ⇒ absent, not `"0"`) — the optional-attribute default is now witnessed, not inferred |
+| `<home name>` is the *file* name | E2 | Confirmed, and it **follows the file**: the re-save rewrote it | `name='test-house.sh3d'` → `name='test-keyed.sh3d'` after Save. The converter already strips `.sh3d` and offers `--name` (`sh3d_to_yaml.py:234`); this is why that override is not optional cosmetics — renaming the drawing would otherwise rename the House |
+| Room ids | E1 | Auto-generated `room-<uuid>`, stable across saves but opaque | `room-ad7c9827-…`; unusable as a human key, corroborating D4 |
+| **V8 additional-properties fields** | E6a | **YES — confirmed in the UI 2026-08-02** (screenshot: *Other properties…* opens *Modify properties* listing `Placementkey` empty and `Kind` = `light`). Via the launch flag, and *only* via it. `-Dcom.eteks.sweethome3d.additionalFurnitureProperties=placementKey,kind`, split on `,\s*` and parsed by `ObjectProperty.fromDescription`. The dialog renders `this.home.getFurnitureAdditionalProperties()` filtered to `isModifiable()` — the list lives on the **Home**, is set only by `SweetHome3D` at startup from that flag, and is **not persisted** to the .sh3d (neither `HomeXMLExporter` nor `HomeXMLHandler` mentions it), so it must be set on every launch. Wrapped in `panel/tool/sh3d.sh` | `SweetHome3D.class` constant pool: the property name adjacent to the split regex `,\s*`; `HomeFurnitureController:380–391` |
+| ~~Catalog declaration alone surfaces the fields~~ | E6a | **NO — measured, and it corrects an earlier reading of the code.** Importing `SmartHome.sh3f` and placing a marker gives a dialog with *no* "Other properties…" button (screenshot, 7.5), even though the catalog entry's `description#1` visibly reached the piece. The catalog path sets property **values** on the piece; it never adds to the Home's declaration list, which is what the UI reads. Library and flag are complementary, not alternatives | user screenshot; `DefaultFurnitureCatalog.getCatalogAdditionalProperties` feeds `CatalogPieceOfFurniture`, not `Home` |
+| Description/attribute parser bug | E6a | `fromDescription` reads `substring("modifiable=".length() + 1)` — one character too far, yielding `"rue"`. Writing `modifiable=true` therefore sets it **false**. Use bare names (all three flags already default true); `:STRING` is safe | `ObjectProperty.fromDescription`, SH3D 7.5 |
+| Additional properties as furniture-list columns | E6a′ | **NO.** *Furniture → Display column* on the keyed home offers only built-ins: Name, Description, Creator, License, Width, Depth, Height, Abscissa, Ordinate, Elevation, Angle, Level, Model Size, Color, Texture, Movable, Door/Window, Visible. No `placementKey`, no `kind` | `HomePane`'s dynamic `DISPLAY_HOME_FURNITURE_ADDITIONAL_PROPERTY_*` actions are built from `getFurnitureAdditionalProperties()`, which returns catalog-declared properties — not properties carried by home pieces |
+| **Does SH3D's UI surface externally-written properties at all?** | E6a + E6a′ + E5 | **NO — closed on three independent surfaces.** Properties written from outside are *preserved perfectly* (V1) and *invisible entirely*. The two facts together define the authoring problem: SH3D is a faithful courier for our data and never an editor of it, unless a catalog entry declares the property | Modify furniture (no button), Modify rooms (no control), Display column (built-ins only) — all on a home whose 13 pieces each carried two properties |
+| **V9 .sh3f property syntax** | E6b | **ANSWERED from source, no experiment needed.** Any resource-bundle key `<name>#<index>` whose name is not a built-in becomes an additional property of entry `<index>`; an optional `:<TYPE>` suffix sets the type, and **the colon must be escaped `\:`** or `java.util.Properties` ends the key there and swallows the type into the value. Built with `new ObjectProperty(name, type)`, which delegates to `(name, null, type, true, true, true)` — **displayable, modifiable, exportable, unconditionally**. Editability needs no extra key | `DefaultFurnitureCatalog.getCatalogAdditionalProperties` and `ObjectProperty`'s constructors, SH3D 7.5 |
+| **V2 catalog→piece propagation** | E6b | **YES, from source.** `FurnitureController.createHomePieceOfFurniture` copies *every* catalog property name onto the placed piece, dropping only `modelPresetTransformations*`. Pending only empirical confirmation | `FurnitureController.java:589–609` |
+| V3 catalogId dialect on own library | E6b | `SmartHome#<kind>` via the optional `id#<index>` key — the `Creator#id` dialect, chosen deliberately so phase 1 can recognise a marker by catalogId alone | `tool/sh3d_marker_library.py`; confirm in the saved `Home.xml` |
+| Mandatory catalog keys | E6b | `name`, `category`, `icon`, `model`, `width`, `depth`, `height`, `movable`, `doorOrWindow` — all read with `resource.getString`. Indexes start at 1 and **must be contiguous**: `readFurniture` stops at the first absent `name#`, so a gap truncates the catalog silently | `readPieceOfFurniture`, `readFurniture` |
+| **Chosen authoring path** | E6 | **(b) marker library + (a) launcher — both, since neither works alone.** `tool/sh3d_marker_library.py` generates `SmartHome.sh3f` (14 markers, one per Device kind, `kind` preset, `catalogId=SmartHome#<kind>`); `tool/sh3d.sh` launches SH3D with the declaration flag so `placementKey` is editable. Authoring is then: drag a marker, type one key. The injection script drops to a bootstrap for pieces from other catalogs | Confirmed end to end in 7.5. 11 tests on the library, incl. a drift test reading `house_loader.dart`'s own `_kind()` switch |
+| **Standing discipline this introduces** | E6a | The House Plan must be opened via `tool/sh3d.sh`, never the Dock icon: the flag is per-session and unsaved, so a normal launch silently hides the key fields (values survive — they just become uneditable and invisible) | `HomeXMLExporter`/`HomeXMLHandler` never mention `furnitureAdditionalProperties` |
+| V23 subscribe_entities snapshot | E7 | *pending* — phase 3 only, does not gate phases 1–2 | |
+| V19 arcExtent sign | E8 | *not run* — arcs are cut from scope (README correction #8) | |
+| Native `description`/`information` as a fallback carrier | E2 | *untested and now unnecessary* — V1 passed, so the fallback question never arose | `carrying native text: 0` on every inspect |
 
-Then update `docs/plans/sh3d-import/README.md`'s stop-rule status, and — if V1 passed — phase 1 is unblocked.
+**Stop rule: did not fire.** Phase 1 is unblocked. The two remaining pending rows (E5's UI side, E6a) affect *authoring ergonomics only* — phase 1 reads the key from the same place regardless (§3 E6 closing line), so neither gates it.
 
 ## 6. Verification
 
