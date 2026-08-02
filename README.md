@@ -148,7 +148,7 @@ Two retry knobs if it misbehaves: SH3D refuses to open the file → re-run injec
 - Double-click a room: any field for custom/additional properties (not Name, not the display toggles)?
 - Double-click a level tab: same question.
 
-Expected "no" for both — that ratifies keeping slug-of-name identity for Rooms and Floors and records the spec's authored roomKey as unimplementable in the tool.
+Expected "no" for both — that ratifies keeping slug-of-name identity for Rooms and Floors and records the spec's authored roomKey as unimplementable in the tool. I.e. say something like: "V1 passed, properties survived the re-save".
 
 What I'll read out of it without you doing anything
 

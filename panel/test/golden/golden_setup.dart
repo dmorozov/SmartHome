@@ -40,10 +40,13 @@ void goldenTest(String description, Future<void> Function(WidgetTester) body) {
 }
 
 /// Pumps the whole app at [kPanelSize] and settles the entry animations.
+/// [hubLabel] defaults to the fake hub's, which is what a dev build shows;
+/// a scene about the production Panel passes `'HUB'`.
 Future<void> pumpPanel(
   WidgetTester tester,
   HubController controller, {
   Size size = kPanelSize,
+  String hubLabel = 'FAKE HUB',
 }) async {
   tester.view
     ..physicalSize = size
@@ -51,7 +54,8 @@ Future<void> pumpPanel(
     // `size`, and it stays comparable to a `tool/shot.sh` capture.
     ..devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(PanelApp(controller: controller));
+  await tester.pumpWidget(
+      PanelApp(controller: controller, hubLabel: hubLabel));
   await tester.pumpAndSettle();
 }
 

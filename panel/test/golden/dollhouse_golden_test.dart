@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:panel/data/fake_hub.dart';
 import 'package:panel/data/hub_client.dart';
 import 'package:panel/main.dart';
-import 'package:panel/ui/hub_controller.dart';
 
 import '../dollhouse_geometry.dart';
-import '../test_house.dart';
+import '../fixtures.dart';
 import 'golden_setup.dart';
 
 /// Renders the Panel to PNGs, headlessly, with no browser and no server.
@@ -23,22 +21,29 @@ import 'golden_setup.dart';
 void main() {
   setUpPanelGoldens();
 
-  // driftEvery: zero — the fake readings must not wander between runs.
-  HubController fakeHub() {
-    final house = loadTestHouse();
-    return HubController(
-        house: house, hub: FakeHub(house, driftEvery: Duration.zero));
+  /// The two scenes about a Hub the Panel cannot reach: every Device
+  /// dropped to unknown, and the badge in [status]. They render the
+  /// production label, because a rejected token and an absent Hub are
+  /// production events — a dev build's fake hub is in-process and does
+  /// neither.
+  Future<void> pumpHubFailure(WidgetTester tester, HubStatus status) async {
+    final (controller, hub) = fakeHubRig();
+    for (final device in controller.house.floors.expand((f) => f.devices)) {
+      hub.dropDevice(device.id);
+    }
+    hub.setStatus(status);
+    await pumpPanel(tester, controller, hubLabel: 'HUB');
   }
 
   goldenTest('ground floor selected', (tester) async {
-    await pumpPanel(tester, fakeHub());
+    await pumpPanel(tester, fakeHubRig().$1);
 
     await expectLater(find.byType(PanelApp),
         matchesGoldenFile('goldens/ground_floor.png'));
   });
 
   goldenTest('upstairs selected', (tester) async {
-    final controller = fakeHub();
+    final (controller, _) = fakeHubRig();
     await pumpPanel(tester, controller);
 
     await tester.tapAt(floorSlabCentre(tester,
@@ -52,7 +57,7 @@ void main() {
   });
 
   goldenTest('device popup over the dollhouse', (tester) async {
-    await pumpPanel(tester, fakeHub());
+    await pumpPanel(tester, fakeHubRig().$1);
 
     await tester.tap(find.byKey(const ValueKey('pin-doorbell')));
     await tester.pumpAndSettle();
@@ -67,13 +72,7 @@ void main() {
   /// hand — so it is scripted through the same adapter dev builds run,
   /// rather than through a stand-in that only this file knows about.
   goldenTest('hub unreachable', (tester) async {
-    final house = loadTestHouse();
-    final hub = FakeHub(house, driftEvery: Duration.zero);
-    for (final device in house.floors.expand((f) => f.devices)) {
-      hub.dropDevice(device.id);
-    }
-    hub.setStatus(HubStatus.retrying);
-    await pumpPanel(tester, HubController(house: house, hub: hub));
+    await pumpHubFailure(tester, HubStatus.retrying);
 
     await expectLater(find.byType(PanelApp),
         matchesGoldenFile('goldens/hub_offline.png'));
@@ -84,13 +83,7 @@ void main() {
   /// mints a new token. In real life it happens about once a decade, which
   /// is exactly why nobody would ever stage it by hand.
   goldenTest('hub gave up: token rejected', (tester) async {
-    final house = loadTestHouse();
-    final hub = FakeHub(house, driftEvery: Duration.zero);
-    for (final device in house.floors.expand((f) => f.devices)) {
-      hub.dropDevice(device.id);
-    }
-    hub.setStatus(HubStatus.gaveUp);
-    await pumpPanel(tester, HubController(house: house, hub: hub));
+    await pumpHubFailure(tester, HubStatus.gaveUp);
 
     await expectLater(find.byType(PanelApp),
         matchesGoldenFile('goldens/hub_gave_up.png'));

@@ -2,12 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'data/fake_hub.dart';
-import 'data/ha_hub.dart';
-import 'data/house_loader.dart';
+import 'boot.dart';
 import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
-import 'domain/house.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
@@ -26,69 +23,37 @@ Future<void> main() async {
     'log': Log.level.name,
   });
   // The House Plan (ADR-0004): generated geometry + hand-maintained devices.
-  final house = _loadHouse(
+  final boot = bootPanel(
+    hubKind: _hubKind,
+    hubUrl: _haUrl,
+    hubToken: _haToken,
     houseYaml: await rootBundle.loadString('assets/house/house.yaml'),
     devicesYaml: await rootBundle.loadString('assets/house/devices.yaml'),
   );
-  runApp(PanelApp(
-    controller: HubController(house: house, hub: _hub(house)),
-  ));
+  runApp(PanelApp(controller: boot.controller, hubLabel: boot.hubLabel));
 }
 
-House _loadHouse({required String houseYaml, required String devicesYaml}) {
-  try {
-    final house = loadHouse(houseYaml: houseYaml, devicesYaml: devicesYaml);
-    final devices = [for (final floor in house.floors) ...floor.devices];
-    Log.info('house', 'loaded', {
-      'name': house.name,
-      'floors': house.floors.length,
-      'rooms': house.floors.fold<int>(0, (n, f) => n + f.rooms.length),
-      'devices': devices.length,
-      // Devices with no `entity:` can never show state — worth knowing at a
-      // glance, without hunting through devices.yaml.
-      'bound': devices.where((d) => d.entityId != null).length,
-    });
-    return house;
-  } catch (error, stack) {
-    // A malformed House Plan is fatal, and on the kiosk nobody is standing
-    // in front of the red screen. Leave one greppable line on the way out.
-    Log.error('house', 'invalid', error: error, stack: stack);
-    rethrow;
-  }
-}
-
-/// Which Hub the build talks to. Defaults to the in-memory [FakeHub]; pass
+/// Which Hub the build talks to. Defaults to the in-memory fake hub; pass
 /// `--dart-define=HUB=ha` (plus `HA_URL` and `HA_TOKEN`) for a real Home
 /// Assistant — see hub/dev/README.md.
 const _hubKind = String.fromEnvironment('HUB', defaultValue: 'fake');
-
-HubClient _hub(House house) {
-  const which = _hubKind;
-  if (which == 'fake') return FakeHub(house);
-  if (which != 'ha') {
-    throw ArgumentError('unknown HUB "$which" (fake | ha)');
-  }
-  const url = String.fromEnvironment('HA_URL',
-      defaultValue: 'http://localhost:8123');
-  const token = String.fromEnvironment('HA_TOKEN');
-  // `set`, never the token itself: these lines end up in logs.
-  Log.info('hub', 'configured',
-      {'url': url, 'token': token.isEmpty ? 'absent' : 'set'});
-  if (token.isEmpty) {
-    throw ArgumentError('HUB=ha needs --dart-define=HA_TOKEN=<long-lived '
-        'token>; keep it out of the repo (hub/dev/token)');
-  }
-  return HaHubClient(
-    house: house,
-    url: HaHubClient.webSocketUrl(url),
-    token: token,
-  );
-}
+const _haUrl =
+    String.fromEnvironment('HA_URL', defaultValue: 'http://localhost:8123');
+const _haToken = String.fromEnvironment('HA_TOKEN');
 
 class PanelApp extends StatelessWidget {
-  const PanelApp({super.key, required this.controller});
+  const PanelApp({
+    super.key,
+    required this.controller,
+    required this.hubLabel,
+  });
 
   final HubController controller;
+
+  /// What the Hub badge calls the Hub. Passed in rather than read from the
+  /// build's dart-defines, so this widget knows nothing about which Hub it
+  /// was compiled against — and so a test can render the production scene.
+  final String hubLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +82,7 @@ class PanelApp extends StatelessWidget {
                     ListenableBuilder(
                       listenable: controller,
                       builder: (context, _) => _HubBadge(
-                        label: _hubKind == 'fake' ? 'FAKE HUB' : 'HUB',
+                        label: hubLabel,
                         status: controller.status,
                       ),
                     ),
