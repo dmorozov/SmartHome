@@ -6,11 +6,15 @@ Two files make up the House Plan:
 
 | File | Who writes it | Contents |
 |---|---|---|
-| `assets/house/house.yaml` | the converter — **never edit by hand** | geometry: Floors → Rooms (footprint polygons) + Walls |
-| `assets/house/devices.yaml` | **you, by hand** | every Device: id, kind, room, position |
+| `assets/house/house.yaml` | the converter — **never edit by hand** | everything drawn: Floors → Rooms + Walls, and the Devices you placed as markers |
+| `assets/house/bindings.yaml` | **you, by hand** | two lines per Device: which Hub entity it is, and local/cloud |
 
 Re-running the converter is always safe: it rewrites `house.yaml` and never
-touches `devices.yaml`.
+touches `bindings.yaml`.
+
+**Devices are drawn, not typed** ([ADR-0005](../docs/adr/0005-devices-authored-in-the-drawing.md)).
+You drop a marker where the thing is; the converter works out which Room it
+is in and where. Nobody measures anything.
 
 ## 1. Install the tools (once)
 
@@ -73,9 +77,9 @@ Work floor by floor, walls first, then rooms.
   ids (`Living Room` → `living-room`) and the labels the Dollhouse draws,
   and they must be **unique across the whole house** — `Guest Bathroom` and
   `Kids Bathroom`, not `Bathroom` twice (error otherwise).
-- Renaming a room later changes its id — every `room:` reference in
-  `devices.yaml` must be updated to the new slug (the loader will name the
-  orphans if you forget).
+- Renaming a room later changes its id, but nothing references it by hand
+  any more: the converter recomputes which Room each Device marker is in.
+  Rename freely.
 
 ### 2.4 Save
 
@@ -98,11 +102,8 @@ in the file).
 On success you get a summary like:
 
 ```
-wrote assets/house/house.yaml: 2 floor(s), 14 room(s), 27 wall(s), 1 warning(s)
-origin shift: yaml (x, y) = Sweet Home 3D (x, y) in cm / 100 minus (0, 0) m — ...
+wrote assets/house/house.yaml: 2 floor(s), 14 room(s), 27 wall(s), 12 device(s), 1 warning(s)
 ```
-
-**Keep the `origin shift` line** — you need it in step 5 to place devices.
 
 ### 3.1 If it errors
 
@@ -129,7 +130,7 @@ Warnings don't block the write; they exist to catch mistakes:
   area to re-create the room snapped to the walls.
 
 Re-run the converter after any drawing change — it's idempotent and never
-touches `devices.yaml`.
+touches `bindings.yaml`.
 
 ## 4. Look at it
 
@@ -143,47 +144,84 @@ means a drawing fix, then reconvert.
 
 ## 5. Add a Device (or move one)
 
-Open `assets/house/devices.yaml`. Each entry:
+You do this in the drawing, not in a text file.
 
-```yaml
-  - id: light-office          # unique, kebab-case, never reuse after deleting
-    name: "Office Light"      # what the Popup and labels show
-    kind: light               # see the list below
-    connectivity: local       # local | cloud  (see CONTEXT.md)
-    room: office              # a room id from house.yaml
-    position: [8.5, 8.5]      # meters from the house NW corner, x east, y south
+**Once, before the first Device:** build and import the marker library.
+
+```sh
+python3 tool/sh3d_marker_library.py -o ~/SmartHome.sh3f
 ```
 
-Step by step:
+In Sweet Home 3D: **Furniture → Import furniture library…** → pick that
+file. A **Smart Home** category appears in the catalog with one marker per
+kind of Device.
 
-1. **Pick the room id**: open `assets/house/house.yaml`, find the room, copy
-   its `id:`. (Never edit that file — just read it.)
-2. **Pick the position** — two ways:
-   - *From the footprint*: the room's `footprint:` lists its corners in
-     meters; pick a point inside (e.g. mid-room for a ceiling light, near a
-     wall for a TV).
-   - *From Sweet Home 3D*: hover the spot in the plan and read the
-     coordinates in the tool, convert cm → m (divide by 100), then subtract
-     the `origin shift` the converter printed.
-3. **Pick the kind** — one of:
-   `light` `outlet` `thermostat` `camera` `doorbell` `oven` `tv` `washer`
-   `dryer` `litter-robot` `feeder` `garage-door` `ev-charger`
-   `energy-monitor`
-   (they map 1:1 to `DeviceKind` in `lib/domain/house.dart` — a new kind of
-   hardware means adding it there + an icon in `lib/ui/theme.dart` first).
-4. **Set `connectivity`**: `local` = works with no vendor cloud; `cloud` =
-   grandfathered vendor-cloud device.
-5. **Check it**: `flutter test` — the loader runs over the real asset files
-   and fails loudly on an unknown room id, duplicate device id, unknown
-   kind, or a position outside the declared room. Then run the app; with
-   the `FakeHub` the device gets a plausible fake state automatically
-   (seeded by kind), so the pin is live immediately.
+**Always open the drawing with `tool/sh3d.sh`**, never the Dock icon:
 
-Deleting a device is just deleting its block. Moving one between rooms =
-change `room:` *and* `position:` (position is house-global, not
-room-relative — a stale position is rejected by the loader, so the Panel
-tells you rather than drawing the pin in the wrong room).
+```sh
+tool/sh3d.sh
+```
 
-When the real Home Assistant `HubClient` lands, each entry will also carry
-its HA entity id — that mapping belongs in this file too, which is why
-devices stay out of the drawing.
+Sweet Home 3D can only show the Device fields when it is started this way,
+and it does not remember the setting. Opened normally, the drawing is still
+safe — the fields are just invisible, so you cannot type a Key.
+
+### Adding one
+
+1. **Drag the marker** for the right kind out of the *Smart Home* category
+   and drop it where the thing actually is. Inside a room — if it belongs
+   on a wall (a TV, a thermostat), on the wall is fine.
+2. **Double-click it → Other properties…** and set **Placementkey** to a
+   name that is yours alone, e.g. `light-office`. Spelling is up to you —
+   hyphens, underscores, capitals all work — it only has to be unique in
+   the house, and you will type it once more in step 4.
+3. **Name the piece** (the *Name* box at the top of the same dialog): this
+   is what the Panel shows on the pin and in the popup, e.g. `Office Light`.
+4. **Save**, re-run the converter (§3), then add one entry to
+   `assets/house/bindings.yaml`:
+
+   ```yaml
+     light-office:
+       entity: input_boolean.light_office   # omit until the hardware exists
+       connectivity: local                  # local | cloud (see CONTEXT.md)
+   ```
+
+   `connectivity` is required — `local` means it works with no vendor cloud.
+   `entity` is optional: leave it out while the hardware is still in a box
+   and the pin renders with unknown state instead.
+5. **Check it**: `flutter test`. The loader reads the real files and says
+   plainly what is wrong — a marker with no binding, a binding whose marker
+   you deleted, an unknown kind.
+
+### Moving, renaming, deleting
+
+- **Moving** a Device: drag the marker, save, re-run the converter. That is
+  all — the Room and the position are recomputed. Dragging it into a
+  different room is the same gesture.
+- **Renaming** what the Panel displays: change the piece's *Name*.
+- **Changing which Hub entity it uses**: `bindings.yaml`, nowhere else.
+- **Deleting**: delete the marker, re-run the converter, delete its
+  `bindings.yaml` entry. The loader will refuse to start if you forget the
+  second half, naming the leftover.
+
+### Kinds
+
+`light` `outlet` `thermostat` `camera` `doorbell` `oven` `tv` `washer`
+`dryer` `litter-robot` `feeder` `garage-door` `ev-charger` `energy-monitor`
+
+Each has its own marker in the library, so the kind is set for you. They map
+1:1 to `DeviceKind` in `lib/domain/house.dart` — a genuinely new kind of
+hardware means adding it there, plus an icon in `lib/ui/theme.dart` and a
+row in `tool/sh3d_marker_library.py`, before it can be drawn.
+
+### What the converter refuses
+
+All of these name the piece as you see it in Sweet Home 3D, and nothing is
+written until the drawing is clean:
+
+- a marker with no Placementkey (did you open the drawing with `sh3d.sh`?)
+- two markers with the same Placementkey — copy-paste keeps the Key, so
+  retype it on the copy
+- a marker with no name
+- a marker sitting outside every room
+- an unknown kind

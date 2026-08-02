@@ -22,13 +22,15 @@ Future<void> main() async {
     'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
     'log': Log.level.name,
   });
-  // The House Plan (ADR-0004): generated geometry + hand-maintained devices.
+  // The House Plan (ADR-0005): everything drawn — geometry and Device
+  // Placements — generated into house.yaml, joined with the hand-maintained
+  // Hub bindings.
   final boot = bootPanel(
     hubKind: _hubKind,
     hubUrl: _haUrl,
     hubToken: _haToken,
     houseYaml: await rootBundle.loadString('assets/house/house.yaml'),
-    devicesYaml: await rootBundle.loadString('assets/house/devices.yaml'),
+    bindingsYaml: await rootBundle.loadString('assets/house/bindings.yaml'),
   );
   runApp(PanelApp(controller: boot.controller, hubLabel: boot.hubLabel));
 }

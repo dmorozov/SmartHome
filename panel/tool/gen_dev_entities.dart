@@ -1,6 +1,12 @@
 // Generates the development Hub's stand-in fleet from the Panel's own
-// devices.yaml, so every Device pin has a real Home Assistant entity behind
+// House Plan, so every Device pin has a real Home Assistant entity behind
 // it while the actual hardware is still in boxes.
+//
+// The source is house.yaml's `devices:` section — the Placements read out
+// of the Sweet Home 3D drawing (ADR-0005). It reads the same three fields
+// it always did (key, name, kind); only the file and the key's spelling
+// changed. The bindings it derives are hand-copied into bindings.yaml, and
+// bindings_drift_test.dart is what keeps the two honest.
 //
 //   dart run tool/gen_dev_entities.dart
 //
@@ -18,7 +24,7 @@ import 'dart:io';
 
 import 'package:yaml/yaml.dart';
 
-const _defaultDevices = 'assets/house/devices.yaml';
+const _defaultDevices = 'assets/house/house.yaml';
 const _defaultOut = '../hub/dev/ha-config/packages/panel_dev.yaml';
 
 /// Kinds that are simply on or off (Panel: `SwitchState`/`GarageDoorState`).
@@ -225,14 +231,17 @@ class _Device {
 List<_Device> _readDevices(File source) {
   final doc = loadYaml(source.readAsStringSync());
   final list = doc is YamlMap ? doc['devices'] : null;
-  if (list is! YamlList) _fail('${source.path}: no top-level "devices:" list');
+  if (list is! YamlList) {
+    _fail('${source.path}: no top-level "devices:" list — regenerate it with '
+        'tool/sh3d_to_yaml.py from a drawing that has Device markers');
+  }
   return [
     for (final entry in list)
       if (entry is! YamlMap)
         _fail('${source.path}: device entries must be maps')
       else
         _Device(
-          _require(entry, 'id', source.path),
+          _require(entry, 'key', source.path),
           _require(entry, 'name', source.path),
           _require(entry, 'kind', source.path),
         ),
@@ -242,7 +251,7 @@ List<_Device> _readDevices(File source) {
 String _require(YamlMap entry, String key, String path) {
   final value = entry[key];
   if (value is! String || value.isEmpty) {
-    _fail('$path: device ${entry['id'] ?? entry} is missing "$key"');
+    _fail('$path: device ${entry['key'] ?? entry} is missing "$key"');
   }
   return value;
 }

@@ -14,7 +14,7 @@ import 'hub_client.dart';
 ///
 /// Folds the Hub's entity-shaped world down to the Panel's one-state-per-
 /// Device model (see [DeviceState]). Each Device names the entity it comes
-/// from in `devices.yaml`; how that entity's state is read depends on the
+/// from in `bindings.yaml`; how that entity's state is read depends on the
 /// Device's kind, not on the entity's domain — a washer reported by a
 /// `sensor.*` and one reported by a vendor integration both become a
 /// [StatusState].
@@ -236,7 +236,7 @@ class HaHubClient implements HubClient {
             'missing': missing.length,
           });
           if (missing.isNotEmpty) {
-            // The Hub has never heard of these. Typo in devices.yaml, or an
+            // The Hub has never heard of these. Typo in bindings.yaml, or
             // integration not set up yet — either way those pins stay blank
             // forever and nothing else says so. Capped because thirty-odd
             // ids on one line is unreadable, and the first few identify the

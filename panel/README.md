@@ -53,7 +53,7 @@ spans domains, so the Panel needs no per-domain knowledge). It reconnects
 forever with backoff — a wall display has to recover from a Hub restart with
 nobody there to press anything.
 
-Each Device names its Hub entity in `devices.yaml` (`entity:`); how that
+Each Device names its Hub entity in `bindings.yaml` (`entity:`); how that
 entity is read depends on the **Device's kind**, not the entity's domain, so a
 washer behind a `sensor.*` and one behind a vendor integration both fold into
 a `StatusState`. Devices without an `entity:` render with unknown state.
@@ -80,14 +80,14 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 - `assets/house/house.yaml` — **generated geometry, never hand-edit**. The
   converter errors on diagonals, overlapping rooms and duplicate room names,
   and warns on unwalled boundaries and non-tiling floors.
-- Its `devices:` section is the Placements read out of the drawing — Key,
-  kind, name, computed Room and position. **The Panel ignores it today**;
-  `devices.yaml` is still the operative file until the bindings cutover.
-  Until then the two must agree, and the converter test proves they do.
-- `assets/house/devices.yaml` — **hand-maintained**: each Device references a
-  room id (slugified room name) with a position in meters. The converter
-  never touches it; renaming a room in the drawing makes the loader point at
-  the missing slug by name.
+  Its `devices:` section is the Placements read out of the drawing — Key,
+  kind, name, and the Room and position the converter computed.
+- `assets/house/bindings.yaml` — **hand-maintained, and the only file you
+  type into**: two lines per Device, keyed by the Key you typed in Sweet
+  Home 3D. `entity:` is which Hub entity it is (omit it and the pin renders
+  with unknown state); `connectivity:` is `local` or `cloud`. The converter
+  never touches it. Delete a marker without deleting its binding and the
+  loader refuses to start, naming the leftover.
 - Current placeholder: `tool/fixtures/placeholder-house.Home.xml` (crafted
   approximation of the real house — ground floor, upstairs, and an unwalled
   attic) run through the converter; the shipped `house.yaml` is exactly what

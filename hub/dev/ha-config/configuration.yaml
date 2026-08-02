@@ -2,7 +2,7 @@
 # ha-config/, which is all runtime state and secrets.
 homeassistant:
   name: Dev Hub
-  # The Panel's stand-in fleet, generated from panel/assets/house/devices.yaml.
+  # The Panel's stand-in fleet, generated from panel/assets/house/house.yaml.
   # Regenerate with: cd panel && dart run tool/gen_dev_entities.dart
   packages: !include_dir_named packages
 

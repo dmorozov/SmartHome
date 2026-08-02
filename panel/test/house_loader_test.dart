@@ -4,7 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/house_loader.dart';
 import 'package:panel/domain/house.dart';
 
-const _house = '''
+/// Geometry as the converter emits it, walls list last so a test can append
+/// one.
+const _geometry = '''
 name: "Test House"
 floors:
   - id: ground-floor
@@ -18,19 +20,44 @@ floors:
       - [[0, 0], [4, 0]]
 ''';
 
-const _devices = '''
+/// The Placements the converter reads out of the drawing — Key, name, kind,
+/// and the Room and position it computed.
+const _placements = '''
 devices:
-  - id: light-den
+  - key: light-den
     name: "Den Light"
     kind: light
-    connectivity: local
     room: den
     position: [2, 1.5]
 ''';
 
+/// The hand-maintained half: which Hub entity the Key binds to, and whether
+/// the Device needs a vendor cloud. Nothing else.
+const _bindings = '''
+bindings:
+  light-den:
+    entity: input_boolean.light_den
+    connectivity: local
+''';
+
+/// One complete generated `house.yaml`. Each optional part splices in where
+/// the converter would have put it.
+String _plan({
+  String extraRoom = '',
+  String extraWall = '',
+  String extraFloor = '',
+  String placements = _placements,
+}) {
+  var yaml = _geometry;
+  if (extraRoom.isNotEmpty) {
+    yaml = yaml.replaceFirst('    walls:', '$extraRoom\n    walls:');
+  }
+  return '$yaml$extraWall$extraFloor$placements';
+}
+
 void main() {
-  test('parses geometry, walls and devices into the domain', () {
-    final house = loadHouse(houseYaml: _house, devicesYaml: _devices);
+  test('joins Placements with their bindings on the Key', () {
+    final house = loadHouse(houseYaml: _plan(), bindingsYaml: _bindings);
     expect(house.name, 'Test House');
     final floor = house.floors.single;
     expect(floor.level, 0);
@@ -40,43 +67,163 @@ void main() {
     expect(den.contains(const Offset(1, 4)), isTrue); // inside the L's leg
     expect(den.contains(const Offset(3, 4)), isFalse); // in the notch
     expect(den.bounds, const Rect.fromLTRB(0, 0, 4, 5));
+
     final light = den.devices.single;
+    // The Key is the identity everything downstream already keys on, which
+    // is why this cutover stopped at the loader.
+    expect(light.id, 'light-den');
+    expect(light.name, 'Den Light');
     expect(light.kind, DeviceKind.light);
-    expect(light.position, const Offset(2, 1.5));
+    expect(light.position, const Offset(2, 1.5)); // from the drawing
+    expect(light.entityId, 'input_boolean.light_den'); // from bindings.yaml
+    expect(light.connectivity, Connectivity.local); // from bindings.yaml
   });
 
-  test('rejects a device pointing at a missing room', () {
-    const orphan = '''
-devices:
-  - id: light-x
-    name: "X"
-    kind: light
+  group('the Placement × binding join', () {
+    test('rejects a Placement with no binding entry', () {
+      // The everyday case: a marker was added to the drawing and nobody
+      // added its line here yet.
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: 'bindings:\n'),
+        _rejects('no entry for Device "light-den"'),
+      );
+    });
+
+    test('rejects a binding whose Device is no longer in the drawing', () {
+      // The other direction, which nothing caught before: the marker was
+      // deleted and the binding was left behind, silently binding nothing.
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+$_bindings  ghost-lamp:
     connectivity: local
-    room: renamed-room
-    position: [1, 1]
-''';
-    expect(
-      () => loadHouse(houseYaml: _house, devicesYaml: orphan),
-      throwsA(isA<FormatException>().having(
-          (e) => e.message, 'message', contains('renamed-room'))),
-    );
+'''),
+        _rejects('bindings.yaml binds ghost-lamp'),
+      );
+    });
+
+    test('accepts a binding with no entity — the Device just has no state',
+        () {
+      // Hardware still in its box. It must render as an unknown-state pin,
+      // never be dropped and never crash the boot.
+      final house = loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    connectivity: cloud
+''');
+      final light = house.floors.single.rooms.single.devices.single;
+      expect(light.entityId, isNull);
+      expect(light.connectivity, Connectivity.cloud);
+    });
+
+    test('loads a house.yaml with no devices section as a house with none',
+        () {
+      // A House Plan generated before markers existed is not an error.
+      final house =
+          loadHouse(houseYaml: _plan(placements: ''), bindingsYaml: 'bindings:\n');
+      expect(house.floors.single.rooms.single.devices, isEmpty);
+    });
+
+    test('rejects two Devices bound to one entity', () {
+      // Two pins driving one entity would toggle each other, and neither
+      // could be reasoned about from across the room.
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+$_bindings  other-lamp:
+    entity: input_boolean.light_den
+    connectivity: local
+'''),
+        _rejects('both bind to entity "input_boolean.light_den"'),
+      );
+    });
+
+    test('rejects an entity id that is not domain.object_id', () {
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    entity: LightDen
+    connectivity: local
+'''),
+        _rejects('entity "LightDen"'),
+      );
+    });
+
+    test('rejects unknown connectivity, and demands it be stated', () {
+      for (final line in ['    connectivity: wifi', '']) {
+        expect(
+          () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    entity: input_boolean.light_den
+$line
+'''),
+          _rejects('(local | cloud)'),
+          reason: line.isEmpty ? 'omitted entirely' : line,
+        );
+      }
+    });
   });
 
-  test('rejects an unknown device kind', () {
-    const bad = '''
+  // These are backstops now, not everyday errors: the converter validates
+  // kinds, computes membership and rejects duplicate Keys, so reaching one
+  // of these means house.yaml was hand-edited or truncated — which is
+  // exactly the escape hatch ADR-0004 kept, and it gets the same
+  // enforcement as the generated path.
+  group('a mangled generated file', () {
+    test('rejects an unknown device kind', () {
+      expect(
+        () => loadHouse(houseYaml: _plan(placements: '''
 devices:
-  - id: gizmo
+  - key: gizmo
     name: "Gizmo"
     kind: flux-capacitor
-    connectivity: local
     room: den
     position: [1, 1]
-''';
-    expect(
-      () => loadHouse(houseYaml: _house, devicesYaml: bad),
-      throwsA(isA<FormatException>().having(
-          (e) => e.message, 'message', contains('flux-capacitor'))),
-    );
+'''), bindingsYaml: '''
+bindings:
+  gizmo:
+    connectivity: local
+'''),
+        _rejects('flux-capacitor'),
+      );
+    });
+
+    test('rejects a duplicate Device key', () {
+      expect(
+        () => loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: light-den
+    name: "Den Light"
+    kind: light
+    room: den
+    position: [2, 1.5]
+  - key: light-den
+    name: "Den Light Again"
+    kind: light
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: _bindings),
+        _rejects('duplicate Device key "light-den"'),
+      );
+    });
+
+    test('rejects a Device pointing at a missing room', () {
+      expect(
+        () => loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: light-x
+    name: "X"
+    kind: light
+    room: renamed-room
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  light-x:
+    connectivity: local
+'''),
+        _rejects('renamed-room'),
+      );
+    });
   });
 
   // The House Plan guarantee: what the converter rejects, the hand-written
@@ -87,26 +234,27 @@ devices:
     test('rejects a duplicate room id', () {
       expect(
         () => loadHouse(
-            houseYaml: _houseWith('''
+            houseYaml: _plan(extraRoom: '''
       - id: den
         name: "Second Den"
         footprint: [[4, 0], [8, 0], [8, 3], [4, 3]]'''),
-            devicesYaml: _devices),
+            bindingsYaml: _bindings),
         _rejects('duplicate room id "den"'),
       );
     });
 
     test('rejects a duplicate floor id', () {
       expect(
-        () => loadHouse(houseYaml: '''
-$_house  - id: ground-floor
+        () => loadHouse(
+            houseYaml: _plan(extraFloor: '''  - id: ground-floor
     name: "Ground Floor Again"
     level: 1
     rooms:
       - id: attic
         name: "Attic"
         footprint: [[0, 0], [4, 0], [4, 3], [0, 3]]
-''', devicesYaml: _devices),
+'''),
+            bindingsYaml: _bindings),
         _rejects('duplicate floor id "ground-floor"'),
       );
     });
@@ -114,11 +262,11 @@ $_house  - id: ground-floor
     test('rejects a diagonal footprint edge', () {
       expect(
         () => loadHouse(
-            houseYaml: _houseWith('''
+            houseYaml: _plan(extraRoom: '''
       - id: wedge
         name: "Wedge"
         footprint: [[0, 6], [4, 6], [2, 9]]'''),
-            devicesYaml: _devices),
+            bindingsYaml: _bindings),
         _rejects('edge (4, 6)→(2, 9) is diagonal'),
       );
     });
@@ -126,11 +274,11 @@ $_house  - id: ground-floor
     test('rejects a footprint with fewer than 3 corners', () {
       expect(
         () => loadHouse(
-            houseYaml: _houseWith('''
+            houseYaml: _plan(extraRoom: '''
       - id: slit
         name: "Slit"
         footprint: [[0, 6], [4, 6]]'''),
-            devicesYaml: _devices),
+            bindingsYaml: _bindings),
         _rejects('room "slit" footprint has fewer than 3 corners'),
       );
     });
@@ -138,8 +286,8 @@ $_house  - id: ground-floor
     test('rejects a diagonal wall', () {
       expect(
         () => loadHouse(
-            houseYaml: '$_house      - [[0, 0], [4, 3]]\n',
-            devicesYaml: _devices),
+            houseYaml: _plan(extraWall: '      - [[0, 0], [4, 3]]\n'),
+            bindingsYaml: _bindings),
         _rejects('wall (0, 0)→(4, 3) on floor "ground-floor" is diagonal'),
       );
     });
@@ -147,61 +295,53 @@ $_house  - id: ground-floor
     test('rejects a zero-length wall', () {
       expect(
         () => loadHouse(
-            houseYaml: '$_house      - [[2, 2], [2, 2]]\n',
-            devicesYaml: _devices),
+            houseYaml: _plan(extraWall: '      - [[2, 2], [2, 2]]\n'),
+            bindingsYaml: _bindings),
         _rejects('wall (2, 2)→(2, 2) on floor "ground-floor" has zero length'),
       );
     });
   });
 
   group('devices against the plan', () {
-    test('rejects a device pinned outside its room', () {
-      // The documented mistake: `room:` moved to the den, `position:` left
-      // where it was (HOUSE-PLAN.md §5) — it lands in the L's notch.
-      const stale = '''
+    test('rejects a Device pinned outside its room', () {
+      // Unreachable through the converter now — it computes membership —
+      // so this pins the backstop against a truncated or hand-mangled file.
+      // The position lands in the L's notch.
+      expect(
+        () => loadHouse(houseYaml: _plan(placements: '''
 devices:
-  - id: light-den
+  - key: light-den
     name: "Den Light"
     kind: light
-    connectivity: local
     room: den
     position: [3, 4]
-''';
-      expect(
-        () => loadHouse(houseYaml: _house, devicesYaml: stale),
+'''), bindingsYaml: _bindings),
         _rejects('position [3, 4] is outside its room "den"'),
       );
     });
 
     test('accepts a device pinned exactly on its room boundary', () {
-      // "Near a wall for a TV" is what the runbook tells the family to do.
-      // Even-odd point-in-polygon answers no for a point on den's east
-      // wall and yes for the same point on its west wall, so the boundary
-      // allowance — not `contains` — is what makes this legal either way.
-      const onEdge = '''
+      // Markers get dropped onto walls — a TV, a thermostat — and even-odd
+      // point-in-polygon answers no for a point on den's east wall and yes
+      // for the same point on its west wall, so the boundary allowance, not
+      // `contains`, is what makes this legal either way.
+      final den = loadHouse(houseYaml: _plan(placements: '''
 devices:
-  - id: tv-den
+  - key: tv-den
     name: "Den TV"
     kind: tv
-    connectivity: local
     room: den
     position: [4, 1.5]
-''';
-      final den = loadHouse(houseYaml: _house, devicesYaml: onEdge)
-          .floors
-          .single
-          .rooms
-          .single;
+'''), bindingsYaml: '''
+bindings:
+  tv-den:
+    connectivity: local
+''').floors.single.rooms.single;
       expect(den.contains(const Offset(4, 1.5)), isFalse, reason: 'on-edge');
       expect(den.devices.single.position, const Offset(4, 1.5));
     });
   });
 }
 
-/// [_house] plus one more room on the ground floor — the walls block sits
-/// after the rooms, so an extra room appends to the room list.
-String _houseWith(String roomYaml) => _house
-    .replaceFirst('    walls:', '$roomYaml\n    walls:');
-
-Matcher _rejects(String culprit) => throwsA(
-    isA<FormatException>().having((e) => e.message, 'message', contains(culprit)));
+Matcher _rejects(String culprit) => throwsA(isA<FormatException>()
+    .having((e) => e.message, 'message', contains(culprit)));

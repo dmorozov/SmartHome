@@ -48,7 +48,7 @@ import zlib
 import zipfile
 from pathlib import Path
 
-# The Device vocabulary, kebab-case exactly as devices.yaml spells it and
+# The Device vocabulary, kebab-case exactly as house.yaml spells it and
 # as house_loader.dart's _kind() parses it — a marker whose kind the loader
 # rejects would be a paper cut invented here rather than by the author.
 KINDS = [

@@ -35,8 +35,10 @@ class PanelBoot {
 }
 
 /// Boots the Panel from plain data: the House Plan's two YAML texts
-/// (ADR-0004) and the Hub configuration as ordinary strings. Reads no files
-/// and no environment, so every boot outcome is reachable from a test.
+/// (ADR-0004, reshaped by ADR-0005 — generated `house.yaml` joined with
+/// hand-maintained `bindings.yaml`) and the Hub configuration as ordinary
+/// strings. Reads no files and no environment, so every boot outcome is
+/// reachable from a test.
 ///
 /// Fails in exactly three ways, each leaving the greppable line the
 /// appliance's journald is the only witness to (ADR-0001 — nobody is
@@ -61,10 +63,10 @@ PanelBoot bootPanel({
   required String hubUrl,
   required String hubToken,
   required String houseYaml,
-  required String devicesYaml,
+  required String bindingsYaml,
   WebSocketChannel Function(Uri)? haConnect,
 }) {
-  final house = _loadHouse(houseYaml: houseYaml, devicesYaml: devicesYaml);
+  final house = _loadHouse(houseYaml: houseYaml, bindingsYaml: bindingsYaml);
   final hub = _hub(house,
       kind: hubKind, url: hubUrl, token: hubToken, connect: haConnect);
   return PanelBoot(
@@ -76,9 +78,9 @@ PanelBoot bootPanel({
   );
 }
 
-House _loadHouse({required String houseYaml, required String devicesYaml}) {
+House _loadHouse({required String houseYaml, required String bindingsYaml}) {
   try {
-    final house = loadHouse(houseYaml: houseYaml, devicesYaml: devicesYaml);
+    final house = loadHouse(houseYaml: houseYaml, bindingsYaml: bindingsYaml);
     final devices = [for (final floor in house.floors) ...floor.devices];
     Log.info('house', 'loaded', {
       'name': house.name,
@@ -86,7 +88,7 @@ House _loadHouse({required String houseYaml, required String devicesYaml}) {
       'rooms': house.floors.fold<int>(0, (n, f) => n + f.rooms.length),
       'devices': devices.length,
       // Devices with no `entity:` can never show state — worth knowing at a
-      // glance, without hunting through devices.yaml.
+      // glance, without hunting through bindings.yaml.
       'bound': devices.where((d) => d.entityId != null).length,
     });
     return house;

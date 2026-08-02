@@ -130,7 +130,7 @@ class ConvertCore(unittest.TestCase):
                          (0.0, 0.0, 5.0, 5.0))
 
     def test_slug_collision_is_an_error(self):
-        # Room ids are slugified names and devices.yaml references them, so
+        # Room ids are slugified names and Device markers reference them,
         # two rooms may not collapse to one id anywhere in the house.
         result = convert(home(
             room('Guest Bathroom', [(0, 0), (300, 0), (300, 300), (0, 300)]),

@@ -43,7 +43,7 @@ gitignored along with the database and logs; only `configuration.yaml` and
 ## The stand-in fleet
 
 `packages/panel_dev.yaml` is **generated** from the Panel's own
-`panel/assets/house/devices.yaml`, so every one of the 33 Device pins has
+`panel/assets/house/house.yaml`, so every one of the 33 Device pins has
 an entity behind it:
 
 | Panel state | Entity the Panel binds to | Poke it with |
@@ -63,7 +63,7 @@ Note `climate.ecobee` is a `generic_thermostat` over a helper temperature
 sensor and a dummy "calling for heat" switch — a genuine climate entity
 with no hardware attached.
 
-Regenerate after editing `devices.yaml`:
+Regenerate after re-running the converter (the Placements are its input):
 
 ```sh
 cd panel && dart run tool/gen_dev_entities.dart

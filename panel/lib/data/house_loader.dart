@@ -11,10 +11,18 @@ import '../domain/house.dart';
 /// against a typed coordinate, tiny against room scale.
 const _pinEps = 0.05;
 
-/// Builds the [House] from the two House Plan files (ADR-0004):
-/// `house.yaml` — converter-generated geometry, never hand-edited — and
-/// `devices.yaml` — hand-maintained Device declarations referencing rooms
-/// by id. Throws [FormatException] with an actionable message on mismatch.
+/// Builds the [House] from the two House Plan files (ADR-0004, reshaped by
+/// ADR-0005): `house.yaml` — converter-generated, never hand-edited, and
+/// now carrying the Placements read out of the drawing as well as the
+/// geometry — joined with `bindings.yaml`, the one remaining hand-
+/// maintained file, which says only which Hub entity each Key binds to and
+/// whether the Device is Local or Cloud. Throws [FormatException] with an
+/// actionable message on mismatch.
+///
+/// The join is on the **Key**: the author types it once in Sweet Home 3D,
+/// and it becomes [Device.id], so everything downstream — the states map,
+/// toggles, pin widget keys, logs — keys on it exactly as it did when ids
+/// were hand-written. That is why this cutover stops at this file.
 ///
 /// The returned [House] carries the full House Plan guarantee the Dollhouse
 /// assumes: every Room footprint is a closed rectilinear polygon (>= 3
@@ -24,49 +32,51 @@ const _pinEps = 0.05;
 /// [_pinEps] of the edge of) that Room's footprint. Geometry the converter
 /// would reject therefore also dies here — the hand-written-YAML escape
 /// hatch (ADR-0004) gets the same enforcement, instead of surfacing as
-/// silent paint-time garbage two modules downstream.
-House loadHouse({required String houseYaml, required String devicesYaml}) {
+/// silent paint-time garbage two modules downstream. The converter now
+/// computes Room membership rather than a person typing it, so [_checkPin]
+/// passes by construction; it stays as the backstop for a mangled file.
+House loadHouse({required String houseYaml, required String bindingsYaml}) {
   final houseDoc = loadYaml(houseYaml);
-  final devicesDoc = loadYaml(devicesYaml);
+  final bindings = _bindings(loadYaml(bindingsYaml));
 
   final devicesByRoom = <String, List<Device>>{};
-  final seenIds = <String>{};
-  final seenEntities = <String, String>{};
-  for (final d in devicesDoc['devices'] as YamlList) {
-    final id = d['id'] as String;
-    if (!seenIds.add(id)) {
-      throw FormatException('devices.yaml: duplicate device id "$id"');
+  final seenKeys = <String>{};
+  // Bindings are consumed as Placements claim them; whatever is left over
+  // is a binding for a Device that no longer exists in the drawing.
+  final unclaimed = bindings.keys.toSet();
+  // Absent `devices:` is not an error — it is a house.yaml generated before
+  // markers existed. It loads as a house with no Devices, which the
+  // `house.loaded … devices=0` log makes obvious.
+  for (final p in (houseDoc['devices'] as YamlList?) ?? YamlList()) {
+    final key = p['key'] as String;
+    if (!seenKeys.add(key)) {
+      throw FormatException(
+          'house.yaml: duplicate Device key "$key" — the converter rejects '
+          'duplicate keys, so regenerate rather than editing house.yaml');
     }
-    final entityId = d['entity'] as String?;
-    if (entityId != null) {
-      if (!RegExp(r'^[a-z_]+\.[a-z0-9_]+$').hasMatch(entityId)) {
-        throw FormatException(
-            'devices.yaml: device "$id" has entity "$entityId", which is not '
-            'a Home Assistant entity id (domain.object_id)');
-      }
-      final clash = seenEntities[entityId];
-      if (clash != null) {
-        throw FormatException(
-            'devices.yaml: devices "$clash" and "$id" both bind to entity '
-            '"$entityId" — one entity, one Device.');
-      }
-      seenEntities[entityId] = id;
+    final binding = bindings[key];
+    if (binding == null) {
+      throw FormatException(
+          'bindings.yaml: no entry for Device "$key" — add one; '
+          'connectivity alone is enough until the hardware exists');
     }
+    unclaimed.remove(key);
     final device = Device(
-      id: id,
-      name: d['name'] as String,
-      kind: _kind(d['kind'] as String, id),
-      connectivity: switch (d['connectivity'] as String) {
-        'local' => Connectivity.local,
-        'cloud' => Connectivity.cloud,
-        final c => throw FormatException(
-            'devices.yaml: device "$id" has unknown connectivity "$c" '
-            '(local | cloud)'),
-      },
-      position: _point(d['position'], 'device "$id" position'),
-      entityId: entityId,
+      id: key,
+      name: p['name'] as String,
+      kind: _kind(p['kind'] as String, key),
+      connectivity: binding.connectivity,
+      position: _point(p['position'], 'device "$key" position'),
+      entityId: binding.entityId,
     );
-    devicesByRoom.putIfAbsent(d['room'] as String, () => []).add(device);
+    devicesByRoom.putIfAbsent(p['room'] as String, () => []).add(device);
+  }
+  if (unclaimed.isNotEmpty) {
+    final stale = unclaimed.toList()..sort();
+    throw FormatException(
+        'bindings.yaml binds ${stale.join(", ")}, which no longer exist in '
+        'house.yaml — marker deleted from the drawing? Delete the '
+        'binding(s) too, or put the marker back and re-run the converter.');
   }
 
   final roomIds = <String>{};
@@ -91,8 +101,8 @@ House loadHouse({required String houseYaml, required String devicesYaml}) {
                 if (!roomIds.add(id)) {
                   throw FormatException(
                       'house.yaml: duplicate room id "$id" — room ids must be '
-                      'unique across the whole house (devices.yaml '
-                      'references them)');
+                      'unique across the whole house (Device markers '
+                      'reference them)');
                 }
                 final footprint = [
                   for (final p in r['footprint'] as YamlList)
@@ -123,9 +133,9 @@ House loadHouse({required String houseYaml, required String devicesYaml}) {
   final orphaned = devicesByRoom.keys.where((r) => !roomIds.contains(r));
   if (orphaned.isNotEmpty) {
     throw FormatException(
-        'devices.yaml references room(s) missing from house.yaml: '
-        '${orphaned.join(", ")} — renamed in Sweet Home 3D? Update the '
-        'room: references to the new slugs.');
+        'house.yaml: Device(s) reference room(s) that do not exist: '
+        '${orphaned.join(", ")} — the converter computes Room membership, so '
+        'this file was hand-edited or truncated; regenerate it.');
   }
   for (final floor in floors) {
     for (final room in floor.rooms) {
@@ -177,7 +187,7 @@ void _checkWall(String floorId, Wall wall) {
   }
 }
 
-// ── Devices against the House Plan (devices.yaml × house.yaml) ──────────
+// ── Devices against the House Plan (Placements × bindings.yaml) ────────
 
 /// A Device pins to a point in its own Room. The position is house-global,
 /// so moving a Device between Rooms means editing two lines, and editing
@@ -190,10 +200,10 @@ void _checkPin(Room room, Device device) {
     if (_segmentDistance(a, b, device.position) <= _pinEps) return;
   }
   throw FormatException(
-      'devices.yaml: device "${device.id}" position [${_xy(device.position)}] '
-      'is outside its room "${room.id}" — positions are meters from the '
-      'house NW corner, not room-relative (HOUSE-PLAN.md §5); recompute from '
-      "the converter's origin-shift line");
+      'house.yaml: Device "${device.id}" position [${_xy(device.position)}] '
+      'is outside its room "${room.id}" — the converter computes membership '
+      'from the drawing, so this file was hand-edited or truncated; '
+      'regenerate it');
 }
 
 /// Distance from [p] to segment [a]–[b]. Exact for the axis-aligned
@@ -203,6 +213,55 @@ double _segmentDistance(Offset a, Offset b, Offset p) {
   final x = p.dx.clamp(math.min(a.dx, b.dx), math.max(a.dx, b.dx)).toDouble();
   final y = p.dy.clamp(math.min(a.dy, b.dy), math.max(a.dy, b.dy)).toDouble();
   return (p - Offset(x, y)).distance;
+}
+
+/// One hand-maintained binding: what the Hub calls this Device, and
+/// whether it needs a vendor cloud.
+class _Binding {
+  const _Binding(this.entityId, this.connectivity);
+  final String? entityId;
+  final Connectivity connectivity;
+}
+
+/// Parses and validates `bindings.yaml` on its own, before any Placement
+/// is looked at — so a malformed binding is reported as a binding problem
+/// rather than surfacing later as a mysteriously missing Device.
+Map<String, _Binding> _bindings(dynamic doc) {
+  final out = <String, _Binding>{};
+  // One entity may back only one Device: two pins driving one entity would
+  // toggle each other, and neither could be reasoned about from the wall.
+  final seenEntities = <String, String>{};
+  for (final entry in ((doc['bindings'] as YamlMap?) ?? YamlMap()).entries) {
+    final key = entry.key as String;
+    final binding = entry.value;
+    final entityId = binding == null ? null : binding['entity'] as String?;
+    if (entityId != null) {
+      if (!RegExp(r'^[a-z_]+\.[a-z0-9_]+$').hasMatch(entityId)) {
+        throw FormatException(
+            'bindings.yaml: "$key" has entity "$entityId", which is not a '
+            'Home Assistant entity id (domain.object_id)');
+      }
+      final clash = seenEntities[entityId];
+      if (clash != null) {
+        throw FormatException(
+            'bindings.yaml: "$clash" and "$key" both bind to entity '
+            '"$entityId" — one entity, one Device.');
+      }
+      seenEntities[entityId] = key;
+    }
+    out[key] = _Binding(
+      entityId,
+      switch (binding == null ? null : binding['connectivity'] as String?) {
+        'local' => Connectivity.local,
+        'cloud' => Connectivity.cloud,
+        // Deliberately no default: a planned Ring camera is a Cloud Device
+        // before it is ever bound, so guessing `local` would mislabel it.
+        final c => throw FormatException(
+            'bindings.yaml: "$key" has connectivity "$c" (local | cloud)'),
+      },
+    );
+  }
+  return out;
 }
 
 DeviceKind _kind(String slug, String deviceId) => switch (slug) {
@@ -221,7 +280,8 @@ DeviceKind _kind(String slug, String deviceId) => switch (slug) {
       'ev-charger' => DeviceKind.evCharger,
       'energy-monitor' => DeviceKind.energyMonitor,
       _ => throw FormatException(
-          'devices.yaml: device "$deviceId" has unknown kind "$slug"'),
+          'house.yaml: Device "$deviceId" has unknown kind "$slug" — the '
+          'converter validates kinds, so regenerate rather than hand-edit'),
     };
 
 Offset _point(dynamic pair, String what) {

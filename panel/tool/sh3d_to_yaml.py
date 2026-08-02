@@ -9,7 +9,7 @@ Python stdlib only — no installs needed.
 
 The pipeline and its rules are decided in docs/adr/0004 (grilled 2026-07-30):
   * every room must be named in Sweet Home 3D — ids are slugified names,
-    unique across the whole house (devices.yaml references them)
+    unique across the whole house (Device markers reference them)
   * room polygons must be rectilinear (right angles only)      -> ERROR
   * rooms on the same floor must not overlap                   -> ERROR
   * diagonal walls                                             -> ERROR
@@ -358,8 +358,9 @@ def convert(root, name=None):
              'walls': [[[x, y], [x, y]], ...]}], lowest level first, in
             meters from the one shared origin; empty floors dropped
     origin  (min_x, min_y) — the NW-corner shift already applied to every
-            coordinate above, which is what devices.yaml positions are
-            measured from
+            coordinate above, including the Placements. Nobody needs it by
+            hand any more; it stays because the tests assert on it and it
+            explains the emitted numbers
     devices [{'key', 'name', 'kind', 'room', 'position': (x, y)}] in the
             drawing's document order — the Device markers, with Room
             membership computed rather than typed. Empty when the drawing
@@ -440,7 +441,7 @@ def convert(root, name=None):
             errors.append(
                 f'rooms "{slugs[slug]}" and "{r["name"]}" both get id '
                 f'"{slug}" — room names must be unique across the whole '
-                f'house (devices.yaml references them); rename one, e.g. '
+                f'house (Device markers reference them); rename one, e.g. '
                 f'"Guest Bathroom" vs "Kids Bathroom"')
             continue
         slugs[slug] = r['name']
@@ -555,7 +556,6 @@ def main():
         report_and_exit(result.errors, result.warnings)
 
     floors, warnings = result.floors, result.warnings
-    min_x, min_y = result.origin
     with open(args.output, 'w') as fh:
         fh.write(emit_yaml(result.name, floors, args.input, result.devices))
 
@@ -566,9 +566,6 @@ def main():
     print(f'wrote {args.output}: {len(floors)} floor(s), {n_rooms} room(s), '
           f'{n_walls} wall(s), {len(result.devices)} device(s), '
           f'{len(warnings)} warning(s)')
-    print(f'origin shift: yaml (x, y) = Sweet Home 3D (x, y) in cm / 100 '
-          f'minus ({fmt(min_x)}, {fmt(min_y)}) m — use this to compute '
-          f'devices.yaml positions from plan coordinates')
 
 
 def report_and_exit(errors, warnings):

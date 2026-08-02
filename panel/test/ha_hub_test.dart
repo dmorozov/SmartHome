@@ -147,8 +147,8 @@ void main() {
     final snapshot = records.firstWhere((r) => r.event == 'snapshot').fields!;
     expect(snapshot['entities'], 1);
     expect(snapshot['bound'], 1);
-    // Every other Device in devices.yaml names an entity the Hub did not
-    // report. Without this line that failure — a typo in devices.yaml, an
+    // Every other Device in bindings.yaml names an entity the Hub did not
+    // report. Without this line that failure — a typo in bindings.yaml, an
     // integration not set up — shows only as a pin that never fills in.
     expect(snapshot['missing'], greaterThan(0));
     expect(records.map((r) => r.event), contains('missing_entities'));

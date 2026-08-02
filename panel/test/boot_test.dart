@@ -8,8 +8,8 @@ import 'package:panel/diagnostics/log.dart';
 import 'support/fake_channel.dart';
 
 /// A House Plan small enough to count by eye: one Floor, two Rooms, two
-/// Devices — one bound to an entity, one not, so `bound` and `devices` must
-/// differ for the counts to mean anything.
+/// Placements — one bound to an entity, one not, so `bound` and `devices`
+/// must differ for the counts to mean anything.
 const _house = '''
 name: "Boot House"
 floors:
@@ -25,23 +25,28 @@ floors:
         footprint: [[4, 0], [6, 0], [6, 3], [4, 3]]
     walls:
       - [[0, 0], [4, 0]]
-''';
-
-const _devices = '''
 devices:
-  - id: light-den
+  - key: light-den
     name: "Den Light"
     kind: light
-    connectivity: local
     room: den
-    entity: light.den
     position: [2, 1.5]
-  - id: light-hall
+  - key: light-hall
     name: "Hall Light"
     kind: light
-    connectivity: local
     room: hall
     position: [5, 1.5]
+''';
+
+/// The hand-maintained half. `light-hall` has no entity — hardware still in
+/// its box — which is what makes `bound` differ from `devices`.
+const _bindings = '''
+bindings:
+  light-den:
+    entity: light.den
+    connectivity: local
+  light-hall:
+    connectivity: local
 ''';
 
 /// The composition root, reachable at last. Every case below needed a
@@ -71,14 +76,14 @@ void main() {
     String url = 'http://localhost:8123',
     String token = '',
     String houseYaml = _house,
-    String devicesYaml = _devices,
+    String bindingsYaml = _bindings,
   }) {
     final assembly = bootPanel(
       hubKind: kind,
       hubUrl: url,
       hubToken: token,
       houseYaml: houseYaml,
-      devicesYaml: devicesYaml,
+      bindingsYaml: bindingsYaml,
       // An idle socket: the ha path picks its adapter without dialling.
       haConnect: (_) => FakeChannel(),
     );
@@ -162,16 +167,20 @@ void main() {
     });
 
     test('a malformed House Plan leaves one fatal line and rethrows', () {
-      const orphan = '''
-devices:
-  - id: light-x
-    name: "X"
-    kind: light
+      // A binding whose Device was deleted from the drawing — the most
+      // likely hand-edit mistake, now that bindings.yaml is the only file
+      // a person types into.
+      const stale = '''
+bindings:
+  light-den:
+    entity: light.den
     connectivity: local
-    room: renamed-room
-    position: [1, 1]
+  light-hall:
+    connectivity: local
+  ghost-lamp:
+    connectivity: local
 ''';
-      expect(() => boot(devicesYaml: orphan), throwsA(isA<FormatException>()));
+      expect(() => boot(bindingsYaml: stale), throwsA(isA<FormatException>()));
 
       final invalid =
           records.singleWhere((r) => r.area == 'house' && r.event == 'invalid');

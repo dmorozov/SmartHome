@@ -32,16 +32,32 @@ void main() {
 
       final house = loadHouse(
         houseYaml: File(out).readAsStringSync(),
-        devicesYaml: File('assets/house/devices.yaml').readAsStringSync(),
+        bindingsYaml: File('assets/house/bindings.yaml').readAsStringSync(),
       );
 
       expect(house.floors, hasLength(3)); // ground, upstairs, attic
       expect(house.floors.expand((f) => f.rooms).map((r) => r.id),
           containsAll(['hall', 'garage', 'attic-storage']));
       // Freshly converted geometry satisfies the gatekeeper's invariants —
-      // loadHouse would have thrown otherwise — and the Devices the family
-      // hand-maintains still land in the rooms the drawing describes.
-      expect(house.floors.expand((f) => f.devices), hasLength(33));
+      // loadHouse would have thrown otherwise.
+      final devices = house.floors.expand((f) => f.devices).toList();
+      expect(devices, hasLength(33));
+      // The whole seam, end to end: these Devices came out of marker
+      // positions in the drawing, were assigned Rooms by the converter,
+      // and were bound to Hub entities by the one hand-maintained file.
+      // Nothing about them was typed twice.
+      expect(devices.where((d) => d.entityId != null), hasLength(33),
+          reason: 'every Key should bind through bindings.yaml');
+      expect(devices.map((d) => d.id).toSet(), hasLength(33),
+          reason: 'Keys are Device identity and must be unique');
+      // Room membership was computed, not declared — and the loader's
+      // independent _checkPin walk accepted every one of them.
+      expect(
+          house.floors
+              .expand((f) => f.rooms)
+              .where((r) => r.devices.isNotEmpty)
+              .map((r) => r.id),
+          containsAll(['garage', 'kitchen', 'hall']));
     },
     skip: _python3Available()
         ? false

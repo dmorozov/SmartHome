@@ -2,7 +2,17 @@
 
 Flip the seam: `loadHouse` consumes the converter's generated Placements joined with a new hand-maintained `bindings.yaml` (Key → Hub entity + connectivity), and `devices.yaml` dies. Keys become Device identity everywhere. The equivalence gate is brutal on purpose: **all four goldens byte-identical**, because the placeholder markers were built to mirror devices.yaml exactly in phase 1.
 
-Status: proposed · Gate: phase 1 landed · Written against commit `d01f290` (2026-08-01) — re-verify line numbers before editing.
+Status: **LANDED 2026-08-02** · Gate: phase 1 landed — met.
+
+**The equivalence gate held: all four goldens byte-identical, no `--update-goldens`.** 134 tests green (was 132 mid-phase, 124 before phase 1). `flutter build web` confirms the bundle now carries `house.yaml` + `bindings.yaml` and no stale `devices.yaml` — the one path no test reaches.
+
+**As-built deltas:**
+
+- **The generator retarget produced exactly one line of diff** in `hub/dev/ha-config/packages/panel_dev.yaml` — the `# Source:` path. All 33 stand-ins, all entity ids, all ordering identical, which is the proof that reading `key` out of `house.yaml`'s `devices:` is the same three fields it read out of `devices.yaml`.
+- **D5's drift test landed as two tests, not one.** `every binding resolves against the dev Hub stand-ins` (the silent-rename hazard, with the empty `_integrated` ledger) plus `every Placement has exactly one binding` — the second is the pair of orphan checks the loader enforces at boot, asserted in `flutter test` instead of on the wall. Both mutation-verified: renaming a stand-in entity and adding a ghost binding each turn exactly one of them red.
+- **`_checkPin` was kept and is now unreachable through the pipeline** — the converter computes membership, so it can only fire on a hand-mangled `house.yaml`. Its test moved into a "mangled generated file" group that says so, rather than being deleted; plan 04's mutation evidence still stands behind it.
+- **The origin-shift print is gone** from `main()` (step 6), along with HOUSE-PLAN.md's "keep this line" instruction and the whole cm→m arithmetic runbook. Nothing computes a position by hand any more.
+- **`pubspec.yaml` needed no edit**, as predicted: `assets/house/` is declared as a directory.
 
 ---
 

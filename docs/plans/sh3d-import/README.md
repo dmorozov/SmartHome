@@ -1,6 +1,6 @@
 # SH3D import, phased — series index
 
-Four implementation phases turning `docs/plans/sh3d-dollhouse-spec-final.md` into a home-scale pipeline: Devices placed in the Sweet Home 3D drawing, positions computed instead of hand-typed, binding to the Hub through author-controlled keys — while keeping everything about the working Dollhouse that the spec would have broken.
+Five phases turning `docs/plans/sh3d-dollhouse-spec-final.md` into a home-scale pipeline: Devices placed in the Sweet Home 3D drawing, positions computed instead of hand-typed, binding to the Hub through author-controlled keys — while keeping everything about the working Dollhouse that the spec would have broken.
 
 Written 2026-08-01 against commit `d01f290`, from the adversarially-verified critical analysis of the spec (4 audits × 4 verifiers over the spec, the repo, plan 06, and the four real `.sh3d` files in `docs/examples/`). Finding IDs used throughout (EX-\*, SR-\*, SI-\*, P6-\*) refer to that analysis; each phase file restates every finding it depends on, so no phase needs the analysis itself.
 
@@ -10,7 +10,7 @@ Written 2026-08-01 against commit `d01f290`, from the adversarially-verified cri
 |---|---|---|---|
 | 0 | [phase-0-experiment-gate.md](phase-0-experiment-gate.md) | One sitting of Sweet Home 3D experiments settling every remaining unknown (V1/V2/V3-roundtrip/V4/V6, the Room-key mechanism the spec forgot, V23) + the missing fixtures | none — do this first · **V1 PASSED 2026-08-02** |
 | 1 | [phase-1-placements-converter.md](phase-1-placements-converter.md) | Converter reads Device markers from the drawing and emits `devices:` into house.yaml; ADR-0005 supersedes ADR-0004's device-markers rejection. Python-only; zero Dart changes | ~~Phase 0 complete and V1 favorable~~ — **LANDED 2026-08-02** |
-| 2 | [phase-2-bindings-cutover.md](phase-2-bindings-cutover.md) | The seam flip: `loadHouse` consumes generated placements × hand-maintained `bindings.yaml`; `devices.yaml` dies; goldens must not move | Phase 1 landed |
+| 2 | [phase-2-bindings-cutover.md](phase-2-bindings-cutover.md) | The seam flip: `loadHouse` consumes generated placements × hand-maintained `bindings.yaml`; `devices.yaml` dies; goldens must not move | ~~Phase 1 landed~~ — **LANDED 2026-08-02**, all four goldens byte-identical |
 | 3 | [phase-3-device-vocabulary.md](phase-3-device-vocabulary.md) | Plan 06 absorbed and corrected: one Device-vocabulary table, the family fold, seed unification, generator pure core | Independent of 1–2 in content; do it last so it consolidates the post-cutover shapes |
 | 4 | *(to write)* **"Prepare the House Plan" — the user manual** | Step-by-step instructions for a non-technical person: install Sweet Home 3D, import the marker library, launch via `sh3d.sh`, draw rooms, place Devices, run the converter, read the error messages. Plus every recommendation this series accumulated, collected in one place at the end | **All of 1–3 landed** — it documents the finished workflow, so writing it earlier would document a moving target |
 
@@ -25,7 +25,7 @@ Written 2026-08-01 against commit `d01f290`, from the adversarially-verified cri
 - **Duplicate keys are the default, not the accident.** SH3D names every placed piece after its catalog entry, so a 13-piece drawing produced 6 distinct slugs (4× `kitchen-cabinet`, 4× `fixed-window`). D2's duplicate-key error is now the *first* thing an author will meet, not a rare copy-paste hazard — its message quality is load-bearing, and V4 (E4) no longer needs running to justify it.
 - **The zero-`<level>` case is real** (EX-V14's open question): a one-level drawing writes no `<level>` element at all and no object carries a `level` attribute. Fixture `no-levels.Home.xml` pins it — and the converter already handles it (`1 floor(s), 2 room(s)`), so that path was untested rather than missing.
 - **Two budgeted behaviours already work.** `negative-origin.Home.xml` converts to YAML identical to the untranslated original bar the provenance comment, so the min-shift erases the offset exactly. Phase 1 inherits both this and the default-Floor synthesis; its estimate should shrink accordingly.
-- **Key spelling is unconstrained by the tool.** The first key typed in anger was `light_kitchen_1` — underscores, where every id in `devices.yaml` is kebab-case. Phase 1 must decide: accept, normalise, or reject. Validating against the loader's own slug rule puts the failure in the drawing instead of the Panel.
+- **Key spelling is unconstrained by the tool.** The first key typed in anger was `light_kitchen_1` — underscores, where every hand-written id had been kebab-case. **Decided (author, 2026-08-02): accept any spelling.** Only emptiness and collisions are rejected; a rule about punctuation would buy a consistency the pipeline never uses.
 
 ## Corrections to the spec (authoritative here, not there)
 

@@ -8,5 +8,5 @@ import 'package:panel/domain/house.dart';
 /// placeholder files.
 House loadTestHouse() => loadHouse(
       houseYaml: File('assets/house/house.yaml').readAsStringSync(),
-      devicesYaml: File('assets/house/devices.yaml').readAsStringSync(),
+      bindingsYaml: File('assets/house/bindings.yaml').readAsStringSync(),
     );
