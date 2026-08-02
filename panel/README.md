@@ -82,9 +82,11 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
   never touches it; renaming a room in the drawing makes the loader point at
   the missing slug by name.
 - Current placeholder: `tool/fixtures/placeholder-house.Home.xml` (crafted
-  two-storey approximation of the real house) run through the converter.
-  `tool/fixtures/AlpsHotel.Home.xml` is a real Sweet Home 3D export used to
-  smoke-test the parser.
+  approximation of the real house — ground floor, upstairs, and an unwalled
+  attic) run through the converter; the shipped `house.yaml` is exactly what
+  it emits, and `tool/test_sh3d_to_yaml.py` keeps it that way.
+  `tool/fixtures/AlpsHotel.Home.xml` is a real Sweet Home 3D export that
+  breaks the rules on purpose — it must be rejected, nothing written.
 
 ## Layout
 
@@ -161,6 +163,9 @@ does not observe this; see `../hub/dev/README.md`.)
 
 `flutter test` — FakeHub semantics, the House Plan loader, the HA
 WebSocket protocol, widget interaction, and the goldens below.
+`test/house_pipeline_contract_test.dart` runs the converter and feeds its
+output straight into the loader, so the two ends of the ADR-0004 seam
+cannot drift apart; it skips where `python3` is absent.
 `FakeHub(house, driftEvery: Duration.zero)` disables the drift timer for
 deterministic tests. `test/flutter_test_config.dart` quiets logging to
 warnings for the whole suite.
@@ -174,6 +179,7 @@ showing exactly what moved.
 ```sh
 flutter test test/golden                    # check
 flutter test --update-goldens test/golden   # regenerate, then look at them
+python3 tool/test_sh3d_to_yaml.py           # the converter's own suite
 ```
 
 Regenerating is also the fastest way to just *see* the Panel while working

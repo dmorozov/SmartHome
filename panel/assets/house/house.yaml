@@ -89,3 +89,4 @@ floors:
       - id: attic-storage
         name: "Attic Storage"
         footprint: [[6, 0], [11, 0], [11, 6], [6, 6]]
+    walls:

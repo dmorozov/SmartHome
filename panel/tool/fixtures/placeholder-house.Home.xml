@@ -1,7 +1,8 @@
 <?xml version='1.0' encoding='UTF-8'?>
-<!-- Hand-crafted placeholder resembling the real house (2 levels, ~2840 sqft:
+<!-- Hand-crafted placeholder resembling the real house (3 levels, ~2840 sqft:
      garage attached west, family/living/kitchen/office/full bath downstairs,
-     3 bedrooms + 2 baths + landing upstairs over roughly half the footprint).
+     3 bedrooms + 2 baths + landing upstairs over roughly half the footprint,
+     one unwalled storage room in the attic).
      Units are centimeters, the format Sweet Home 3D writes in Home.xml.
      Regenerate panel/assets/house/house.yaml with the converter (exact
      command in panel/README.md).
@@ -9,6 +10,7 @@
 <home version="7400" name="Placeholder House" wallHeight="250.0">
   <level id="level0" name="Ground Floor" elevation="0.0" floorThickness="12.0" height="250.0" elevationIndex="0"/>
   <level id="level1" name="Upstairs" elevation="262.0" floorThickness="12.0" height="250.0" elevationIndex="0"/>
+  <level id="level2" name="Attic" elevation="524.0" floorThickness="12.0" height="250.0" elevationIndex="0"/>
 
   <!-- Ground floor: main block x 600..2200, y 0..1100; garage sticks out west -->
   <room id="r-garage" level="level0" name="Garage">
@@ -87,4 +89,11 @@
   <wall id="u7" level="level1" xStart="1100" yStart="700" xEnd="1400" yEnd="700" height="250" thickness="8"/>
   <wall id="u8" level="level1" xStart="600" yStart="600" xEnd="1100" yEnd="600" height="250" thickness="8"/>
   <wall id="u9" level="level1" xStart="850" yStart="600" xEnd="850" yEnd="1100" height="250" thickness="8"/>
+
+  <!-- Attic: one room over the master bedroom, no walls drawn — the whole
+       level is open (ADR-0004), so the converter warns about every one of
+       its boundaries. That is the correct reading, not a defect. -->
+  <room id="r-attic" level="level2" name="Attic Storage">
+    <point x="600" y="0"/><point x="1100" y="0"/><point x="1100" y="600"/><point x="600" y="600"/>
+  </room>
 </home>

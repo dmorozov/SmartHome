@@ -174,14 +174,15 @@ Step by step:
 4. **Set `connectivity`**: `local` = works with no vendor cloud; `cloud` =
    grandfathered vendor-cloud device.
 5. **Check it**: `flutter test` — the loader runs over the real asset files
-   and fails loudly on an unknown room id, duplicate device id, or unknown
-   kind. Then run the app; with the `FakeHub` the device gets a plausible
-   fake state automatically (seeded by kind), so the pin is live
-   immediately.
+   and fails loudly on an unknown room id, duplicate device id, unknown
+   kind, or a position outside the declared room. Then run the app; with
+   the `FakeHub` the device gets a plausible fake state automatically
+   (seeded by kind), so the pin is live immediately.
 
 Deleting a device is just deleting its block. Moving one between rooms =
 change `room:` *and* `position:` (position is house-global, not
-room-relative — a stale position renders the pin outside its room).
+room-relative — a stale position is rejected by the loader, so the Panel
+tells you rather than drawing the pin in the wrong room).
 
 When the real Home Assistant `HubClient` lands, each entry will also carry
 its HA entity id — that mapping belongs in this file too, which is why
