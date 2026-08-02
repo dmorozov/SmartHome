@@ -95,8 +95,8 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 - `lib/data/` — `HubClient` interface, `FakeHub`, `house_loader.dart` (parses
   the two House Plan YAML assets)
 - `lib/ui/` — theme, `HubController` (ChangeNotifier over `HubClient`),
-  `dollhouse/` (iso projection, plan geometry, floor slab painter, stacking
-  view), Popup
+  `dollhouse/` (iso projection, floor arrangement, floor scene, slab
+  painter, stacking view), Popup
 - `lib/diagnostics/` — structured logging (below)
 - `tool/` — the Sweet Home 3D converter + fixtures
 

@@ -4,6 +4,7 @@ import 'package:panel/data/fake_hub.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 
+import '../dollhouse_geometry.dart';
 import '../test_house.dart';
 import 'golden_setup.dart';
 
@@ -36,13 +37,13 @@ void main() {
   });
 
   goldenTest('upstairs selected', (tester) async {
-    await pumpPanel(tester, fakeHub());
+    final controller = fakeHub();
+    await pumpPanel(tester, controller);
 
-    // The neighbour's box is drawn unscaled; the slab itself sits at ~0.16
-    // of its height (0.32 scale about the top centre), and only the slab
-    // takes taps — see dollhouse_test.dart.
-    final rect = tester.getRect(find.byKey(const ValueKey('floor-upstairs')));
-    await tester.tapAt(rect.topCenter + Offset(0, rect.height * 0.16));
+    await tester.tapAt(floorSlabCentre(tester,
+        house: controller.house,
+        selectedFloorId: 'ground-floor',
+        floorId: 'upstairs'));
     await tester.pumpAndSettle();
 
     await expectLater(find.byType(PanelApp),

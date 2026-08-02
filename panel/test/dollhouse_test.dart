@@ -5,6 +5,7 @@ import 'package:panel/domain/device_state.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 
+import 'dollhouse_geometry.dart';
 import 'test_house.dart';
 
 /// The Dollhouse as the wall shows it. Every scene the Hub has a hand in is
@@ -32,13 +33,10 @@ void main() {
     final (controller, _) = makeController();
     await tester.pumpWidget(PanelApp(controller: controller));
 
-    // The rect is the unscaled box; a neighbour is drawn at 0.32 about its
-    // top centre, so the box centre maps to 0.16 of the height. Only the
-    // slab itself takes taps — the rest of the box belongs to whichever
-    // Floor is behind it.
-    final rect =
-        tester.getRect(find.byKey(const ValueKey('floor-upstairs')));
-    await tester.tapAt(rect.topCenter + Offset(0, rect.height * 0.16));
+    await tester.tapAt(floorSlabCentre(tester,
+        house: controller.house,
+        selectedFloorId: 'ground-floor',
+        floorId: 'upstairs'));
     await tester.pumpAndSettle();
 
     expect(find.byIcon(Icons.pets), findsOneWidget);
