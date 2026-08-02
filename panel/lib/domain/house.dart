@@ -1,5 +1,9 @@
 import 'dart:ui';
 
+import 'device_vocabulary.dart';
+
+export 'device_vocabulary.dart';
+
 part 'plan_geometry.dart';
 
 /// Static structure of the house, as the Panel draws it. This is Panel-side
@@ -178,23 +182,3 @@ class Device {
   final Offset position;
 }
 
-enum DeviceKind {
-  light,
-  outlet,
-  thermostat,
-  camera,
-  doorbell,
-  oven,
-  tv,
-  washer,
-  dryer,
-  litterRobot,
-  feeder,
-  garageDoor,
-  evCharger,
-  energyMonitor,
-}
-
-/// Local Device: works with no vendor cloud. Cloud Device: grandfathered,
-/// second-class — may lag or break (see CONTEXT.md).
-enum Connectivity { local, cloud }

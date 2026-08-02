@@ -2,7 +2,29 @@
 
 One pure-Dart vocabulary module — kind → slug, state-shape family, stand-in seed, togglability — consumed by the loader, FakeHub, HaHubClient's fold, and a purified dev-entity generator core, killing the seed triplication and collapsing seven kind-switch sites to the table plus compiler-policed icon/presentation arms. This is `docs/plans/06-device-vocabulary-table.md` carried forward into the post-cutover world, with the corrections the sh3d analysis forced.
 
-Status: proposed · Gate: none in content (implementable today), but **do it after phase 2** so the parser work targets `bindings.yaml` once instead of twice · Written against commit `d01f290` (2026-08-01) — re-verify everything; plan 06's own line numbers were already stale at this baseline.
+Status: **LANDED 2026-08-02** · Gate: after phase 2 — met, so the parser targeted `bindings.yaml` once.
+
+**Verification:** 155 tests green (was 134), analyzer clean, **all four goldens byte-identical**, the regenerated `panel_dev.yaml` **byte-identical** to the shipped one, and both Python suites green (30 + 11).
+
+**As-built deltas:**
+
+- **The seed table is the single source, and the generator now switches on the seed's *shape*** rather than on kind — so its per-kind loop is five arms wide however many kinds exist. The byte-identity check caught the one thing that would have drifted: the old code interpolated `double` seeds, so `812` printed as `812.0`. Matching that exactly is what makes "nothing changed" checkable.
+- **`deviceKindSlugs` was added** beyond the plan's list, so error messages can name the valid slugs; the loader's unknown-kind message now does.
+- **Both Python drift tests were re-pointed** — they read `house_loader.dart`'s `_kind()` switch, which no longer exists. They now read the table's `slug:` rows, and compare **membership rather than order**: the table groups rows by state family for readability while the enum keeps its historical order, and only a kind existing on one side and not the other is a defect.
+- **Doc-pinning landed as `test_the_runbooks_kind_list_is_complete`** — HOUSE-PLAN.md's kind list is now checked against the converter's, so a new kind cannot ship undocumented.
+- **`ha_hub_live_test.dart` asserts against the table**, not copies of its numbers. What it now really checks is that a real Home Assistant round-trips the seeds unchanged — and changing a seed can no longer leave it asserting a value nothing produces.
+
+**Mutation evidence** (all five caught, file restored identical):
+
+| mutation | caught by |
+|---|---|
+| thermostat declared togglable | 8 tests — the safety rule is guarded from several directions |
+| wrong family for one kind (washer → power) | seed-shape agreement + the Hub fold |
+| a seed value changed (812 → 999) | 4 tests, incl. the generator's byte-identity |
+| a slug misspelled (`garage-door` → `garagedoor`) | 61 tests |
+| two kinds sharing a slug | 63 tests |
+
+Plus the one the plan called "the design working": **deleting a row is a compile error** (`non_exhaustive_switch_expression`), verified by deleting the feeder row.
 
 ---
 

@@ -305,29 +305,24 @@ class HaHubClient implements HubClient {
     final attributes = entity['attributes'];
     final attrs = attributes is Map ? attributes : const {};
 
-    switch (device.kind) {
-      case DeviceKind.light:
-      case DeviceKind.outlet:
-      case DeviceKind.tv:
+    // On the family, not the kind: how a reading is *read* follows the
+    // shape of the state, and a washer behind a `sensor.*` folds exactly
+    // like one behind a vendor integration. Fourteen arms became five, and
+    // a new kind of hardware needs no arm here at all.
+    switch (specOf(device.kind).family) {
+      case StateFamily.toggle:
         return SwitchState(device.id, on: raw == 'on');
-      case DeviceKind.garageDoor:
+      case StateFamily.garageDoor:
         return GarageDoorState(device.id, open: raw == 'on' || raw == 'open');
-      case DeviceKind.thermostat:
+      case StateFamily.thermostat:
         final current = _number(attrs['current_temperature']);
         final target = _number(attrs['temperature']);
         if (current == null || target == null) return null;
         return ThermostatState(device.id, currentC: current, targetC: target);
-      case DeviceKind.energyMonitor:
-      case DeviceKind.evCharger:
+      case StateFamily.power:
         final watts = _number(raw);
         return watts == null ? null : PowerState(device.id, watts: watts);
-      case DeviceKind.camera:
-      case DeviceKind.doorbell:
-      case DeviceKind.oven:
-      case DeviceKind.washer:
-      case DeviceKind.dryer:
-      case DeviceKind.litterRobot:
-      case DeviceKind.feeder:
+      case StateFamily.status:
         return StatusState(device.id, raw);
     }
   }

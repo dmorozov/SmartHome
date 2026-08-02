@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:yaml/yaml.dart';
 
 import '../domain/house.dart';
+import 'bindings_parser.dart';
 
 /// A pin sitting exactly on its Room's edge is legal — HOUSE-PLAN.md tells
 /// the family to place TVs and thermostats against a wall — and even-odd
@@ -37,7 +38,7 @@ const _pinEps = 0.05;
 /// passes by construction; it stays as the backstop for a mangled file.
 House loadHouse({required String houseYaml, required String bindingsYaml}) {
   final houseDoc = loadYaml(houseYaml);
-  final bindings = _bindings(loadYaml(bindingsYaml));
+  final bindings = parseBindings(bindingsYaml);
 
   final devicesByRoom = <String, List<Device>>{};
   final seenKeys = <String>{};
@@ -215,74 +216,14 @@ double _segmentDistance(Offset a, Offset b, Offset p) {
   return (p - Offset(x, y)).distance;
 }
 
-/// One hand-maintained binding: what the Hub calls this Device, and
-/// whether it needs a vendor cloud.
-class _Binding {
-  const _Binding(this.entityId, this.connectivity);
-  final String? entityId;
-  final Connectivity connectivity;
-}
-
-/// Parses and validates `bindings.yaml` on its own, before any Placement
-/// is looked at — so a malformed binding is reported as a binding problem
-/// rather than surfacing later as a mysteriously missing Device.
-Map<String, _Binding> _bindings(dynamic doc) {
-  final out = <String, _Binding>{};
-  // One entity may back only one Device: two pins driving one entity would
-  // toggle each other, and neither could be reasoned about from the wall.
-  final seenEntities = <String, String>{};
-  for (final entry in ((doc['bindings'] as YamlMap?) ?? YamlMap()).entries) {
-    final key = entry.key as String;
-    final binding = entry.value;
-    final entityId = binding == null ? null : binding['entity'] as String?;
-    if (entityId != null) {
-      if (!RegExp(r'^[a-z_]+\.[a-z0-9_]+$').hasMatch(entityId)) {
-        throw FormatException(
-            'bindings.yaml: "$key" has entity "$entityId", which is not a '
-            'Home Assistant entity id (domain.object_id)');
-      }
-      final clash = seenEntities[entityId];
-      if (clash != null) {
-        throw FormatException(
-            'bindings.yaml: "$clash" and "$key" both bind to entity '
-            '"$entityId" — one entity, one Device.');
-      }
-      seenEntities[entityId] = key;
-    }
-    out[key] = _Binding(
-      entityId,
-      switch (binding == null ? null : binding['connectivity'] as String?) {
-        'local' => Connectivity.local,
-        'cloud' => Connectivity.cloud,
-        // Deliberately no default: a planned Ring camera is a Cloud Device
-        // before it is ever bound, so guessing `local` would mislabel it.
-        final c => throw FormatException(
-            'bindings.yaml: "$key" has connectivity "$c" (local | cloud)'),
-      },
-    );
-  }
-  return out;
-}
-
-DeviceKind _kind(String slug, String deviceId) => switch (slug) {
-      'light' => DeviceKind.light,
-      'outlet' => DeviceKind.outlet,
-      'thermostat' => DeviceKind.thermostat,
-      'camera' => DeviceKind.camera,
-      'doorbell' => DeviceKind.doorbell,
-      'oven' => DeviceKind.oven,
-      'tv' => DeviceKind.tv,
-      'washer' => DeviceKind.washer,
-      'dryer' => DeviceKind.dryer,
-      'litter-robot' => DeviceKind.litterRobot,
-      'feeder' => DeviceKind.feeder,
-      'garage-door' => DeviceKind.garageDoor,
-      'ev-charger' => DeviceKind.evCharger,
-      'energy-monitor' => DeviceKind.energyMonitor,
-      _ => throw FormatException(
-          'house.yaml: Device "$deviceId" has unknown kind "$slug" — the '
-          'converter validates kinds, so regenerate rather than hand-edit'),
-    };
+/// The slug list lives in the Device vocabulary; this only owns the error,
+/// because only this caller knows the slug came from a generated file.
+DeviceKind _kind(String slug, String deviceId) =>
+    kindFromSlug(slug) ??
+    (throw FormatException(
+        'house.yaml: Device "$deviceId" has unknown kind "$slug" — the '
+        'converter validates kinds, so regenerate rather than hand-edit '
+        '(one of: ${deviceKindSlugs.join(", ")})'));
 
 Offset _point(dynamic pair, String what) {
   if (pair is! YamlList || pair.length != 2) {

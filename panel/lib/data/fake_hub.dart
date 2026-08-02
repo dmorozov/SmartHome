@@ -120,22 +120,13 @@ class FakeHub implements HubClient {
     }
   }
 
-  DeviceState _initialState(Device device) => switch (device.kind) {
-        DeviceKind.light => SwitchState(device.id, on: _random.nextBool()),
-        DeviceKind.outlet => SwitchState(device.id, on: true),
-        DeviceKind.tv => SwitchState(device.id, on: false),
-        DeviceKind.garageDoor => GarageDoorState(device.id, open: false),
-        DeviceKind.thermostat =>
-          ThermostatState(device.id, currentC: 21.4, targetC: 21.0),
-        DeviceKind.energyMonitor => PowerState(device.id, watts: 812),
-        DeviceKind.evCharger => PowerState(device.id, watts: 0),
-        DeviceKind.washer => StatusState(device.id, 'Idle'),
-        DeviceKind.dryer => StatusState(device.id, 'Cycle · 32 min left'),
-        DeviceKind.oven => StatusState(device.id, 'Off'),
-        DeviceKind.litterRobot =>
-          StatusState(device.id, 'Clean · cycled 2 h ago'),
-        DeviceKind.feeder => StatusState(device.id, 'Next meal 5:00 pm'),
-        DeviceKind.camera || DeviceKind.doorbell =>
-          StatusState(device.id, 'Live'),
-      };
+  /// Seeded from the Device vocabulary, except lights: those draw from
+  /// [_random] so a fresh house looks lived-in rather than uniformly off.
+  /// Only lights consume the draw sequence, so the seeded [Random] keeps
+  /// producing the same house — which is what lets the goldens be
+  /// byte-comparable at all.
+  DeviceState _initialState(Device device) =>
+      device.kind == DeviceKind.light
+          ? SwitchState(device.id, on: _random.nextBool())
+          : specOf(device.kind).seed(device.id);
 }

@@ -5,12 +5,12 @@
 
 Two kinds of test, for the two ways this file can rot.
 
-**Drift.** The library's kind list must stay equal to the one
-`house_loader.dart` parses. Nothing else notices when they diverge: a
+**Drift.** The library's kind list must stay equal to the Panel's Device
+vocabulary. Nothing else notices when they diverge: a
 marker with a kind the loader rejects looks perfectly fine in Sweet Home
 3D and fails much later, in the Panel, with a stack trace pointing at
-YAML nobody hand-wrote. So the loader's own switch is read here and
-compared, rather than a copy of it being trusted.
+YAML nobody hand-wrote. So the table itself is read here and compared,
+rather than a copy of it being trusted.
 
 **Sweet Home 3D's parser.** Every rule below was read out of the 7.5
 sources, and each is a rule the application enforces silently — a
@@ -35,7 +35,7 @@ from sh3d_marker_library import (  # noqa: E402
     CATEGORY, CREATOR, KINDS, build, catalog_properties)
 
 TOOL = pathlib.Path(__file__).parent
-LOADER = TOOL.parent / 'lib' / 'data' / 'house_loader.dart'
+VOCABULARY = TOOL.parent / 'lib' / 'domain' / 'device_vocabulary.dart'
 
 # `readPieceOfFurniture` reads these with `resource.getString`, so a missing
 # one is a MissingResourceException, not a default.
@@ -108,13 +108,15 @@ def _additional_properties(props):
 
 
 class KindVocabulary(unittest.TestCase):
-    def test_matches_the_loader_exactly(self):
+    def test_matches_the_panels_vocabulary_exactly(self):
         """The one test that catches a real future mistake: adding a kind to
         the Panel and forgetting the catalog, or the reverse."""
-        loader = re.findall(r"'([a-z0-9-]+)' => DeviceKind\.",
-                            LOADER.read_text())
-        self.assertTrue(loader, 'could not read _kind() out of house_loader.dart')
-        self.assertEqual([slug for slug, _, _ in KINDS], loader)
+        panel = re.findall(r"slug: '([a-z0-9-]+)'", VOCABULARY.read_text())
+        self.assertTrue(panel, 'could not read the slugs out of the table')
+        # Membership, not order: catalog order is how the markers appear in
+        # Sweet Home 3D's browser, a cosmetic choice. A kind on one side
+        # and not the other is what breaks.
+        self.assertEqual({slug for slug, _, _ in KINDS}, set(panel))
 
     def test_slugs_are_unique_and_kebab_case(self):
         slugs = [slug for slug, _, _ in KINDS]

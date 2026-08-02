@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/ha_hub.dart';
 import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
+import 'package:panel/domain/device_vocabulary.dart';
 
 import 'test_house.dart';
 
@@ -29,14 +30,23 @@ void main() {
     }
 
     expect(hub.status.value, HubStatus.up, reason: 'never authenticated');
-    // The generated stand-ins seed these exact values (hub/dev/README.md).
-    expect((hub.states['energy-monitor'] as PowerState).watts, 812);
+    // Asserted against the Device vocabulary, not against copies of its
+    // numbers: the stand-ins were generated from this same table, so what
+    // is really being checked is that a real Home Assistant round-trips
+    // them unchanged — and changing a seed can no longer leave this test
+    // asserting a value nothing produces any more.
+    final watts = specOf(DeviceKind.energyMonitor).seed('x') as PowerState;
+    expect((hub.states['energy-monitor'] as PowerState).watts, watts.watts);
+
+    final seed = specOf(DeviceKind.thermostat).seed('x') as ThermostatState;
     final thermostat = hub.states['thermostat'] as ThermostatState;
     // closeTo, not equals: the Hub reports at the entity's own
     // precision, which is a property of the thermostat, not of us.
-    expect(thermostat.currentC, closeTo(21.4, 0.05));
-    expect(thermostat.targetC, 21.0);
-    expect((hub.states['washer'] as StatusState).status, 'Idle');
+    expect(thermostat.currentC, closeTo(seed.currentC, 0.05));
+    expect(thermostat.targetC, seed.targetC);
+
+    final washer = specOf(DeviceKind.washer).seed('x') as StatusState;
+    expect((hub.states['washer'] as StatusState).status, washer.status);
     expect((hub.states['light-hall'] as SwitchState).on, isFalse);
 
     // Round-trip a command: toggle, and wait for the Hub to tell us it

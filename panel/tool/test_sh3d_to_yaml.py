@@ -27,7 +27,8 @@ TOOL = pathlib.Path(__file__).parent
 FIXTURES = TOOL / 'fixtures'
 PLACEHOLDER = 'tool/fixtures/placeholder-house.Home.xml'
 SHIPPED = TOOL.parent / 'assets' / 'house' / 'house.yaml'
-LOADER = TOOL.parent / 'lib' / 'data' / 'house_loader.dart'
+VOCABULARY = TOOL.parent / 'lib' / 'domain' / 'device_vocabulary.dart'
+HOUSE_PLAN = TOOL.parent / 'HOUSE-PLAN.md'
 
 DEN = [(0, 0), (500, 0), (500, 500), (0, 500)]
 
@@ -345,14 +346,23 @@ class Placements(unittest.TestCase):
 
 class Vocabulary(unittest.TestCase):
 
-    def test_device_kinds_match_the_loader_exactly(self):
-        """Drift here is silent: a kind the converter accepts and the
-        loader rejects produces a House Plan that fails at Panel boot,
-        pointing at generated YAML nobody wrote by hand."""
-        loader = re.findall(r"'([a-z0-9-]+)' => DeviceKind\.",
-                            LOADER.read_text())
-        self.assertTrue(loader, 'could not read _kind() out of the loader')
-        self.assertEqual(list(DEVICE_KINDS), loader)
+    def test_device_kinds_match_the_panels_vocabulary(self):
+        """Drift here is silent: a kind the converter accepts and the Panel
+        rejects produces a House Plan that fails at boot, pointing at
+        generated YAML nobody wrote by hand."""
+        panel = re.findall(r"slug: '([a-z0-9-]+)'", VOCABULARY.read_text())
+        self.assertTrue(panel, 'could not read the slugs out of the table')
+        # Membership, not order: the table groups rows by state family for
+        # readability while this list follows the enum. Only a kind
+        # existing on one side and not the other is a defect.
+        self.assertEqual(set(DEVICE_KINDS), set(panel))
+        self.assertEqual(len(panel), len(set(panel)), 'duplicate slug')
+
+    def test_the_runbooks_kind_list_is_complete(self):
+        """HOUSE-PLAN.md tells the family which kinds exist. A kind missing
+        from it is a Device nobody knows they can draw."""
+        listed = set(re.findall(r'`([a-z0-9-]+)`', HOUSE_PLAN.read_text()))
+        self.assertEqual(set(DEVICE_KINDS) - listed, set())
 
 
 class Adapter(unittest.TestCase):

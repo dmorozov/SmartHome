@@ -2,7 +2,7 @@
 
 Deepen the Device-kind vocabulary — devices.yaml slug, state-shape family, stand-in seed — into one pure-Dart domain module, and collapse the two divergent devices.yaml parsers into one shared pure-Dart parser, so adding a new kind of hardware costs one vocabulary row plus one icon arm instead of six coordinated edits.
 
-Status: **superseded in part — do not implement from this file.** Its successor is [`sh3d-import/phase-3-device-vocabulary.md`](sh3d-import/phase-3-device-vocabulary.md), which carries this plan's five surviving deliverables forward with corrections (stale baseline, the seventh kind-switch site `device_traits.dart`, the parser re-target to `bindings.yaml`) — read that file first; it applies this one as its base. Originally: proposed · Strength: Worth exploring · Written against commit 105610c (2026-08-01).
+Status: **SUPERSEDED AND LANDED — do not implement from this file.** Its five surviving deliverables shipped 2026-08-02 as [`sh3d-import/phase-3`](sh3d-import/phase-3-device-vocabulary.md); this file is kept only for the evidence and reasoning behind them. Originally recorded as: Its successor is [`sh3d-import/phase-3-device-vocabulary.md`](sh3d-import/phase-3-device-vocabulary.md), which carries this plan's five surviving deliverables forward with corrections (stale baseline, the seventh kind-switch site `device_traits.dart`, the parser re-target to `bindings.yaml`) — read that file first; it applies this one as its base. Originally: proposed · Strength: Worth exploring · Written against commit 105610c (2026-08-01).
 
 ---
 
