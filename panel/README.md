@@ -68,7 +68,10 @@ rules, converter errors and fixes, and how to add/move Devices.
 
 Short version: draw the house in [Sweet Home 3D](https://www.sweethome3d.com)
 — one level per Floor, name every room in-tool, right angles only (square
-45° corners off), don't draw walls across open passages. Then:
+45° corners off), don't draw walls across open passages. Open it with
+`tool/sh3d.sh`, not the Dock icon, and drop a marker from the SmartHome
+library wherever a Device goes (`tool/sh3d_marker_library.py` builds that
+library; ADR-0005). Then:
 
 ```sh
 python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
@@ -77,6 +80,10 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 - `assets/house/house.yaml` — **generated geometry, never hand-edit**. The
   converter errors on diagonals, overlapping rooms and duplicate room names,
   and warns on unwalled boundaries and non-tiling floors.
+- Its `devices:` section is the Placements read out of the drawing — Key,
+  kind, name, computed Room and position. **The Panel ignores it today**;
+  `devices.yaml` is still the operative file until the bindings cutover.
+  Until then the two must agree, and the converter test proves they do.
 - `assets/house/devices.yaml` — **hand-maintained**: each Device references a
   room id (slugified room name) with a position in meters. The converter
   never touches it; renaming a room in the drawing makes the loader point at

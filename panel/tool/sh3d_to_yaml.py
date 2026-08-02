@@ -18,6 +18,12 @@ The pipeline and its rules are decided in docs/adr/0004 (grilled 2026-07-30):
 The converter never invents geometry: an undrawn wall is an open passage.
 Doors and windows placed in walls are ignored.
 
+Devices are drawn too (ADR-0005): a piece carrying a `placementKey`
+property — or placed from the SmartHome marker library — becomes a
+Placement, and the converter computes its Room and its position instead of
+anyone typing meters. Ordinary furniture is ignored, so a drawing full of
+beds converts exactly as before.
+
 Output units are meters, origin at the house's NW corner (minimum x/y over
 all floors — every floor shares this one origin), x east, y south. Room
 polygon points are ordered so their shoelace area is positive in these
@@ -32,13 +38,35 @@ import zipfile
 from collections import defaultdict, namedtuple
 
 ConvertResult = namedtuple(
-    'ConvertResult', 'name floors origin errors warnings')
+    'ConvertResult', 'name floors origin devices errors warnings')
 
 TOL_AXIS = 0.02  # m — max off-axis drift before an edge counts as diagonal
 GRID = 0.1       # m — sampling grid for overlap / gap checks
 WALL_NEAR = 0.25  # m — how far a wall centerline may sit from a room edge
 COVER_WARN = 0.5  # warn when less than this fraction of a boundary is walled
 CM = 0.01        # Sweet Home 3D stores centimeters
+PIN_EPS = 0.05   # m — same allowance as the loader's _pinEps, same reason:
+#                  markers get dropped onto a wall, and even-odd
+#                  point-in-polygon is ambiguous exactly on the boundary
+
+# Sweet Home 3D 7.x furniture tags. `shelfUnit` is 7.x-only and a walk
+# keyed on the four legacy tags silently drops those pieces; unknown
+# siblings are tolerated, so a future tag costs nothing.
+FURNITURE_TAGS = ('pieceOfFurniture', 'doorOrWindow', 'light', 'shelfUnit',
+                  'furnitureGroup')
+
+# The Device vocabulary, kebab-case as house_loader.dart's _kind() parses
+# it. Validated here so a typo dies in the drawing, naming the piece,
+# rather than at Panel boot two modules downstream.
+DEVICE_KINDS = ('light', 'outlet', 'thermostat', 'camera', 'doorbell',
+                'oven', 'tv', 'washer', 'dryer', 'litter-robot', 'feeder',
+                'garage-door', 'ev-charger', 'energy-monitor')
+
+# catalogId -> kind for markers placed from SmartHome.sh3f
+# (tool/sh3d_marker_library.py). Exact strings, never a parsed shape:
+# catalogIds come in three dialects in the wild and only ours is
+# predictable.
+MARKER_CATALOG = {f'SmartHome#{kind}': kind for kind in DEVICE_KINDS}
 
 
 def load_home_xml(path):
@@ -124,6 +152,109 @@ def bbox(pts):
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     return min(xs), min(ys), max(xs), max(ys)
+
+
+def segment_distance(a, b, p):
+    """Distance from p to an axis-aligned segment, by clamping p into the
+    segment's box — the loader's `_segmentDistance`, same simplification
+    for the same reason: every edge here is already rectilinear."""
+    x = min(max(p[0], min(a[0], b[0])), max(a[0], b[0]))
+    y = min(max(p[1], min(a[1], b[1])), max(a[1], b[1]))
+    return ((p[0] - x) ** 2 + (p[1] - y) ** 2) ** 0.5
+
+
+def walk_furniture(parent, inherited_level=None):
+    """(element, level id) for every furniture element, recursing into
+    groups. Coordinates are absolute plan cm even inside a group, so a
+    child needs no correction; a child's own `level` wins over the
+    group's."""
+    for child in parent:
+        if child.tag not in FURNITURE_TAGS:
+            continue
+        level = child.get('level', inherited_level)
+        yield child, level
+        if child.tag == 'furnitureGroup':
+            yield from walk_furniture(child, level)
+
+
+def extract_placements(root, by_key, default_level, errors):
+    """Device markers in document order, positions in absolute plan meters.
+
+    A furniture element is a marker iff it carries a `placementKey`
+    property or its catalogId is in MARKER_CATALOG — never its tag, which
+    classifies nothing (a real plan had 218 pieces and zero `<light>`
+    elements). Everything else is ordinary furniture and is ignored, which
+    is what makes this safe to run over a drawing full of beds.
+
+    Keys are author-controlled and free-form: any spelling, any
+    separator. Only emptiness and collisions are rejected.
+    """
+    out = []
+    for el, level in walk_furniture(root):
+        props = {p.get('name'): p.get('value') for p in el.findall('property')}
+        key = (props.get('placementKey') or '').strip()
+        catalog_kind = MARKER_CATALOG.get(el.get('catalogId'))
+        if not key and catalog_kind is None:
+            continue
+
+        name = (el.get('name') or '').strip()
+        # Name the piece the way the author sees it in Sweet Home 3D; fall
+        # back to plan coordinates, which is all an unnamed piece offers.
+        where = f'"{name}"' if name else \
+            f'the piece at ({el.get("x")}, {el.get("y")}) cm'
+        if not key:
+            errors.append(
+                f'{where} is a Device marker with no key — open it in Sweet '
+                f'Home 3D and set placementKey under Other properties (run '
+                f'the app via tool/sh3d.sh or that button is hidden)')
+            continue
+        if not name:
+            errors.append(
+                f'Device marker "{key}" has no name — name it in Sweet Home '
+                f'3D; the name is what the Panel shows on its pin and popup')
+            continue
+
+        kind = (props.get('kind') or '').strip() or catalog_kind
+        if not kind:
+            errors.append(
+                f'Device marker "{key}" ({name}) has no kind — either place '
+                f'it from the SmartHome library or set a kind property; one '
+                f'of: {", ".join(DEVICE_KINDS)}')
+            continue
+        if kind not in DEVICE_KINDS:
+            errors.append(
+                f'Device marker "{key}" ({name}) has unknown kind "{kind}" '
+                f'— one of: {", ".join(DEVICE_KINDS)}')
+            continue
+
+        floor = by_key.get(level if level is not None else default_level)
+        if floor is None:
+            continue
+        out.append({'key': key, 'name': name, 'kind': kind, 'floor': floor,
+                    'x': float(el.get('x')) * CM,
+                    'y': float(el.get('y')) * CM})
+    return out
+
+
+def room_at(floor, x, y):
+    """The Room a marker sits in: the one containing it, else one whose
+    edge is within PIN_EPS. Rooms tile the Floor (ADR-0004) so containment
+    is unique in practice; ties resolve to the smaller Room so the answer
+    never depends on document order."""
+    def area(room):
+        return abs(shoelace(room['pts']))
+
+    inside = [r for r in floor['rooms'] if contains(r['pts'], x, y)]
+    if inside:
+        return min(inside, key=area)
+    near = []
+    for room in floor['rooms']:
+        pts = room['pts']
+        edges = (segment_distance(pts[i], pts[(i + 1) % len(pts)], (x, y))
+                 for i in range(len(pts)))
+        if min(edges) <= PIN_EPS:
+            near.append(room)
+    return min(near, key=area) if near else None
 
 
 def check_overlaps_and_gaps(floor_name, rooms, errors, warnings):
@@ -229,6 +360,10 @@ def convert(root, name=None):
     origin  (min_x, min_y) — the NW-corner shift already applied to every
             coordinate above, which is what devices.yaml positions are
             measured from
+    devices [{'key', 'name', 'kind', 'room', 'position': (x, y)}] in the
+            drawing's document order — the Device markers, with Room
+            membership computed rather than typed. Empty when the drawing
+            has none, which is every drawing predating the marker library
     """
     errors, warnings = [], []
     house_name = name or root.get('name') or 'House'
@@ -276,7 +411,7 @@ def convert(root, name=None):
     if not raw_rooms:
         errors.append('no rooms found — draw and name rooms in Sweet Home 3D')
         return ConvertResult(
-            house_name, [], (0.0, 0.0), errors, warnings)
+            house_name, [], (0.0, 0.0), [], errors, warnings)
 
     # one shared origin: NW corner of everything drawn, on any floor
     min_x = min(min(p[0] for p in r['pts']) for r in raw_rooms if r['pts'])
@@ -329,6 +464,33 @@ def convert(root, name=None):
             continue
         w['floor']['walls'].append(seg)
 
+    # Placements last: they hang off the origin the rooms and walls fixed,
+    # and deliberately never move it — a stray marker must not shift every
+    # other coordinate in the house (and one outside every Room is an
+    # error anyway).
+    devices, first_seen = [], {}
+    for p in extract_placements(root, by_key, floors[0]['key'], errors):
+        x = round(p['x'] - min_x, 3)
+        y = round(p['y'] - min_y, 3)
+        room = room_at(p['floor'], x, y)
+        if room is None:
+            errors.append(
+                f'Device marker "{p["key"]}" ({p["name"]}) at '
+                f'{fmt(x)},{fmt(y)} on "{p["floor"]["name"]}" is not in any '
+                f'room — drag it inside one; every Device belongs to exactly '
+                f'one Room')
+            continue
+        if p['key'] in first_seen:
+            errors.append(
+                f'two Device markers share the key "{p["key"]}" — in '
+                f'"{first_seen[p["key"]]}" and in "{room["name"]}"; a key '
+                f'identifies one Device, and copy-paste keeps it, so retype '
+                f'it on the copy')
+            continue
+        first_seen[p['key']] = room['name']
+        devices.append({'key': p['key'], 'name': p['name'], 'kind': p['kind'],
+                        'room': room['id'], 'position': (x, y)})
+
     for f in floors:
         check_overlaps_and_gaps(f['name'], f['rooms'], errors, warnings)
         check_wall_coverage(f['name'], f['rooms'], f['walls'], warnings)
@@ -338,11 +500,16 @@ def convert(root, name=None):
         errors.append('no floor has any geometry')
 
     return ConvertResult(
-        house_name, floors, (min_x, min_y), errors, warnings)
+        house_name, floors, (min_x, min_y), devices, errors, warnings)
 
 
-def emit_yaml(name, floors, source):
-    """The exact house.yaml text, header naming `source` as its origin."""
+def emit_yaml(name, floors, source, devices=()):
+    """The exact house.yaml text, header naming `source` as its origin.
+
+    A drawing with no markers emits no `devices:` key at all, rather than
+    an empty list: absent then means "predates the marker library", which
+    is a distinction the phase-2 loader can act on.
+    """
     out = [f'# Generated by sh3d_to_yaml.py from {source} — '
            f'DO NOT EDIT BY HAND (ADR-0004).',
            '# Meters from the house NW corner; x east, y south. Walls are',
@@ -363,6 +530,15 @@ def emit_yaml(name, floors, source):
         for (a, b) in f['walls']:
             out.append(f'      - [[{fmt(a[0])}, {fmt(a[1])}], '
                        f'[{fmt(b[0])}, {fmt(b[1])}]]')
+    if devices:
+        out.append('devices:')
+        for d in devices:
+            x, y = d['position']
+            out.append(f'  - key: {d["key"]}')
+            out.append(f'    name: "{d["name"]}"')
+            out.append(f'    kind: {d["kind"]}')
+            out.append(f'    room: {d["room"]}')
+            out.append(f'    position: [{fmt(x)}, {fmt(y)}]')
     return '\n'.join(out) + '\n'
 
 
@@ -381,14 +557,15 @@ def main():
     floors, warnings = result.floors, result.warnings
     min_x, min_y = result.origin
     with open(args.output, 'w') as fh:
-        fh.write(emit_yaml(result.name, floors, args.input))
+        fh.write(emit_yaml(result.name, floors, args.input, result.devices))
 
     for w in warnings:
         print(f'warning: {w}', file=sys.stderr)
     n_rooms = sum(len(f['rooms']) for f in floors)
     n_walls = sum(len(f['walls']) for f in floors)
     print(f'wrote {args.output}: {len(floors)} floor(s), {n_rooms} room(s), '
-          f'{n_walls} wall(s), {len(warnings)} warning(s)')
+          f'{n_walls} wall(s), {len(result.devices)} device(s), '
+          f'{len(warnings)} warning(s)')
     print(f'origin shift: yaml (x, y) = Sweet Home 3D (x, y) in cm / 100 '
           f'minus ({fmt(min_x)}, {fmt(min_y)}) m — use this to compute '
           f'devices.yaml positions from plan coordinates')

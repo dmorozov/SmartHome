@@ -2,7 +2,14 @@
 
 Teach `panel/tool/sh3d_to_yaml.py` to read Device markers out of the Sweet Home 3D drawing — key, kind, name, position, computed Room membership — and emit them as a `devices:` section of the generated `house.yaml`. Mint ADR-0005 superseding ADR-0004's devices-as-furniture-markers rejection. **Python and fixtures only: zero Dart changes, the loader ignores the new section, all four goldens must not move.**
 
-Status: proposed · Gate: **phase 0 complete, V1 favorable** · Written against commit `d01f290` (2026-08-01) — re-verify line numbers before editing.
+Status: **LANDED 2026-08-02** · Gate: phase 0 complete, V1 favorable — met · Written against `d01f290`, implemented against `e03573c`.
+
+**As-built deltas from the plan:**
+
+- **D-key — key spelling is free-form** (author's decision, 2026-08-02). Any spelling, separator or case; only emptiness and collisions are rejected. The plan's open question about validating against a slug pattern is closed in favour of not validating: Sweet Home 3D constrains nothing, and a rule about punctuation buys consistency this pipeline never uses. `test_key_spelling_is_the_authors_business` pins it.
+- **`negative-origin.Home.xml` was regenerated** from the *enriched* placeholder, so it now mirrors all 33 markers rather than geometry alone. The test that replaced §7 case 10 is strictly stronger: the entire emitted House Plan — geometry and all 33 Placements — must be identical between the two drawings, which are the same house 3 m apart.
+- **Two behaviours the plan budgeted for already worked** (measured in phase 0): the zero-`<level>` default-Floor synthesis, and the min-shift over negative coordinates. Both now have fixtures rather than new code.
+- **Suite grew 10 → 29**, not the estimated ~21, and 9 mutations were used to prove the new tests bite (origin shift skipped, edge allowance removed, duplicate check removed, markers moving the origin, walk not recursing into groups, `shelfUnit` dropped, kind validation removed, empty `devices:` emitted, group child's own level ignored). All 9 caught.
 
 ---
 

@@ -96,4 +96,146 @@
   <room id="r-attic" level="level2" name="Attic Storage">
     <point x="600" y="0"/><point x="1100" y="0"/><point x="1100" y="600"/><point x="600" y="600"/>
   </room>
+
+  <!-- Device markers (ADR-0005), one per entry in devices.yaml. Written as
+       Sweet Home 3D writes them: catalogId from the SmartHome marker
+       library, kind and placementKey as <property> children.
+
+       At phase 1 these mirror devices.yaml, which is still the operative
+       file — the converter emits them into house.yaml where nothing reads
+       them yet, so the two must agree and the golden test proves they do.
+       At phase 2 the direction reverses: these markers become the source
+       of truth and devices.yaml shrinks to bindings.yaml. -->
+  <pieceOfFurniture id="pf-garage-door" catalogId="SmartHome#garage-door" name="Garage Door" creator="SmartHome" level="level0" x="300" y="760" width="10" depth="10" height="10">
+    <property name="kind" value="garage-door"/>
+    <property name="placementKey" value="garage-door"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-ev-charger" catalogId="SmartHome#ev-charger" name="Tesla Wall Connector" creator="SmartHome" level="level0" x="50" y="500" width="10" depth="10" height="10">
+    <property name="kind" value="ev-charger"/>
+    <property name="placementKey" value="ev-charger"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-energy-monitor" catalogId="SmartHome#energy-monitor" name="Emporia Vue" creator="SmartHome" level="level0" x="540" y="260" width="10" depth="10" height="10">
+    <property name="kind" value="energy-monitor"/>
+    <property name="placementKey" value="energy-monitor"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-cam-garage" catalogId="SmartHome#camera" name="Garage Cam" creator="SmartHome" level="level0" x="60" y="260" width="10" depth="10" height="10">
+    <property name="kind" value="camera"/>
+    <property name="placementKey" value="cam-garage"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-tv-family" catalogId="SmartHome#tv" name="Family Room TV" creator="SmartHome" level="level0" x="950" y="70" width="10" depth="10" height="10">
+    <property name="kind" value="tv"/>
+    <property name="placementKey" value="tv-family"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-family" catalogId="SmartHome#light" name="Family Ceiling Light" creator="SmartHome" level="level0" x="950" y="300" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-family"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-reading" catalogId="SmartHome#light" name="Reading Lamp" creator="SmartHome" level="level0" x="670" y="520" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-reading"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-outlet-media" catalogId="SmartHome#outlet" name="Media Outlet" creator="SmartHome" level="level0" x="1240" y="70" width="10" depth="10" height="10">
+    <property name="kind" value="outlet"/>
+    <property name="placementKey" value="outlet-media"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-oven" catalogId="SmartHome#oven" name="Oven" creator="SmartHome" level="level0" x="1360" y="70" width="10" depth="10" height="10">
+    <property name="kind" value="oven"/>
+    <property name="placementKey" value="oven"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-kitchen" catalogId="SmartHome#light" name="Kitchen Light" creator="SmartHome" level="level0" x="1500" y="300" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-kitchen"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-feeder-granary" catalogId="SmartHome#feeder" name="Granary Feeder" creator="SmartHome" level="level0" x="1640" y="540" width="10" depth="10" height="10">
+    <property name="kind" value="feeder"/>
+    <property name="placementKey" value="feeder-granary"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-feeder-petlibro" catalogId="SmartHome#feeder" name="Petlibro One" creator="SmartHome" level="level0" x="1360" y="540" width="10" depth="10" height="10">
+    <property name="kind" value="feeder"/>
+    <property name="placementKey" value="feeder-petlibro"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-tv-living" catalogId="SmartHome#tv" name="Living Room TV" creator="SmartHome" level="level0" x="2140" y="300" width="10" depth="10" height="10">
+    <property name="kind" value="tv"/>
+    <property name="placementKey" value="tv-living"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-living" catalogId="SmartHome#light" name="Living Room Light" creator="SmartHome" level="level0" x="1950" y="300" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-living"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-cam-living" catalogId="SmartHome#camera" name="Living Cam" creator="SmartHome" level="level0" x="1760" y="60" width="10" depth="10" height="10">
+    <property name="kind" value="camera"/>
+    <property name="placementKey" value="cam-living"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-office" catalogId="SmartHome#light" name="Office Light" creator="SmartHome" level="level0" x="850" y="850" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-office"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-outlet-office" catalogId="SmartHome#outlet" name="Desk Outlet" creator="SmartHome" level="level0" x="660" y="1040" width="10" depth="10" height="10">
+    <property name="kind" value="outlet"/>
+    <property name="placementKey" value="outlet-office"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-cam-office" catalogId="SmartHome#camera" name="Office Cam" creator="SmartHome" level="level0" x="1040" y="660" width="10" depth="10" height="10">
+    <property name="kind" value="camera"/>
+    <property name="placementKey" value="cam-office"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-doorbell" catalogId="SmartHome#doorbell" name="Ring Doorbell" creator="SmartHome" level="level0" x="1400" y="1060" width="10" depth="10" height="10">
+    <property name="kind" value="doorbell"/>
+    <property name="placementKey" value="doorbell"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-thermostat" catalogId="SmartHome#thermostat" name="Ecobee" creator="SmartHome" level="level0" x="1150" y="700" width="10" depth="10" height="10">
+    <property name="kind" value="thermostat"/>
+    <property name="placementKey" value="thermostat"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-hall" catalogId="SmartHome#light" name="Hall Light" creator="SmartHome" level="level0" x="1400" y="850" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-hall"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-guest-bath" catalogId="SmartHome#light" name="Guest Bath Light" creator="SmartHome" level="level0" x="1820" y="850" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-guest-bath"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-washer" catalogId="SmartHome#washer" name="LG Washer" creator="SmartHome" level="level0" x="2020" y="1030" width="10" depth="10" height="10">
+    <property name="kind" value="washer"/>
+    <property name="placementKey" value="washer"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-dryer" catalogId="SmartHome#dryer" name="LG Dryer" creator="SmartHome" level="level0" x="2140" y="1030" width="10" depth="10" height="10">
+    <property name="kind" value="dryer"/>
+    <property name="placementKey" value="dryer"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-master" catalogId="SmartHome#light" name="Master Light" creator="SmartHome" level="level1" x="850" y="300" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-master"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-tv-master" catalogId="SmartHome#tv" name="Master TV" creator="SmartHome" level="level1" x="670" y="300" width="10" depth="10" height="10">
+    <property name="kind" value="tv"/>
+    <property name="placementKey" value="tv-master"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-outlet-master" catalogId="SmartHome#outlet" name="Bedside Outlet" creator="SmartHome" level="level1" x="1040" y="70" width="10" depth="10" height="10">
+    <property name="kind" value="outlet"/>
+    <property name="placementKey" value="outlet-master"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-master-bath" catalogId="SmartHome#light" name="Master Bath Light" creator="SmartHome" level="level1" x="1250" y="150" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-master-bath"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-bed2" catalogId="SmartHome#light" name="Bedroom 2 Light" creator="SmartHome" level="level1" x="1250" y="500" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-bed2"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-bed3" catalogId="SmartHome#light" name="Bedroom 3 Light" creator="SmartHome" level="level1" x="1250" y="900" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-bed3"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-kids-bath" catalogId="SmartHome#light" name="Kids Bath Light" creator="SmartHome" level="level1" x="720" y="850" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-kids-bath"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-light-landing" catalogId="SmartHome#light" name="Landing Light" creator="SmartHome" level="level1" x="970" y="750" width="10" depth="10" height="10">
+    <property name="kind" value="light"/>
+    <property name="placementKey" value="light-landing"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-litter-robot" catalogId="SmartHome#litter-robot" name="Litter-Robot 5" creator="SmartHome" level="level1" x="970" y="1030" width="10" depth="10" height="10">
+    <property name="kind" value="litter-robot"/>
+    <property name="placementKey" value="litter-robot"/>
+  </pieceOfFurniture>
 </home>

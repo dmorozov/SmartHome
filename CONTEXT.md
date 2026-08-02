@@ -40,6 +40,14 @@ _Avoid_: opening (an opening is just the absence of a Wall), partition
 A controllable or observable thing in the house (light, camera, thermostat, feeder…), pinned to a Room in the Dollhouse.
 _Avoid_: entity (that is the Hub's internal term), gadget
 
+**Placement**:
+A Device marker drawn on the House Plan — where a Device is, as drawn, with its Key and kind. The converter reads Placements out of the drawing and computes each one's Room and position; nobody types meters (ADR-0005).
+_Avoid_: marker (that is the Sweet Home 3D furniture piece a Placement is read from), pin (that is how the Dollhouse draws it)
+
+**Key**:
+The author-controlled identity of a Device, typed once in Sweet Home 3D and referenced by everything else. Free-form — any spelling or separator — but unique across the house.
+_Avoid_: id (ambiguous with the Hub's entity id), name (the Key is not what the Panel displays)
+
 **Local Device**:
 A Device that works with no vendor cloud — LAN or mesh protocol only. All NEW purchases must be Local Devices.
 
