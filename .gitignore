@@ -23,5 +23,10 @@
 hs_err_pid*
 replay_pid*
 
-# Sweet Home 3D binary fixtures (large; re-download from sweethome3d.com gallery)
+# Sweet Home 3D archives — large binaries (127 MB for the four gallery plans).
+# Only the extracted Home.xml is tracked; that is the part anything reads, and
+# the archives are re-downloadable. See docs/examples/README.md.
 panel/tool/fixtures/*.sh3d
+
+# macOS
+.DS_Store

@@ -21,7 +21,8 @@ import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 
-from sh3d_to_yaml import DEVICE_KINDS, bbox, convert, emit_yaml  # noqa: E402
+from sh3d_to_yaml import (  # noqa: E402
+    DEVICE_KINDS, bbox, convert, emit_yaml, walk_furniture)
 
 TOOL = pathlib.Path(__file__).parent
 FIXTURES = TOOL / 'fixtures'
@@ -104,18 +105,64 @@ class PlaceholderFixture(unittest.TestCase):
             SHIPPED.read_text())
 
 
-class AlpsHotelFixture(unittest.TestCase):
-    """The negative fixture: a real drawing that breaks the rules."""
+# Four public Sweet Home 3D gallery plans, kept as their extracted
+# Home.xml. They are here to be **refused**: ADR-0004's drawing rules are
+# authoring guidance for one disciplined drawing, and a converter that
+# quietly accepted these would be inventing identity for 37 unnamed rooms.
+# Each entry lists error classes that plan must produce.
+CORPUS = {
+    'AlpsHotel.Home.xml': ('unnamed room', 'diagonal edge', 'diagonal wall'),
+    'Blues.Home.xml': ('unnamed room', 'diagonal edge', 'both get id'),
+    'House-based-on-a-factory.Home.xml': ('unnamed room', 'overlap'),
+    'Industrial_Loft.Home.xml': ('unnamed room', 'diagonal wall'),
+}
 
-    def test_is_rejected_with_the_documented_error_classes(self):
-        result = convert(
-            ET.parse(FIXTURES / 'AlpsHotel.Home.xml').getroot())
-        joined = '\n'.join(result.errors)
-        self.assertNotEqual(result.errors, [])
-        for expected in ('unnamed room', 'diagonal edge', 'diagonal wall'):
-            self.assertIn(expected, joined)
-        # Its valid rooms convert fine — one broken room still refuses the
-        # whole drawing, which is what `test_nothing_written_on_error` pins.
+
+class RealWorldPlans(unittest.TestCase):
+    """The gatekeeper posture, pinned against real drawings rather than
+    asserted. Without this the corpus is inert reference material, and the
+    claim that third-party plans do not convert is only prose."""
+
+    def test_every_real_plan_is_refused_for_the_documented_reasons(self):
+        for name, expected in CORPUS.items():
+            with self.subTest(name):
+                result = convert(ET.parse(FIXTURES / name).getroot())
+                self.assertNotEqual(result.errors, [], 'converted cleanly!')
+                joined = '\n'.join(result.errors)
+                for reason in expected:
+                    self.assertIn(reason, joined)
+                # One broken room refuses the whole drawing — nothing
+                # written, which `test_nothing_written_on_error` pins.
+
+    def test_the_corpus_still_backs_the_behaviour_doc(self):
+        """docs/sweet-home-3d-behaviour.md quotes these counts as its
+        evidence. Re-derived here so the doc cannot drift from the files it
+        cites, and so a wrong number is caught rather than quoted onward."""
+        pieces, angles, props, groups, shelf = [], [], 0, 0, 0
+        rooms = walls = unnamed = 0
+        for name in CORPUS:
+            root = ET.parse(FIXTURES / name).getroot()
+            for element, _level in walk_furniture(root):
+                pieces.append(element)
+                if element.get('angle'):
+                    angles.append(float(element.get('angle')))
+                props += len(element.findall('property'))
+                groups += element.tag == 'furnitureGroup'
+                shelf += element.tag == 'shelfUnit'
+            rooms += len(root.findall('room'))
+            walls += len(root.findall('wall'))
+            unnamed += sum(1 for r in root.findall('room') if not r.get('name'))
+
+        self.assertEqual((len(pieces), rooms, walls), (1724, 95, 411))
+        self.assertEqual(unnamed, 37)  # 39% — "name every room" is not free
+        self.assertEqual((groups, shelf), (120, 4))
+        # The finding that inverted the spec: angles are radians.
+        self.assertEqual(len(angles), 1303)
+        self.assertLessEqual(max(angles), 6.3)
+        # And the reason phase 0 needed an experiment at all — the property
+        # mechanism is entirely unused in the wild, so no amount of reading
+        # real files could have answered whether it survives a save.
+        self.assertEqual(props, 0)
 
 
 class ConvertCore(unittest.TestCase):

@@ -1,0 +1,979 @@
+<?xml version='1.0'?>
+<home version='7400' name='House based on a factory.sh3d' camera='topCamera' selectedLevel='level2' wallHeight='250.0' furnitureSortedProperty='NAME'>
+  <property name='com.eteks.sweethome3d.SweetHome3D.CatalogPaneDividerLocation' value='722'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.ColumnWidths' value='54,53,54,53,54,53'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.ExpandedGroups' value='119'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.FrameHeight' value='849'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.FrameMaximized' value='false'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.FrameWidth' value='1482'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.FrameX' value='0'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.FrameY' value='38'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.FurnitureViewportY' value='864'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.MainPaneDividerLocation' value='339'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.PlanPaneDividerLocation' value='722'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.PlanScale' value='0.54345876'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.PlanViewportX' value='0'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.PlanViewportY' value='0'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.ScreenHeight' value='849'/>
+  <property name='com.eteks.sweethome3d.SweetHome3D.ScreenWidth' value='1470'/>
+  <property name='com.eteks.sweethome3d.swing.PhotoPanel.PhotoDialogX' value='1603'/>
+  <property name='com.eteks.sweethome3d.swing.PhotoPanel.PhotoDialogY' value='134'/>
+  <furnitureVisibleProperty name='NAME'/>
+  <furnitureVisibleProperty name='WIDTH'/>
+  <furnitureVisibleProperty name='DEPTH'/>
+  <furnitureVisibleProperty name='HEIGHT'/>
+  <furnitureVisibleProperty name='LEVEL'/>
+  <furnitureVisibleProperty name='VISIBLE'/>
+  <environment groundColor='00A8A8A8' skyColor='00CCE4FC' lightColor='00D0D0D0' observerCameraElevationAdjusted='false' ceillingLightColor='00000000' photoWidth='2400' photoHeight='1800' photoAspectRatio='RATIO_4_3' photoQuality='0' videoWidth='320' videoAspectRatio='RATIO_4_3' videoQuality='0' videoFrameRate='25'>
+    <texture attribute='groundTexture' name='Green fabric' creator='Scopia' catalogId='eTeksScopia#green-fabric-for-furniture' width='100.0' height='100.0' image='0'/>
+    <texture attribute='skyTexture' name='Big sun' creator='Scopia' catalogId='eTeksScopia#big-sun-sky' width='300.0' height='50.0' image='1'/>
+  </environment>
+  <compass x='1988.0164' y='-240.76746' diameter='165.0' northDirection='3.1415925' longitude='0.040724345' latitude='0.8528843' timeZone='Europe/Paris'/>
+  <observerCamera attribute='observerCamera' lens='PINHOLE' x='1211.0981' y='634.7006' z='168.81622' yaw='29.33978' pitch='0.7288016' fieldOfView='1.0646509' time='1520423100633' fixedSize='true'/>
+  <camera attribute='topCamera' lens='PINHOLE' x='-573.1675' y='1012.58276' z='1095.7222' yaw='-133.95032' pitch='0.4399992' fieldOfView='1.0995575' time='1520424000000'/>
+  <camera attribute='storedCamera' id='camera-15752846-67f3-4349-be18-ab33a0e0f164' name='Aerial view' lens='PINHOLE' x='1859.2324' y='2018.2167' z='2452.2134' yaw='-72.67375' pitch='0.8400003' fieldOfView='1.0995575' time='1520424000000'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-d78f4615-fbb2-4209-903f-8d991279d9e1' name='View from upper office' lens='PINHOLE' x='503.89935' y='628.56714' z='415.38507' yaw='35.610447' pitch='0.11880152' fieldOfView='1.0646509' time='1520423100633' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-2a24d919-43be-44b0-96e0-85e103601400' name='View from mezzanine' lens='PINHOLE' x='1474.7404' y='668.1959' z='415.38507' yaw='33.48046' pitch='0.043801643' fieldOfView='1.0646509' time='1520423100633' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-61063fd6-8c9a-4cf9-9da1-980db443a2d6' name='Bedroom' lens='PINHOLE' x='1733.3271' y='283.26672' z='564.32623' yaw='30.56049' pitch='0.20920482' fieldOfView='1.0646509' time='1520424000000' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-52b52810-943a-4454-bde3-39ec6b348f6a' name='Bathroom' lens='PINHOLE' x='2111.17' y='147.44476' z='564.32623' yaw='33.335423' pitch='0.27420488' fieldOfView='1.0646509' time='1520424000000' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-57d9c8f0-5773-47d5-81b9-305158627a1e' name='Upper office' lens='PINHOLE' x='551.56824' y='68.26489' z='422.32623' yaw='38.24043' pitch='0.20420492' fieldOfView='1.0646509' time='1520424000000' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-425e61ef-4396-4473-bce0-9e6be7951cff' name='Lower office' lens='PINHOLE' x='1375.0391' y='70.21525' z='162.32617' yaw='45.020428' pitch='0.1042051' fieldOfView='1.0646509' time='1520424000000' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-a72a0af4-6eba-4f53-a4bc-0066044bcc21' name='Entrance' lens='PINHOLE' x='447.51483' y='403.42697' z='162.32617' yaw='42.30041' pitch='0.16420493' fieldOfView='1.0646509' time='1520424000000' fixedSize='true'/>
+  <observerCamera attribute='storedCamera' id='observerCamera-9a04634e-447d-4bf7-b725-66be144fe245' name='Living room' lens='PINHOLE' x='1259.3876' y='682.5081' z='422.32623' yaw='35.285435' pitch='0.1792049' fieldOfView='1.0646509' time='1520424000000' fixedSize='true'/>
+  <level id='level0' name='Office and garage' elevation='0.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
+  <level id='level1' name='Mezzanines' elevation='260.0' floorThickness='10.0' height='130.0' elevationIndex='0'/>
+  <level id='level2' name='Rooms above garage' elevation='402.0' floorThickness='12.0' height='250.0' elevationIndex='0'/>
+  <level id='level3' name='Roof' elevation='604.0' floorThickness='1.0' height='250.0' elevationIndex='0' visible='false'/>
+  <doorOrWindow id='doorOrWindow-d4da4bb4-fa65-4c88-a579-096ad2f7949f' level='level0' catalogId='OlaKristianHoff#window_shop' name='Shop window' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='2' x='1123.1525' y='-2.0000002' elevation='40.0' width='80.0' depth='22.00075' height='460.0' color='FF3D3230' modelSize='3355' movable='false' dropOnTopElevation='-0.005' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-646f627f-872d-4f02-be0f-1cff99210ebd' level='level0' catalogId='OlaKristianHoff#window_shop' name='Shop window' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='2' x='913.4984' y='-2.0000002' elevation='40.0' width='80.0' depth='22.00075' height='460.0' color='FF3D3230' modelSize='3355' movable='false' dropOnTopElevation='-0.005' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true' boundToWall='false'/>
+  <doorOrWindow id='doorOrWindow-7c92c021-7257-4bbe-a068-a116ed8d2634' level='level0' catalogId='OlaKristianHoff#window_shop' name='Shop window' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='2' x='703.8444' y='-1.9866619' elevation='40.0' width='80.0' depth='22.00075' height='460.0' color='FF3D3230' modelSize='3355' movable='false' dropOnTopElevation='-0.005' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true' boundToWall='false'/>
+  <furnitureGroup id='furnitureGroup-0f98f81c-37d9-4196-86cc-ff106b64313d' level='level0' name='Staircase' x='1060.0006' y='629.47577' angle='1.5707964' width='160.50006' depth='320.80127' height='260.0'>
+    <pieceOfFurniture id='pieceOfFurniture-875dff1e-c93b-4612-9a26-2e22f07250df' level='level0' name='Beam' model='5/beam45.obj' icon='4' x='1066.6512' y='629.0' angle='4.712389' width='25.0' widthInPlan='25.000002' depth='307.5' height='260.0' color='FF3D3230' modelSize='479'/>
+    <pieceOfFurniture id='pieceOfFurniture-2b34561d-95a8-4eca-a4b6-42d45302972d' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='914.6' y='629.47577' elevation='21.292969' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-0c8a5e3c-97f3-408a-9947-9059af9bbf07' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='941.00903' y='629.47577' elevation='42.585938' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-02d13e8f-3592-43ab-9a79-bd7f0b1695f1' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='967.41815' y='629.47577' elevation='63.878906' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-bf207768-22af-4c83-b380-447a3dcddded' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='993.8273' y='629.47577' elevation='85.171875' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-47515974-962e-46f8-a4bc-b6307f2bda7a' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1020.2364' y='629.47577' elevation='106.46484' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-d036985c-1d3c-4acd-b2ac-ae0285672c1f' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1046.6455' y='629.47577' elevation='127.75781' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-9bf8b56d-c507-4d88-8652-ce85800c4517' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1073.0546' y='629.47577' elevation='149.05078' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-022d2340-d16f-4018-8153-126bb00225f4' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1099.4636' y='629.47577' elevation='170.34375' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-700b8767-901d-4556-a984-88e40e7542b4' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1125.8727' y='629.47577' elevation='191.63672' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-ca052fb4-b3e1-4bbd-8275-4c682c6ff95b' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1152.2817' y='629.47577' elevation='212.92969' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-19232e35-c914-4033-ad75-9fa60f7699fb' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1178.6908' y='629.47577' elevation='234.22266' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-59e6f5c7-85c7-488b-88e0-8eadb03d184f' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1205.1' y='629.47577' elevation='257.0' angle='1.5707964' width='160.5' depth='30.0' height='3.0' color='FF3D3230' modelSize='1661'/>
+  </furnitureGroup>
+  <doorOrWindow id='doorOrWindow-9e814619-fe9d-4d5d-90c4-b244dfed2dec' level='level0' catalogId='Scopia#garage-door' name='Garage door' creator='Scopia' model='9/garage-door.obj' icon='8' x='1924.4998' y='720.5' angle='3.1415927' width='410.0' depth='22.00075' height='363.0' modelSize='43932' movable='false' dropOnTopElevation='-0.004518753' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true' boundToWall='false'>
+    <material name='beige-door_texture-garage-door.png' color='FF3D3230'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-3ebc241c-fbce-4436-98ee-5b09e5aa110a' level='level0' catalogId='OlaKristianHoff#window_shop' name='Shop window' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='2' x='2154.8633' y='361.15225' elevation='154.0' angle='1.572642' width='205.0' depth='22.00075' height='75.0' color='FF3D3230' modelSize='3355' movable='false' dropOnTopElevation='-0.005' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true' boundToWall='false'/>
+  <furnitureGroup id='furnitureGroup-ce69826e-2091-4028-924c-9aa6cb6cbf62' level='level1' name='Small staircase' x='1585.1073' y='644.6611' angle='1.5707964' width='129.67786' depth='198.47339' height='229.70001' movable='false' dropOnTopElevation='0.9738789'>
+    <pieceOfFurniture id='pieceOfFurniture-a3f4edcc-22c4-47f8-bbd9-b424bf009f27' level='level1' name='Beam' model='5/beam45.obj' icon='4' x='1594.3785' y='647.1' angle='4.712389' width='24.800001' depth='179.3' depthInPlan='179.29999' height='141.6' heightInPlan='141.60002' color='FF3D3230' shininess='0.0' modelSize='479'/>
+    <pieceOfFurniture id='pieceOfFurniture-b2e4b7a7-4cdd-46c5-84bf-a9b013e055b0' level='level1' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1547.2992' y='647.0' elevation='46.0' angle='1.5707964' width='125.0' depth='30.0' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-f56f47c7-3f84-463d-816c-d573e9c0092e' level='level1' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1577.8104' y='647.0' elevation='69.0' angle='1.5707964' width='125.0' depth='30.0' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-980b8313-1de9-41e6-9715-3fc6f487d949' level='level1' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1608.3217' y='647.0' elevation='92.0' angle='1.5707964' width='125.0' depth='30.0' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-f420d924-71ff-4a4e-8f5f-bbf1164c4b6b' level='level1' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1638.8329' y='647.0' elevation='115.0' angle='1.5707964' width='125.0' depth='30.0' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-22b38445-4f72-41f7-a95e-b770cf292ff5' level='level1' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1516.788' y='647.0' elevation='23.0' angle='1.5707964' width='125.0' depth='30.0' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-c9005435-9cbe-4252-be66-caf34a1e54b0' level='level1' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1669.344' y='647.0' elevation='139.0' angle='1.5707964' width='125.0' depth='30.0' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-8c7b8918-42ea-4d79-bcfb-44e5b935b2dc' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1487.6012' y='588.0443' width='3.0' depth='3.0' height='84.9' heightInPlan='84.899994' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-3d372c7b-c08f-425a-b4e5-70abf02693a1' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1516.0912' y='588.0443' elevation='23.0' width='3.0' depth='3.0' height='80.700005' heightInPlan='80.7' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-eb22bfb1-049a-4351-ab2f-0b135549a3fc' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1546.5812' y='588.0443' elevation='46.0' width='3.0' depth='3.0' height='81.700005' heightInPlan='81.7' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-d00ddbc0-f1bd-43c9-bee2-369e3711000b' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1577.0712' y='588.0443' elevation='69.0' width='3.0' depth='3.0' height='82.4' heightInPlan='82.399994' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-c5dbd3c3-b611-4dd6-9cab-ea7c54529d1d' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1607.5612' y='588.0443' elevation='92.0' width='3.0' depth='3.0' height='83.8' heightInPlan='83.799995' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-1e4ada57-d566-418b-9003-3296a7f62dc0' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1638.0511' y='588.0443' elevation='115.0' width='3.0' depth='3.0' height='84.700005' heightInPlan='84.7' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-4296aba9-fab4-4a25-bc47-f8d5531d2397' level='level1' catalogId='eTeks#texturableCylinder' name='Pole' creator='eTeks' model='11/texturableCylinder.obj' icon='10' x='1668.5411' y='588.0443' elevation='139.0' width='3.0' depth='3.0' height='84.700005' heightInPlan='84.7' color='FF3D3230' modelSize='6600'/>
+    <pieceOfFurniture id='pieceOfFurniture-fa3888b4-accb-43eb-8735-ee3689a94ebd' level='level1' catalogId='OlaKristianHoff#stairs_rail' name='Rail' creator='Ola-Kristian Hoff' model='13/stairs_rail.obj' icon='12' x='1583.3706' y='584.82214' elevation='81.700005' width='195.0' depth='10.0' height='148.0' color='FF3D3230' modelSize='5361' movable='false' dropOnTopElevation='-0.0042643924'/>
+  </furnitureGroup>
+  <pieceOfFurniture id='pieceOfFurniture-5030c250-85bf-4705-bd77-ff9a11c6210f' level='level0' name='Beam' creator='eTeks' model='15/metalBeam.obj' icon='14' x='1232.5845' y='359.73962' elevation='223.0' angle='1.5707964' width='708.0' depth='25.0' height='27.0' color='FF3D3230' shininess='0.0' modelSize='2037' movable='false'/>
+  <pieceOfFurniture id='pieceOfFurniture-833eba09-e5f3-478c-8296-b72cf083ee19' level='level0' name='Beam' creator='eTeks' model='15/metalBeam.obj' icon='14' x='593.69867' y='355.5' elevation='223.0' angle='1.5707964' width='708.0' depth='25.0' height='27.0' color='FF3D3230' shininess='0.0' modelSize='2037' movable='false'/>
+  <pieceOfFurniture id='pieceOfFurniture-0606e752-1ac8-434f-b368-98ea2ed65e92' level='level0' catalogId='eTeks#texturableBox' name='Edge' creator='eTeks' model='7/texturableBox.obj' icon='6' x='856.5259' y='-473.5349' width='2742.0' depth='43.0' height='100.0' shininess='0.0' modelSize='1661'>
+    <texture name='Grass darker' creator='Scopia' catalogId='eTeksScopia#grass_darker' width='80.0' height='80.0' image='16'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-e739f0f4-e7fb-4255-a03a-20230aa7b643' level='level0' catalogId='eTeks#texturableBox' name='Edge' creator='eTeks' model='7/texturableBox.obj' icon='6' x='2195.2' y='-231.79938' angle='1.5707964' width='444.0' depth='60.0' height='100.0' shininess='0.0' modelSize='1661'>
+    <texture name='Grass darker' creator='Scopia' catalogId='eTeksScopia#grass_darker' width='80.0' height='80.0' image='16'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-97055aca-9412-4326-887f-359648fecc82' level='level0' catalogId='eTeks#texturableBox' name='Edge' creator='eTeks' model='7/texturableBox.obj' icon='6' x='592.1429' y='1158.9738' width='2195.0' widthInPlan='2194.9995' depth='77.0' height='100.0' shininess='0.0' modelSize='1661'>
+    <texture name='Grass darker' creator='Scopia' catalogId='eTeksScopia#grass_darker' width='80.0' height='80.0' image='16'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-90852988-7d7f-48c3-b0ac-83c1bdd292e6' level='level0' catalogId='eTeks#texturableBox' name='Edge' creator='eTeks' model='7/texturableBox.obj' icon='6' x='2193.2' y='966.1598' angle='1.5707964' width='473.0' depth='56.0' height='100.0' shininess='0.0' modelSize='1661'>
+    <texture name='Grass darker' creator='Scopia' catalogId='eTeksScopia#grass_darker' width='80.0' height='80.0' image='16'/>
+  </pieceOfFurniture>
+  <furnitureGroup id='furnitureGroup-baf7d24d-9175-48f1-9bac-8ed48a27f8c4' level='level0' name='Staircase' x='766.5988' y='89.25006' angle='4.712389' width='160.50012' depth='320.80017' height='260.0'>
+    <pieceOfFurniture id='pieceOfFurniture-81f81a16-d0c1-4f0c-9d0d-5242bbaeb57c' level='level0' name='Beam' creator='eTeks' model='5/beam45.obj' icon='4' x='759.9481' y='89.72595' angle='1.5707965' width='24.99999' depth='307.4988' height='260.0' color='FF3D3230' shininess='0.0' modelSize='479'/>
+    <pieceOfFurniture id='pieceOfFurniture-328a51ec-8bc9-4287-b0de-58bd1a4b746f' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='911.99896' y='89.25' elevation='21.292969' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-2acae9f2-447f-4728-84bf-b40557d86e40' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='885.58997' y='89.25006' elevation='42.585938' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-d72f6578-3e42-43f9-a976-d39cb42969af' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='859.1809' y='89.25' elevation='63.878906' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-a95ed953-656b-42f7-ab8c-ba673c4fc9bd' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='832.7719' y='89.25' elevation='85.171875' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-a49ba7b1-9407-4184-adb8-2c8b32014929' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='806.3629' y='89.25012' elevation='106.46484' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-acd444c1-3428-4634-abb2-230716c53e2f' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='779.954' y='89.24994' elevation='127.75781' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-91c5643e-adab-4d0f-b6c6-5a7068ca94b6' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='753.5451' y='89.25006' elevation='149.05078' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-ca579170-5ae7-4c5f-a0d1-d38955d2788d' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='727.1361' y='89.25006' elevation='170.34375' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-7620555d-df07-419e-a0d9-d9078f8de1c1' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='700.7269' y='89.25006' elevation='191.63672' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-892f48e0-98f5-4926-93dc-7a9718d2eb1a' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='674.318' y='89.25009' elevation='212.92969' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-b8a3fdb2-29fd-44a5-92b3-b0799c6a5823' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='647.90906' y='89.25003' elevation='234.22266' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+    <pieceOfFurniture id='pieceOfFurniture-cddc5ac4-7f96-4c7d-95f2-c60d98d13b57' level='level0' catalogId='eTeks#texturableBox' name='Step' creator='eTeks' model='7/texturableBox.obj' icon='6' x='621.5001' y='89.25009' elevation='257.0' angle='4.712389' width='160.49994' depth='29.999884' height='3.0' color='FF3D3230' shininess='0.5' modelSize='1661'/>
+  </furnitureGroup>
+  <doorOrWindow id='doorOrWindow-6a5cb6b8-414a-4490-a56c-36d435e904a0' level='level1' catalogId='OlaKristianHoff#window_shop' name='Vitrine' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='2' x='914.8533' y='720.5' elevation='35.0' angle='3.1415927' width='300.0' depth='22.00075' height='200.0' color='FF3D3230' modelSize='3355' license='Free Art / CC-BY' movable='false' dropOnTopElevation='-0.005' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-e657e135-711f-4933-be7a-98747b74f847' level='level1' catalogId='OlaKristianHoff#window_shop' name='Vitrine' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='2' x='1374.8698' y='720.5' elevation='35.0' angle='3.1415927' width='300.0' depth='22.00075' height='200.0' color='FF3D3230' modelSize='3355' license='Free Art / CC-BY' movable='false' dropOnTopElevation='-0.005' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-81e8c161-6405-4274-8c80-5407ddaf526a' level='level1' catalogId='Mchnz#craftsmanDoorClosed' name='Porte' creator='Mchnz' model='18/craftsmanDoorClosed.obj' icon='17' x='1363.643' y='498.80396' angle='3.1415927' width='100.9' depth='12.091267' height='209.6' modelSize='122462' license='Free Art' movable='false' dropOnTopElevation='-0.0047709923' wallThickness='0.62032086' wallDistance='0.090909086' cutOutShape='M0.078,0.037 v0.963 h0.846 v-0.964 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.101090185' yAxis='0.7112299' width='0.79484636' startAngle='0.0' endAngle='-1.5707964'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-f03b978c-6650-4d09-9ccc-d4f548a22639' level='level1' catalogId='Mchnz#craftsmanDoorClosed' name='Porte' creator='Mchnz' model='18/craftsmanDoorClosed.obj' icon='17' x='439.15088' y='81.78728' angle='1.5707964' width='100.9' depth='12.091267' height='209.6' modelSize='122462' license='Free Art' movable='false' dropOnTopElevation='-0.0047709923' wallThickness='0.62032086' wallDistance='0.090909086' cutOutShape='M0.078,0.037 v0.963 h0.846 v-0.964 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.101090185' yAxis='0.7112299' width='0.79484636' startAngle='0.0' endAngle='-1.5707964'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-ecc4e3a7-389b-4408-8b28-47a9ec7a3435' level='level2' catalogId='Mchnz#craftsmanDoorClosed' name='Porte' creator='Mchnz' model='18/craftsmanDoorClosed.obj' icon='17' x='1693.3733' y='649.4549' angle='4.712389' width='100.9' depth='12.091267' height='209.6' modelSize='122462' license='Free Art' movable='false' dropOnTopElevation='-0.0047709923' wallThickness='0.62032086' wallDistance='0.090909086' cutOutShape='M0.078,0.037 v0.963 h0.846 v-0.964 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.101090185' yAxis='0.7112299' width='0.79484636' startAngle='0.0' endAngle='-1.5707964'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-68a75d59-556d-48ae-8251-2e83bc9c13a0' level='level0' catalogId='Scopia#glassDoor2' name='Porte vitrée' creator='Scopia' model='20/glassDoor2.obj' icon='19' x='334.2063' y='239.88997' angle='3.1415927' width='84.5' depth='31.103691' height='204.0' modelSize='16590' license='CC-BY' movable='false' dropOnTopElevation='-0.004901961' wallThickness='0.24113475' wallDistance='0.37588653' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.9881657' yAxis='0.61702126' width='0.97633135' startAngle='3.1415927' endAngle='4.712389'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-6c90e7a7-8bac-462d-a894-1ca3fefb662b' level='level0' catalogId='Scopia#glassDoor2' name='Porte vitrée' creator='Scopia' model='20/glassDoor2.obj' icon='19' x='407.80884' y='487.22952' angle='6.283185' width='84.5' depth='31.103691' height='204.0' modelSize='16590' license='CC-BY' movable='false' dropOnTopElevation='-0.004901961' wallThickness='0.24113475' wallDistance='0.37588653' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.9881657' yAxis='0.61702126' width='0.97633135' startAngle='3.1415927' endAngle='4.712389'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-c5db8cce-6229-46a6-a48a-cfd2ed815dd0' level='level0' catalogId='Kator Legaz#exterior-door-05' name='Porte d&apos;entrée' creator='Kator Legaz' model='22/exterior-door-05.obj' icon='21' x='2083.9988' y='0.5666664' width='99.0' depth='27.134083' height='205.0' modelSize='119396' license='CC-BY' movable='false' dropOnTopElevation='-0.004878049' wallThickness='0.8108108' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.92424244' yAxis='0.8108108' width='0.8484849' startAngle='3.1415927' endAngle='4.712389'/>
+    <material name='PAINT_gloss_black' color='FF3D3230'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-ce98acbd-11a2-432d-bb5c-6e049c74ebaf' level='level0' catalogId='Kator Legaz#window-01' name='Fenêtre américaine' creator='Kator Legaz' model='24/window-01.obj' icon='23' x='261.5' y='681.29785' elevation='93.0' angle='4.712389' width='55.3' depth='22.00075' height='128.0' color='FF3D3230' modelSize='21009' license='CC-BY' movable='false' dropOnTopElevation='-0.0078125' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-0477d342-58f7-4750-8a15-54f6bfea73e3' level='level0' catalogId='Kator Legaz#window-01' name='Fenêtre américaine' creator='Kator Legaz' model='24/window-01.obj' icon='23' x='261.5' y='131.11801' elevation='93.0' angle='4.712389' width='55.3' depth='22.00075' height='128.0' color='FF3D3230' modelSize='21009' license='CC-BY' movable='false' dropOnTopElevation='-0.0078125' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-b5ca4f7a-cb92-4fef-adda-2200cfee1265' level='level1' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='26' icon='25' x='523.51776' y='719.62' elevation='111.0' angle='3.1415927' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-a76173d7-8d9e-41a3-acfc-d1936ce0408e' level='level1' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='26' icon='25' x='350.5515' y='719.62' elevation='111.0' angle='3.1415927' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-44363144-ba7a-41fe-98a8-26874c6ed7e7' level='level1' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='26' icon='25' x='1305.5459' y='-1.1200001' elevation='93.0' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-467696ec-0781-4ec1-a629-aa52fd6dae5f' level='level1' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='26' icon='25' x='1605.4766' y='-1.1200001' elevation='93.0' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-9cb90bb0-69f3-402a-ba03-937c07e3b81a' level='level1' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='26' icon='25' x='1454.5913' y='-1.1200001' elevation='93.0' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <pieceOfFurniture id='pieceOfFurniture-2b7ec74f-68b6-44ab-8861-f7f13d9f5665' level='level0' catalogId='Scopia#hedgeTextured' name='Haie' creator='Scopia' model='28/hedgeTextured.obj' icon='27' x='-473.37558' y='1026.6895' angle='1.5707964' width='190.0' depth='58.0' height='100.0' modelSize='1359824' license='CC-BY' movable='false'/>
+  <pieceOfFurniture id='pieceOfFurniture-ed2a56d4-77d7-4acb-9c6d-d14d14132b0e' level='level0' catalogId='Scopia#hedge' name='Haie' creator='Scopia' model='30/hedge.obj' icon='29' x='-481.87558' y='458.23026' angle='1.5707964' width='75.0' depth='75.0' height='106.3' modelSize='1067649' license='CC-BY' movable='false' dropOnTopElevation='-0.009407338'/>
+  <pieceOfFurniture id='pieceOfFurniture-83e94a59-573a-4649-8320-14844caea731' level='level0' catalogId='Scopia#hedge' name='Haie' creator='Scopia' model='30/hedge.obj' icon='29' x='-466.78656' y='242.04465' angle='1.5707964' width='93.0' depth='86.0' height='106.3' modelSize='1067649' license='CC-BY' movable='false' dropOnTopElevation='-0.009407338'/>
+  <pieceOfFurniture id='pieceOfFurniture-bde25dea-e79e-4837-be3f-d4a4a124dcaa' level='level0' catalogId='Scopia#hedge' name='Haie' creator='Scopia' model='30/hedge.obj' icon='29' x='-476.85275' y='-403.0349' angle='1.5707964' width='98.0' depth='88.0' height='106.3' modelSize='1067649' license='CC-BY' movable='false' dropOnTopElevation='-0.009407338'/>
+  <pieceOfFurniture id='pieceOfFurniture-a42a4bcb-1f48-4812-8350-29c70ab02bff' level='level0' catalogId='Pencilart#grillNgauge' name='Grill' creator='Pencilart' model='32/grillNgauge.obj' icon='31' x='1653.2981' y='-116.51077' angle='1.5707964' width='92.0' depth='49.5' height='89.0' modelSize='853865' license='Free Art' dropOnTopElevation='0.76853937'/>
+  <pieceOfFurniture id='pieceOfFurniture-f43f9ca0-c5ea-4b5a-8539-f39d8036a276' level='level0' catalogId='Blend Swap CC-0#relaxChair' name='Chaise relax' creator='Semhustej' model='34/relaxChair.obj' icon='33' x='457.13568' y='-322.2707' angle='5.497787' width='66.0' depth='190.0' height='84.700005' modelSize='1091248' license='CC-0' dropOnTopElevation='0.6871311'/>
+  <pieceOfFurniture id='pieceOfFurniture-9cf247bf-e583-44ff-8203-127241601b23' level='level0' catalogId='Blend Swap CC-0#relaxChair' name='Chaise relax' creator='Semhustej' model='34/relaxChair.obj' icon='33' x='433.21478' y='-133.76093' angle='4.1887903' width='66.0' depth='190.0' height='84.700005' modelSize='1091248' license='CC-0' dropOnTopElevation='0.6871311'/>
+  <pieceOfFurniture id='pieceOfFurniture-f54c4edf-6030-4926-8200-a75db2b7eae9' level='level0' catalogId='Scopia#ext_chair' name='Chaise' creator='Scopia' model='36/ext_chair.obj' icon='35' x='586.3797' y='848.2533' angle='4.712389' width='100.0' depth='76.4' height='73.4' modelRotation='0 0 1 0 1 0 -1 0 0' modelSize='165694' license='CC-BY' dropOnTopElevation='0.41689372'/>
+  <pieceOfFurniture id='pieceOfFurniture-cb6c6bf3-3311-45a2-bf56-20bb98365a5f' level='level0' catalogId='Scopia#ext_chair' name='Chaise' creator='Scopia' model='36/ext_chair.obj' icon='35' x='695.55695' y='947.0036' angle='3.1415927' width='100.0' depth='76.4' height='73.4' modelRotation='0 0 1 0 1 0 -1 0 0' modelSize='165694' license='CC-BY' dropOnTopElevation='0.41689372'/>
+  <pieceOfFurniture id='pieceOfFurniture-0485097b-4975-40ee-bb3d-a275c199d2f6' level='level0' catalogId='Pencilart#gardenUmbrella' name='Parasol' creator='Pencilart' model='38/gardenUmbrella.obj' icon='37' x='442.08167' y='-244.97632' width='256.7' depth='222.0' height='250.0' modelSize='111365' license='Free Art' dropOnTopElevation='-0.004'/>
+  <pieceOfFurniture id='pieceOfFurniture-085592ea-1bc4-4393-a3c6-2ac28cba835d' level='level0' catalogId='LucaPresidente#doppio' name='Meuble bas' creator='LucaPresidente' model='40/doppio.obj' icon='39' x='1540.0212' y='41.7' width='80.0' depth='63.4' height='87.0' modelSize='517832' license='Free Art'>
+    <material name='Box522_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box52_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line67_10'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-00ba7783-f88d-4f86-9093-da730b394319' level='level0' catalogId='LucaPresidente#doppio' name='Meuble bas' creator='LucaPresidente' model='40/doppio.obj' icon='39' x='1620.0212' y='41.7' width='80.0' depth='63.4' height='87.0' modelSize='517832' license='Free Art'>
+    <material name='Box522_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box52_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line67_10'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-3db850fb-c1ce-4ecd-ac23-e4f1fd4f9186' level='level0' catalogId='LucaPresidente#singolo' name='Meuble bas' creator='LucaPresidente' model='44/singolo.obj' icon='43' x='1659.8662' y='41.7' width='40.0' depth='63.4' height='87.0' modelSize='273103' license='Free Art'>
+    <material name='Box052_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box05_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line03_2'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-e05386c3-0112-455f-a863-1e59656d9305' level='level0' catalogId='LucaPresidente#doppio' name='Meuble bas' creator='LucaPresidente' model='40/doppio.obj' icon='39' x='1648.5' y='102.98657' angle='1.5707964' width='80.0' depth='63.4' height='87.0' modelSize='517832' license='Free Art'>
+    <material name='Box522_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box52_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line67_10'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-1979998b-63c9-4444-b908-fc2b0d3de236' level='level0' catalogId='LucaPresidente#doppio' name='Meuble bas' creator='LucaPresidente' model='40/doppio.obj' icon='39' x='1648.5' y='182.98657' angle='1.5707964' width='80.0' depth='63.4' height='87.0' modelSize='517832' license='Free Art'>
+    <material name='Box522_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box52_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line67_10'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-db104a6c-5684-48c5-b51f-0dce7a78c362' level='level0' catalogId='LucaPresidente#lavello' name='Meuble évier' creator='LucaPresidente' model='46/lavello.obj' icon='45' x='1648.5' y='262.98657' angle='1.5707964' width='80.0' depth='63.4' height='105.0' modelSize='970849' license='Free Art' dropOnTopElevation='0.8210526'>
+    <material name='Box272_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box27_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line50_9'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Rectangle10_12' color='FF27201F'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-c256f81f-fc34-427e-8b3b-c182ff867feb' level='level0' catalogId='LucaPresidente#doppio' name='Meuble bas' creator='LucaPresidente' model='40/doppio.obj' icon='39' x='1648.5' y='342.98657' angle='1.5707964' width='80.0' depth='63.4' height='87.0' modelSize='517832' license='Free Art'>
+    <material name='Box522_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box52_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line67_10'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-2182c4ee-42c5-4ac0-b9a6-2d882a0deb66' level='level0' catalogId='LucaPresidente#singolo' name='Meuble bas' creator='LucaPresidente' model='44/singolo.obj' icon='43' x='1648.5' y='402.98657' angle='1.5707964' width='40.0' depth='63.4' height='87.0' modelSize='273103' license='Free Art'>
+    <material name='Box052_4'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Box05_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Line03_2'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-19022214-383a-4209-9d00-b04420cc7086' level='level0' catalogId='Space Mushrooms#Coffe table_006' name='Coffe table 006' creator='Space Mushrooms' model='48/Coffe table_006.obj' icon='47' x='1414.656' y='569.4241' angle='3.1415927' width='235.0' depth='100.0' height='75.0' modelSize='1437379' license='Copyright Space Mushrooms'>
+    <material name='Base'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Top'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-125ffdc5-1d86-4dd8-bd2c-be89d999c58e' level='level0' catalogId='Space Mushrooms#Chair40' name='Chair 40' creator='Space Mushrooms' model='50/Chair40.obj' icon='49' x='1332.1472' y='493.02408' width='54.3' depth='52.8' height='88.5' modelSize='1564465' license='Copyright Space Mushrooms'>
+    <material name='Base_wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Seat_leather'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-acce3789-6e5e-4194-aa8a-a4d05b97afd9' level='level0' catalogId='Space Mushrooms#Chair40' name='Chair 40' creator='Space Mushrooms' model='50/Chair40.obj' icon='49' x='1407.3491' y='493.02408' width='54.3' depth='52.8' height='88.5' modelSize='1564465' license='Copyright Space Mushrooms'>
+    <material name='Base_wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Seat_leather'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-a854b5bd-5c6a-4a79-8ac8-1ee07096d0f9' level='level0' catalogId='Space Mushrooms#Chair40' name='Chair 40' creator='Space Mushrooms' model='50/Chair40.obj' icon='49' x='1481.1929' y='493.02408' width='54.3' depth='52.8' height='88.5' modelSize='1564465' license='Copyright Space Mushrooms'>
+    <material name='Base_wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Seat_leather'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-ce772fe2-69bc-4168-858d-90e21fff2578' level='level0' catalogId='Space Mushrooms#Chair40' name='Chair 40' creator='Space Mushrooms' model='50/Chair40.obj' icon='49' x='1483.0326' y='645.8241' angle='3.1415927' width='54.3' depth='52.8' height='88.5' modelSize='1564465' license='Copyright Space Mushrooms'>
+    <material name='Base_wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Seat_leather'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-145a1720-350e-41b0-ac57-9f75049ccc11' level='level0' catalogId='Space Mushrooms#Chair40' name='Chair 40' creator='Space Mushrooms' model='50/Chair40.obj' icon='49' x='1414.7092' y='645.8241' angle='3.1415927' width='54.3' depth='52.8' height='88.5' modelSize='1564465' license='Copyright Space Mushrooms'>
+    <material name='Base_wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Seat_leather'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-1a90244e-857e-479c-8870-dbca7ef89c55' level='level0' catalogId='Space Mushrooms#Chair40' name='Chair 40' creator='Space Mushrooms' model='50/Chair40.obj' icon='49' x='1339.5074' y='645.8241' angle='3.1415927' width='54.3' depth='52.8' height='88.5' modelSize='1564465' license='Copyright Space Mushrooms'>
+    <material name='Base_wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Seat_leather'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-79885282-78bc-4973-935a-8f47421b968d' level='level0' catalogId='Kator Legaz#plate-and-ustensils' name='Assiette, verre et couverts' creator='Kator Legaz' model='53/plate-and-ustensils.obj' icon='52' x='1336.8749' y='593.365' elevation='75.0' width='27.0' depth='34.0' height='13.2' modelSize='223776' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-33e6b6dc-76b4-4910-bb83-f58ad7f46e43' level='level0' catalogId='Kator Legaz#plate-and-ustensils' name='Assiette, verre et couverts' creator='Kator Legaz' model='53/plate-and-ustensils.obj' icon='52' x='1412.3176' y='593.365' elevation='75.0' width='27.0' depth='34.0' height='13.2' modelSize='223776' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-d19f976f-cb2f-4cd5-a603-00a591c9be16' level='level0' catalogId='Kator Legaz#plate-and-ustensils' name='Assiette, verre et couverts' creator='Kator Legaz' model='53/plate-and-ustensils.obj' icon='52' x='1482.2401' y='595.2051' elevation='75.0' width='27.0' depth='34.0' height='13.2' modelSize='223776' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-5f388377-4c43-43f4-bb3d-11b9755464d5' level='level0' catalogId='Kator Legaz#plate-and-ustensils' name='Assiette, verre et couverts' creator='Kator Legaz' model='53/plate-and-ustensils.obj' icon='52' x='1480.4' y='541.84314' elevation='75.0' angle='3.1415927' width='27.0' depth='34.0' height='13.2' modelSize='223776' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-fd24a6f8-730d-4de4-9b31-8897e703bd23' level='level0' catalogId='Kator Legaz#plate-and-ustensils' name='Assiette, verre et couverts' creator='Kator Legaz' model='53/plate-and-ustensils.obj' icon='52' x='1406.7974' y='540.00305' elevation='75.0' angle='3.1415927' width='27.0' depth='34.0' height='13.2' modelSize='223776' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-03ca673d-3d2c-4a76-9b65-d54feddbec25' level='level0' catalogId='Kator Legaz#plate-and-ustensils' name='Assiette, verre et couverts' creator='Kator Legaz' model='53/plate-and-ustensils.obj' icon='52' x='1335.0348' y='547.4645' elevation='75.0' angle='3.1415927' width='27.0' depth='34.0' height='13.2' modelSize='223776' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-28a1cb1d-b33e-46ff-b4cf-71188383e615' level='level0' catalogId='Scopia#induction-cooker-4-zones' name='Plaque induction 4 zones' creator='Scopia' model='55/induction-cooker-4-zones.obj' icon='54' x='1648.0898' y='103.24009' elevation='87.0' angle='1.5707964' width='56.0' depth='49.5' height='0.4' modelSize='32930' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-99643424-da55-46a7-a72e-137aea47ca7b' level='level0' catalogId='Space Mushrooms#Stool3' name='Stool 3' creator='Space Mushrooms' model='57/Stool3.obj' icon='56' x='1361.35' y='176.6656' angle='4.712389' width='47.4' depth='44.600002' height='87.700005' shininess='0.0' modelSize='2442275' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-d6e34547-2be6-468d-b356-0db3f7a98f97' level='level0' catalogId='Space Mushrooms#Stool3' name='Stool 3' creator='Space Mushrooms' model='57/Stool3.obj' icon='56' x='1361.35' y='233.10376' angle='4.712389' width='47.4' depth='44.600002' height='87.700005' shininess='0.0' modelSize='2442275' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-79253f3e-bcc6-40f9-a4c0-9a0831d9205f' level='level0' catalogId='Space Mushrooms#Stool3' name='Stool 3' creator='Space Mushrooms' model='57/Stool3.obj' icon='56' x='1361.35' y='349.02783' angle='4.712389' width='47.4' depth='44.600002' height='87.700005' shininess='0.0' modelSize='2442275' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-a85a48ea-5783-446e-a2b7-326c91ce5d74' level='level0' catalogId='Space Mushrooms#Stool3' name='Stool 3' creator='Space Mushrooms' model='57/Stool3.obj' icon='56' x='1361.35' y='290.1457' angle='4.712389' width='47.4' depth='44.600002' height='87.700005' modelSize='2442275' license='Copyright Space Mushrooms'>
+    <material name='Base_metal' shininess='0.0'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-61ba23e4-2acd-4c1d-941a-8a5b55b7caf9' level='level0' catalogId='Scopia#spiceTower' name='Tour à épice' creator='Scopia' model='59/spiceTower.obj' icon='58' x='1592.6143' y='26.774952' elevation='87.0' width='15.900001' depth='15.900001' height='31.0' modelSize='506018' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-472c1cea-356a-4bcf-8b61-fda111f8761a' level='level0' catalogId='Blend Swap CC-BY#kitchenTools' name='Ustensiles suspendus' creator='Jay-Artist' model='61/kitchenTools.obj' icon='60' x='1676.2999' y='106.44041' elevation='96.0' angle='1.5707964' width='44.0' depth='9.8' height='31.6' modelSize='893688' license='CC-BY' dropOnTopElevation='-0.03164557'/>
+  <pieceOfFurniture id='pieceOfFurniture-22995bb5-e445-45c5-b150-5a2646afeb36' level='level0' catalogId='Blend Swap CC-BY#utensilsPot' name='Pot d&apos;ustensiles' creator='Oldtimer' model='63/utensilsPot.obj' icon='62' x='1660.6866' y='46.45576' elevation='87.0' width='12.2' depth='11.1' height='40.2' modelSize='73044' license='CC-BY' dropOnTopElevation='0.0024875621'/>
+  <pieceOfFurniture id='pieceOfFurniture-8f1e6c4b-5585-466b-a403-7fb9af6c8c27' level='level0' catalogId='Blend Swap CC-0#kitchenaid' name='Mixeur' creator='Swno' model='65/kitchenaid.obj' icon='64' x='1663.2' y='360.73688' elevation='87.0' angle='1.5707964' width='21.4' depth='36.0' height='35.3' modelSize='1387208' license='CC-0'/>
+  <pieceOfFurniture id='pieceOfFurniture-d49dcaea-9543-47bc-9a90-d89d44291c40' level='level0' catalogId='Scopia#cooker' name='Robot de cusine' creator='Scopia' model='67/cooker.obj' icon='66' x='1653.8396' y='401.2882' elevation='87.0' angle='1.5707964' width='28.9' depth='40.0' height='27.1' modelSize='105749' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-74998c0f-7092-49e2-93c4-248e81da4252' level='level0' catalogId='eTeks#hood' name='Hotte' creator='eTeks' model='69' icon='68' x='1654.8999' y='102.18689' elevation='156.0' angle='1.5707964' width='60.0' depth='52.600002' height='94.0' modelSize='10536' license='GNU GPL / CC-BY' dropOnTopElevation='-0.010638298'/>
+  <pieceOfFurniture id='pieceOfFurniture-0d16482a-acdb-4aea-ac98-f9f5d1718355' level='level0' catalogId='Kator Legaz#oil-servers' name='Huiles' creator='Kator Legaz' model='71/oil-servers.obj' icon='70' x='1663.7196' y='160.29977' elevation='87.0' angle='1.5707964' width='14.3' depth='7.2000003' height='34.600002' modelSize='78959' license='CC-BY'/>
+  <pieceOfFurniture id='pieceOfFurniture-129b1e2f-1531-48b8-afc9-15d7e7fbe625' level='level0' catalogId='Blend Swap CC-0#coffeeBrewer' name='Machine à expresso' creator='TreyClaine' model='73/coffeeBrewer.obj' icon='72' x='1525.7852' y='40.24553' elevation='87.0' width='13.400001' depth='38.5' height='27.2' modelSize='457436' license='CC-0'/>
+  <pieceOfFurniture id='pieceOfFurniture-17770d25-c33d-4b29-93e2-829faff34a50' level='level3' name='Roof window' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='74' x='910.2897' y='557.0944' elevation='1.0' pitch='4.4406986' width='613.0' depth='10.300002' depthInPlan='398.39914' height='410.70007' heightInPlan='120.137726' modelSize='3355'>
+    <material name='Frame_in' color='FF3D3230'/>
+    <material name='Frame_out' color='FF3D3230'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-a02b6667-2586-4609-be69-1b6a9a47b08a' level='level3' name='Roof window' creator='Ola-Kristian Hoff' model='3/window_shop.obj' icon='74' x='911.2771' y='160.30968' elevation='1.0' angle='3.1415927' pitch='4.4406986' width='613.0' depth='10.3' depthInPlan='398.30276' height='410.6' heightInPlan='120.11087' modelSize='3355'>
+    <material name='Frame_in' color='FF3D3230'/>
+    <material name='Frame_out' color='FF3D3230'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-7de4e350-261a-4730-9d38-43ca3c00eef7' level='level3' catalogId='eTeks#texturableBox' name='Roof tiles' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1692.5315' y='159.49155' elevation='1.0' angle='3.1415927' pitch='4.4406986' width='949.0' depth='10.3' depthInPlan='398.39908' height='410.7' heightInPlan='120.13771' shininess='0.0' modelSize='1661'>
+    <texture name='Old red roof' creator='Scopia' catalogId='eTeksScopia#old-roof-tiles' width='200.0' height='200.0' angle='3.1415927' image='75'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-344a6761-80a6-466f-a578-172afbce02fc' level='level3' catalogId='eTeks#texturableBox' name='Roof tiles' creator='eTeks' model='7/texturableBox.obj' icon='6' x='1692.29' y='557.1661' elevation='1.0' pitch='4.4406986' width='949.0' depth='10.3' depthInPlan='398.39908' height='410.7' heightInPlan='120.13771' shininess='0.0' modelSize='1661'>
+    <texture name='Old red roof' creator='Scopia' catalogId='eTeksScopia#old-roof-tiles' width='200.0' height='200.0' angle='3.1415927' image='75'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-c9106daa-5776-4125-85f5-119f278670f9' level='level3' catalogId='eTeks#texturableBox' name='Roof tiles' creator='eTeks' model='7/texturableBox.obj' icon='6' x='428.0406' y='159.17728' elevation='1.0' angle='3.1415927' pitch='4.4406986' width='355.0' depth='10.3' depthInPlan='398.39908' height='410.7' heightInPlan='120.13771' shininess='0.0' modelSize='1661'>
+    <texture name='Old red roof' creator='Scopia' catalogId='eTeksScopia#old-roof-tiles' width='200.0' height='200.0' angle='3.1415927' image='75'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-4ccea94c-a2d5-422c-8ead-1dc8245d2073' level='level3' catalogId='eTeks#texturableBox' name='Roof tiles' creator='eTeks' model='7/texturableBox.obj' icon='6' x='426.08398' y='557.9014' elevation='1.0' pitch='4.4406986' width='355.0' depth='10.3' depthInPlan='398.39908' height='410.7' heightInPlan='120.13771' shininess='0.0' modelSize='1661'>
+    <texture name='Old red roof' creator='Scopia' catalogId='eTeksScopia#old-roof-tiles' width='200.0' height='200.0' angle='3.1415927' image='75'/>
+  </pieceOfFurniture>
+  <doorOrWindow id='doorOrWindow-078d92a0-b7f4-4ba0-a8cc-47ae5cd2b7e3' level='level2' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='76' icon='25' x='2154.9202' y='120.47888' elevation='93.0' angle='1.5707964' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <doorOrWindow id='doorOrWindow-9a1e5d48-ae39-41a0-b794-813aad840724' level='level2' catalogId='eTeks#doubleHungWindow80x122' name='Fenêtre américaine' creator='eTeks' model='76' icon='25' x='2154.9355' y='589.69586' elevation='93.0' angle='1.5707964' width='81.0' depth='23.76075' height='128.0' color='FF3D3230' modelSize='3457' license='GNU GPL / CC-BY' movable='false' dropOnTopElevation='-0.0078125' wallThickness='0.9259259' cutOutShape='M0,0 v1 h1 v-1 z' wallCutOutOnBothSides='true'/>
+  <pieceOfFurniture id='pieceOfFurniture-a7bde31e-ef17-4287-8e3e-c162e0f47a9d' level='level1' catalogId='Space Mushrooms#Wooden curve dresser' name='Wooden curve dresser' creator='Space Mushrooms' model='78/Wooden curve dresser.obj' icon='77' x='1258.6171' y='239.62189' angle='4.712389' width='150.0' depth='61.0' height='65.0' modelSize='264638' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-306bd299-4e33-4edb-ac73-921839df0882' level='level1' catalogId='Jabberwalky#curvedTVForTable' name='TV incurvée' creator='Jabberwalky' model='80/curvedTVForTable.obj' icon='79' x='1248.2075' y='240.65237' elevation='65.0' angle='4.712389' width='126.3' depth='18.1' height='79.9' modelSize='9687' license='Free Art' dropOnTopElevation='-0.012515645'/>
+  <pieceOfFurniture id='pieceOfFurniture-922cb450-d495-474f-8ddf-b16876fca9a1' level='level1' catalogId='Space Mushrooms#OVAL_RUG' name='OVAL RUG' creator='Space Mushrooms' model='82/OVAL_RUG.obj' icon='81' x='348.6' y='140.58582' angle='1.5707964' width='150.2' depth='105.6' height='1.0' modelSize='168483' license='Copyright Space Mushrooms'>
+    <texture name='tapis beige Tani' creator='Galaw' width='250.0' height='355.55566' image='83'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-4face80d-1da1-40a2-8c6e-4c4a533b191e' level='level1' catalogId='Kator Legaz#oriental-rug' name='Tapis oriental' creator='Kator Legaz' model='85/oriental-rug.obj' icon='84' x='425.58536' y='458.089' angle='1.5707964' width='185.8' depth='257.7' height='2.5' modelSize='123674' license='CC-BY'>
+    <texture name='tapis beige Tani' creator='Galaw' width='250.0' height='355.55566' image='83'/>
+  </pieceOfFurniture>
+  <light id='light-867410b9-8c76-477b-b308-c151d2713694' level='level1' catalogId='eTeks#pendantLamp' name='Suspension' creator='eTeks' model='87' icon='86' x='400.22064' y='330.7868' elevation='262.0' width='60.0' depth='60.0' height='80.0' modelSize='15723' license='GNU GPL / CC-BY' dropOnTopElevation='-0.0125' power='0.5'>
+    <lightSource x='0.5' y='0.5' z='0.125' color='00AA9770' diameter='0.33333334'/>
+  </light>
+  <light id='light-11a76665-9359-427f-884c-a4146923e0f2' level='level1' catalogId='eTeks#pendantLamp' name='Suspension' creator='eTeks' model='87' icon='86' x='1456.4186' y='238.78351' elevation='262.0' width='60.0' depth='60.0' height='80.0' modelSize='15723' license='GNU GPL / CC-BY' dropOnTopElevation='-0.0125' power='0.5'>
+    <lightSource x='0.5' y='0.5' z='0.125' color='00AA9770' diameter='0.33333334'/>
+  </light>
+  <pieceOfFurniture id='pieceOfFurniture-3be40562-2a21-453e-b5c3-0b81d3052ec3' level='level1' catalogId='Kator Legaz#oriental-rug' name='Tapis oriental' creator='Kator Legaz' model='85/oriental-rug.obj' icon='84' x='1436.5156' y='236.42984' width='185.8' depth='257.7' height='2.5' modelSize='123674' license='CC-BY'>
+    <texture name='tapis beige POLU' creator='galaw' width='250.0' height='368.87607' image='88'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-b1b18658-48f0-4361-b49b-c43fcae33bae' level='level1' catalogId='Blend Swap CC-0#plant' name='Plante' creator='Ndakasha' model='90/plant.obj' icon='89' x='1262.6171' y='454.34998' angle='4.712389' width='81.8' depth='69.0' height='117.1' modelSize='598218' license='CC-0' dropOnTopElevation='-0.00853971'/>
+  <pieceOfFurniture id='pieceOfFurniture-61554123-40ac-4e1f-a0b5-f25dce93887d' level='level1' catalogId='alaX#bar_stool' name='Tabouret de bar' creator='alaX' model='92/bar_stool.obj' icon='91' x='1266.5021' y='62.337463' width='44.5' depth='42.0' height='70.0' modelSize='107852' license='Free Art'/>
+  <pieceOfFurniture id='pieceOfFurniture-3d508771-f91f-4caf-a97d-ac3b1b4487a6' level='level1' catalogId='Blend Swap CC-BY#mediumIndoorPlant' name='Plante' creator='Betomo16' model='94/mediumIndoorPlant.obj' icon='93' x='1264.3671' y='61.23683' elevation='68.0' width='72.5' depth='76.6' height='67.9' modelSize='1285520' license='CC-BY' dropOnTopElevation='-0.01472754'/>
+  <pieceOfFurniture id='pieceOfFurniture-74a8dd54-7728-439e-9694-8fd873b440f0' level='level1' catalogId='Blend Swap CC-BY#spatifilum' name='Spathiphyllum' creator='HeraSK' model='96/spatifilum.obj' icon='95' x='1642.75' y='53.63645' angle='1.5707964' width='79.8' depth='74.9' height='87.5' modelSize='3884670' license='CC-BY' dropOnTopElevation='-0.011428571'/>
+  <pieceOfFurniture id='pieceOfFurniture-9fbd112a-248c-4a50-9f7f-03c69087527e' level='level1' catalogId='Space Mushrooms#Vase_26' name='Vase with plant' creator='Space Mushrooms' model='98/Vase_26.obj' icon='97' x='1256.3671' y='134.92189' angle='4.712389' width='59.4' depth='56.5' height='85.4' modelSize='1402558' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-f6defb6e-e5db-44d4-9ccb-e7cab57c94ce' level='level1' catalogId='Space Mushrooms#Vase_29' name='Vase with plant' creator='Space Mushrooms' model='100/Vase_29.obj' icon='99' x='1256.0171' y='347.8719' angle='4.712389' width='66.5' depth='55.8' height='86.5' modelSize='1022345' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-24f4a439-fa51-4800-8246-6a0737c9939c' level='level1' catalogId='Space Mushrooms#Vase_92' name='Vase with plant' creator='Space Mushrooms' model='102/Vase_92.obj' icon='101' x='1250.3671' y='403.5719' angle='4.712389' width='44.9' depth='44.5' height='49.2' modelSize='623876' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-4d09f3da-5937-40d3-84be-6155164025cd' level='level1' catalogId='Space Mushrooms#Vase_58' name='Vase with plant' creator='Space Mushrooms' model='104/Vase_58.obj' icon='103' x='1332.1171' y='42.95' width='63.0' depth='65.9' height='69.1' modelSize='1579671' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-629e8ee3-501d-4c20-a033-4737c5f3087c' level='level1' catalogId='Space Mushrooms#Vase_60' name='Vase with plant' creator='Space Mushrooms' model='106/Vase_60.obj' icon='105' x='1406.8289' y='39.010376' width='63.9' depth='56.5' height='96.5' modelSize='2256191' license='Copyright Space Mushrooms'/>
+  <pieceOfFurniture id='pieceOfFurniture-053ff025-94f9-45ab-b048-05a87a4a1ccf' level='level1' catalogId='PZLDneYLGyceUIQiV1WQ' name='Coiffeuse' creator='Space Mushrooms' model='108/dressing-table-3/dressing-table-3.obj' icon='107' x='304.75' y='210.62375' angle='4.712389' width='149.1' depth='62.5' height='76.9' modelSize='1668154' dropOnTopElevation='0.0'>
+    <material name='Base' color='FF382514'/>
+    <material name='Base_2'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-f6539376-be09-40db-92cb-5f909cb07ee0' level='level1' catalogId='XO3OQOBcB6Qn2gAaqAjW' name='Lit double blanc' creator='Space Mushrooms' model='111/white-double-bed-1/white-double-bed-1.obj' icon='110' x='475.34692' y='456.4453' angle='1.5707964' width='255.90001' depth='246.5' height='99.6' modelSize='2069993' dropOnTopElevation='0.0'>
+    <material name='Base_2'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+    <material name='Blanket' color='FFAC9882' shininess='0.0'/>
+    <material name='Pillows' color='FFAC9882' shininess='0.1328125'/>
+    <material name='Sheet' color='FFD3D0CB' shininess='0.0'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-685f6a83-5024-4eea-b00b-ef521e6cccbc' level='level1' catalogId='eNTkaHGwHPDa8BeUnxzT' name='Armoire ouverte en verre' creator='Space Mushrooms' model='113/glass-open-wardrobe/glass-open-wardrobe.obj' icon='112' x='518.1559' y='238.98766' angle='1.7484555E-7' width='160.0' depth='138.0' height='280.0' modelSize='2702030' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-b6ab21ff-5513-4bfb-9110-b1dd94626e53' level='level1' catalogId='vrlYdGpaGD1oQVtQD0xa' name='Table de chevet classique en marbre' creator='Space Mushrooms' model='115/nightstand-classic-marble/nightstand-classic-marble.obj' icon='114' x='577.49695' y='609.84534' angle='1.5707964' width='50.9' depth='42.2' height='50.2' modelSize='355315' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-3c3d1872-d57d-4d34-9395-0d11de00cf88' level='level1' catalogId='Pbzo4yItesv9kbw0vgI5' name='Chaise de bureau à roulettes' creator='Space Mushrooms' model='117/rolling-office-chair/rolling-office-chair.obj' icon='116' x='368.9' y='219.17099' angle='1.5707964' width='59.2' depth='65.8' height='88.4' modelSize='932405' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-df5797e5-9760-4b4e-9366-4c77b021ba73' level='level1' catalogId='6dVDBPund5UYjA8WDxnU' name='Meuble TV en marbre' creator='Space Mushrooms' model='119/tv-stand-marble/tv-stand-marble.obj' icon='118' x='375.0' y='682.2' angle='3.1415927' width='203.0' depth='52.600002' height='69.1' modelSize='748777' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-4336a997-8354-4e40-8171-d0d60bb5e6a4' level='level1' catalogId='FP7oy8H1jlqexh2MwXxY' name='Pot d&apos;entrée' creator='Space Mushrooms' model='121/entryway-pot/entryway-pot.obj' icon='120' x='299.05' y='300.5544' angle='4.712389' width='37.2' depth='51.100002' height='86.5' modelSize='949817' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-eeeb9d70-bca3-4f19-ad30-9464f1ed6e9e' level='level1' catalogId='N6OyJL2DuDh5gYGSpsJo' name='Pot à surface courbe' creator='Space Mushrooms' model='123/curved-surface-pot/curved-surface-pot.obj' icon='122' x='566.9469' y='675.85' angle='3.1415927' width='63.3' depth='65.3' height='58.7' modelSize='1046330' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-c5efe3e9-fec8-48fc-a521-ea3c7b4ea18b' level='level1' catalogId='kjSdaee7sBW02G2JZzfT' name='Vase Mini Décor' creator='Space Mushrooms' model='125/mini-decor-vase/mini-decor-vase.obj' icon='124' x='496.92114' y='686.13965' angle='3.1415927' width='37.5' depth='43.2' height='127.1' modelSize='2051471' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-3d3c5c15-ef42-47bd-9995-e65d10a0d54b' level='level1' catalogId='5XOJqtWNxsAENIWIgrSO' name='Vase d&apos;Humeur Intérieur' creator='Space Mushrooms' model='127/indoor-mood-vase/indoor-mood-vase.obj' icon='126' x='325.05' y='59.20132' angle='4.712389' width='96.700005' depth='103.1' height='188.7' modelSize='1731244' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-db1b196e-3f56-43d5-bfca-cb0efd3a502c' level='level1' catalogId='l3DWYrhapmxpd83yPDal' name='Vase Style Doux' creator='Space Mushrooms' model='129/soft-style-vase/soft-style-vase.obj' icon='128' x='306.1' y='112.49369' angle='4.712389' width='70.8' depth='65.200005' height='94.0' modelSize='1727354' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-cf05db26-95a6-4e48-87aa-b42e5c5b46d5' level='level1' catalogId='2krnEZ5IECdBW7Fa18h5' name='Lit double bleu clair' creator='Space Mushrooms' model='131/light-blue-double-bed/light-blue-double-bed.obj' icon='130' x='1568.6272' y='246.87927' angle='1.5707964' width='216.90001' depth='223.1' height='112.8' modelSize='1652008' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+    <material name='Blanket' color='FF9B9C8F' shininess='0.0'/>
+    <material name='Pillow' color='FF9B9C8F' shininess='0.0'/>
+    <material name='Pillows' color='FFAC9882'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-3723a0ed-42af-4386-8297-c42c3794bbf4' level='level1' catalogId='H9mXidMyUea47g3N1dH0' name='Table de chevet double en bois' creator='Space Mushrooms' model='133/nightstand-double-wood/nightstand-double-wood.obj' icon='132' x='1660.1772' y='113.42932' angle='1.5707964' width='50.0' depth='40.0' height='58.7' modelSize='391628' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-3a753c28-4da5-4fd8-bdac-e5577a73f54f' level='level1' catalogId='H9mXidMyUea47g3N1dH0' name='Table de chevet double en bois' creator='Space Mushrooms' model='133/nightstand-double-wood/nightstand-double-wood.obj' icon='132' x='1660.1772' y='380.3293' angle='1.5707964' width='50.0' depth='40.0' height='58.7' modelSize='391628' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-8ba3eebe-5ed5-4bee-b422-3afc09a0c85c' level='level1' catalogId='YGlnXmpIsydEhCBTRi5Y' name='Armoire moderne en bois avec étagères' creator='Space Mushrooms' model='135/modern-wood-wardrobe-with-shelves/modern-wood-wardrobe-with-shelves.obj' icon='134' x='1550.6772' y='470.25' angle='3.1415927' width='259.0' depth='50.0' height='300.0' modelSize='936476' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='Wood63_niga23_oak_dif' creator='Space Mushrooms' width='-1.0' height='-1.0' image='109'/>
+    </material>
+    <material name='Shelves' color='FF9B9C8F'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-107f0e9b-b937-4f02-904c-6bfbb3d09673' level='level0' catalogId='bYksW602zmFCnA040loh' name='Canapé d&apos;angle' creator='Space Mushrooms' model='137/sectional-sofa-3/sectional-sofa-3.obj' icon='136' x='920.655' y='354.28455' width='477.7' depth='349.4' height='87.9' modelSize='1495998' dropOnTopElevation='0.0'>
+    <material name='Pillows' color='FFAC9882' shininess='0.140625'/>
+    <material name='Sofa_fabric' shininess='0.1875'>
+      <texture name='tissu beige' creator='galaw' width='100.0' height='177.77779' image='51'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-b0747f2d-7149-4d9d-b466-7fa183f75e7a' level='level0' catalogId='ab5fiUCOnsrBsFRfV7Rk' name='Table basse en marbre noir' creator='Space Mushrooms' model='139/black-marble-coffe-table-1/black-marble-coffe-table-1.obj' icon='138' x='991.8413' y='414.96387' width='281.5' depth='109.0' height='25.0' modelSize='449153' dropOnTopElevation='0.0'>
+    <material name='Base_Wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Top_Marble'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-799316b3-00bb-437d-9ed5-a70e0879db09' level='level0' catalogId='QWVJq5gkf4kwCSKeSnG2' name='Cheminée Moderne' creator='Space Mushrooms' model='141/modern-fireplace-25/modern-fireplace-25.obj' icon='140' x='1650.6' y='571.95483' angle='1.5707964' width='185.0' depth='59.2' height='250.0' modelSize='107765' dropOnTopElevation='0.0'>
+    <material name='Base' color='FFADA599'/>
+    <material name='Base_2'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Base_3'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-fb3e0755-eb04-49ec-959a-f75c0f952288' level='level0' catalogId='AACv4StVgCD19MWVPNLr' name='Îlot de cuisine en bois' creator='Space Mushrooms' model='143/kitchen-island-wood/kitchen-island-wood.obj' icon='142' x='1439.65' y='264.68335' angle='1.5707964' width='240.0' depth='112.0' height='87.0' modelSize='195860' dropOnTopElevation='0.0'>
+    <material name='Ceramic'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-77a75041-b6d9-460a-bbbc-2f526ca2f9bf' level='level0' catalogId='katorlegaz-oriental-rug' name='Tapis oriental' creator='Kator Legaz' model='85/oriental-rug.obj' icon='84' x='974.5896' y='423.89816' angle='1.5707964' width='185.0' depth='302.0' height='2.5' modelSize='1730' license='CC-BY' dropOnTopElevation='0.0'>
+    <texture name='tapis' creator='Galaw' width='150.0' height='263.1579' image='144'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-0bcf8374-f1f4-49de-a03d-54ebd75a9ed1' level='level0' catalogId='ViAuwSMo3Jbcfuas9SaV' name='Réfrigérateur Noir' creator='Space Mushrooms' model='146/black-refrigerator-13/black-refrigerator-13.obj' icon='145' x='1222.9464' y='46.65' width='91.1' depth='73.3' height='175.40001' modelSize='2459484' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-21008a64-4aaf-4fff-9db3-9be50b469908' level='level0' catalogId='4q7oEOO5imuIuwcWg7yt' name='Bibliothèque' creator='Space Mushrooms' model='148/bookcase-2/bookcase-2.obj' icon='147' x='523.75' y='27.013714' width='248.0' depth='36.0' height='212.0' modelSize='1766979' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Base_2'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Base_3' color='FF382514'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-c8c771b3-56d2-4700-afd9-d7cb888934d1' level='level0' catalogId='hXmyo69WumM3mpp4J1IH' name='Meuble TV Blanc et Bois' creator='Space Mushrooms' model='150/white-and-wood-tv-stand/white-and-wood-tv-stand.obj' icon='149' x='612.10077' y='597.26996' angle='4.712389' width='200.0' depth='60.0' height='83.0' modelSize='101039' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Metal' color='FF382514'/>
+    <material name='Wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-b953732a-3c8e-420e-9e10-d0b50231f262' level='level0' catalogId='7xN0tpCEbcL7X5cZbeZH' name='Table basse en pierre' creator='Space Mushrooms' model='152/stone-coffee-table/stone-coffee-table.obj' icon='151' x='540.0966' y='128.04439' width='195.0' depth='65.1' height='20.1' modelSize='52915' dropOnTopElevation='0.0'>
+    <material name='Base' color='FF382514'/>
+    <material name='Top'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-b946667b-7ac7-4809-9ca6-ab33714362cb' level='level0' catalogId='7H7qi4YZWaNw0lPfRcsm' name='Fauteuil Carré Doux' creator='Space Mushrooms' model='154/squared-soft-armchair-1/squared-soft-armchair-1.obj' icon='153' x='472.87262' y='207.49438' angle='3.6651917' width='94.9' depth='93.8' height='74.200005' modelSize='3226529' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-e1e8575b-354d-417b-95af-318ceb5007ed' level='level0' catalogId='7H7qi4YZWaNw0lPfRcsm' name='Fauteuil Carré Doux' creator='Space Mushrooms' model='154/squared-soft-armchair-1/squared-soft-armchair-1.obj' icon='153' x='707.54694' y='102.369934' angle='1.5707964' width='94.9' depth='93.8' height='74.200005' modelSize='3226529' dropOnTopElevation='0.0'/>
+  <doorOrWindow id='doorOrWindow-f66187bb-7267-4670-bc1a-787eca2403d1' level='level0' catalogId='hxbDJaVoIztqIjcwFoaH' name='Porte en bois' creator='Space Mushrooms' model='156/wooden-door/wooden-door.obj' icon='155' x='261.5' y='363.60034' angle='4.712389' width='205.0' depth='22.00075' height='211.2' modelSize='2630477' dropOnTopElevation='0.0' cutOutShape='&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?> &lt;!-- Generator: Blender, SVG Export for Grease Pencil - v2.0 --> &lt;!DOCTYPE svg PUBLIC &quot;-//W3C//DTD SVG 1.1//EN&quot; &quot;http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd&quot;> &lt;svg version=&quot;1.0&quot; x=&quot;0px&quot; y=&quot;0px&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;0.000000px&quot; height=&quot;0.000000px&quot; viewBox=&quot;0 0 0.000000 0.000000&quot; />' wallCutOutOnBothSides='true'>
+    <material name='Base'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-13efb8fd-5721-42db-a697-1ca304e7fe35' level='level0' catalogId='qZqx5lX2zoC17mWLmKjU' name='Porte coulissante' creator='Space Mushrooms' model='158/sliding-door-4/sliding-door-4.obj' icon='157' x='1384.7565' y='-2.0000002' width='220.0' depth='22.00075' height='250.0' modelSize='524316' dropOnTopElevation='0.0' cutOutShape='&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?> &lt;!-- Generator: Blender, SVG Export for Grease Pencil - v2.0 --> &lt;!DOCTYPE svg PUBLIC &quot;-//W3C//DTD SVG 1.1//EN&quot; &quot;http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd&quot;> &lt;svg version=&quot;1.0&quot; x=&quot;0px&quot; y=&quot;0px&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;0.000000px&quot; height=&quot;0.000000px&quot; viewBox=&quot;0 0 0.000000 0.000000&quot; />' wallCutOutOnBothSides='true'>
+    <material name='Metal.003' color='FF3D3230'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-f7f1a285-10c3-4d47-8027-78c899f2fe3f' level='level0' catalogId='qZqx5lX2zoC17mWLmKjU' name='Porte coulissante' creator='Space Mushrooms' model='158/sliding-door-4/sliding-door-4.obj' icon='157' x='1436.6323' y='720.5' angle='3.1415927' width='301.0' depth='22.00075' height='250.0' modelSize='524316' dropOnTopElevation='0.0' cutOutShape='&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?> &lt;!-- Generator: Blender, SVG Export for Grease Pencil - v2.0 --> &lt;!DOCTYPE svg PUBLIC &quot;-//W3C//DTD SVG 1.1//EN&quot; &quot;http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd&quot;> &lt;svg version=&quot;1.0&quot; x=&quot;0px&quot; y=&quot;0px&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;0.000000px&quot; height=&quot;0.000000px&quot; viewBox=&quot;0 0 0.000000 0.000000&quot; />' wallCutOutOnBothSides='true'>
+    <material name='Metal.003' color='FF3D3230'/>
+  </doorOrWindow>
+  <doorOrWindow id='doorOrWindow-f5e571aa-0a09-4c8d-89a0-84f9b0dd89ab' level='level0' catalogId='qZqx5lX2zoC17mWLmKjU' name='Porte coulissante' creator='Space Mushrooms' model='158/sliding-door-4/sliding-door-4.obj' icon='157' x='748.8203' y='720.5' angle='3.1415927' width='301.0' depth='22.00075' height='250.0' modelSize='524316' dropOnTopElevation='0.0' cutOutShape='&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?> &lt;!-- Generator: Blender, SVG Export for Grease Pencil - v2.0 --> &lt;!DOCTYPE svg PUBLIC &quot;-//W3C//DTD SVG 1.1//EN&quot; &quot;http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd&quot;> &lt;svg version=&quot;1.0&quot; x=&quot;0px&quot; y=&quot;0px&quot; xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;0.000000px&quot; height=&quot;0.000000px&quot; viewBox=&quot;0 0 0.000000 0.000000&quot; />' wallCutOutOnBothSides='true'>
+    <material name='Metal.003' color='FF3D3230'/>
+  </doorOrWindow>
+  <pieceOfFurniture id='pieceOfFurniture-ee3d0176-78d9-4914-99cb-a61f143b7fbb' level='level0' catalogId='LoPtmpgcwMDmO0UkaOgR' name='Bougie' creator='Space Mushrooms' model='160/candle-1/candle-1.obj' icon='159' x='611.35254' y='509.5925' elevation='82.0' width='6.3' depth='6.3' height='14.900001' modelSize='100755' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-112d8d55-0be3-4ab5-b264-50bf46681e5d' level='level0' catalogId='vRHbx4TvuqrQRaDaDzXO' name='Horloge' creator='Space Mushrooms' model='162/clock/clock.obj' icon='161' x='582.85077' y='593.55066' elevation='135.0' angle='4.712389' width='90.8' depth='1.5' height='90.8' modelSize='475776' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-427d10f9-b143-4a2a-b21d-48e7e600fc49' level='level0' catalogId='scopia-arbreachat' name='Arbre à chat' creator='Scopia' model='164/arbreAChat/arbreAChat.obj' icon='163' x='531.52527' y='457.9695' angle='3.1415927' width='65.0' depth='48.8' height='89.6' modelSize='133403' license='CC-BY' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-2172ed66-5e5a-48ce-a52d-04e6549c06c8' level='level0' catalogId='yqTz5uJ0xB9ZH88n9Ajm' name='Vase rond en pierre' creator='Space Mushrooms' model='166/stone-round-vase/stone-round-vase.obj' icon='165' x='613.969' y='655.1875' elevation='85.0' width='23.800001' depth='17.800001' height='44.5' modelSize='2369353' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-ea451143-ffbd-4f17-9685-ce2dce1c35f0' level='level0' catalogId='5XOJqtWNxsAENIWIgrSO' name='Vase d&apos;Humeur Intérieur' creator='Space Mushrooms' model='127/indoor-mood-vase/indoor-mood-vase.obj' icon='126' x='1185.2648' y='629.14166' width='96.700005' depth='103.1' height='188.7' modelSize='1731244' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-e9cd48dc-d8e6-4990-b53b-b1c83db56144' level='level0' catalogId='sYrTKq77Z31MtrxchHcs' name='Vase de Décoration Discrète' creator='Space Mushrooms' model='168/discreet-decor-vase/discreet-decor-vase.obj' icon='167' x='420.79663' y='140.9553' angle='4.712389' width='39.4' depth='43.600002' height='34.100002' modelSize='1431375' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-c8000e0c-69c8-4475-b7bc-fb0c3fdfac63' level='level0' catalogId='NWdDbVDXUlWV5f84oMSU' name='Vase avec plantes' creator='Space Mushrooms' model='170/vase-54-license/vase-54-license.obj' icon='169' x='606.8813' y='452.9695' angle='3.1415927' width='63.600002' depth='58.8' height='53.100002' modelSize='1453607' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-f80c2568-dcf7-456d-b701-46ed7ad39d6e' level='level0' catalogId='5pahz7mM6jUnjZOD9IPR' name='Vase Style Nordique' creator='Space Mushrooms' model='172/nordic-look-vase/nordic-look-vase.obj' icon='171' x='665.0004' y='172.26993' angle='1.5707964' width='44.9' depth='44.5' height='49.2' modelSize='350247' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-52657a8b-a49a-4c0a-a1a6-55a97aa30635' level='level0' catalogId='sAOFxIeMGbxYScA45AWp' name='Vase Prêt à Poser' creator='Space Mushrooms' model='174/shelf-ready-vase/shelf-ready-vase.obj' icon='173' x='1070.0648' y='425.75903' elevation='22.0' width='45.4' depth='30.0' height='78.200005' modelSize='882281' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-99da98e4-4780-452f-942f-17b81b6c77f2' level='level0' catalogId='emmBM39BAVHPVfnUJcHP' name='Douche Moderne' creator='Space Mushrooms' model='176/modern-shower/modern-shower.obj' icon='175' x='523.60077' y='549.4695' angle='1.5707966' width='117.200005' depth='100.0' height='209.6' modelSize='3152167' dropOnTopElevation='0.0'>
+    <material name='Metal' color='FF382514'/>
+    <material name='Shower' color='FF382514'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-68cf3285-a03c-43f2-b533-7337e234cf7b' level='level0' catalogId='gY2SpvGnIzQzlUhJXsXd' name='Baignoire gris foncé' creator='Space Mushrooms' model='178/bath-tube-dark-gray-1/bath-tube-dark-gray-1.obj' icon='177' x='314.75' y='580.5696' angle='4.712389' width='179.40001' depth='84.5' height='53.0' modelSize='267179' dropOnTopElevation='0.0'>
+    <material name='Base' shininess='0.25'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-2513524b-1c47-4eaf-be3c-02709175ea4f' level='level0' catalogId='LyqQj489X7hwKZ3N984a' name='Double évier' creator='Space Mushrooms' model='180/double-sink-6/double-sink-6.obj' icon='179' x='468.30078' y='683.89996' elevation='31.0' angle='3.1415927' width='210.6' depth='51.2' height='113.9' modelSize='2550294' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Base_2'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Faucet___Drain' color='FF382514'/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-db99db1e-2205-4871-8606-0115e8eb11f0' level='level0' catalogId='rAf81WXJyXzf3eRJLmIp' name='Évier Blanc' creator='Space Mushrooms' model='182/white-sink-7/white-sink-7.obj' icon='181' x='370.3' y='136.89502' elevation='59.0' angle='1.5707964' width='46.0' depth='41.9' height='30.800001' modelSize='729058' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-167c6613-f58a-4738-93d8-6f7c7082277b' level='level0' catalogId='pQa02cH9oHTkncdnkvPL' name='Toilette noire' creator='Space Mushrooms' model='184/black-toilet-3/black-toilet-3.obj' icon='183' x='326.63507' y='33.25' width='35.5' depth='48.5' height='28.9' modelSize='283651' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-d742ceb9-368e-48c4-9db8-3ae205a7c582' level='level0' catalogId='scopia-suv' name='SUV' creator='Scopia' model='186/suv/suv.obj' icon='185' x='1907.5688' y='325.81763' width='209.1' depth='463.1' height='162.7' modelSize='206226' license='CC-BY' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-674ed7ca-ddb9-4227-bce1-a4bcbb2a3c46' level='level0' catalogId='wxbKXeOeVhYI2795Uq6o' name='Plante tropicale' creator='Space Mushrooms' model='188/tropical-plant-1/tropical-plant-1.obj' icon='187' x='1041.5067' y='948.9269' width='71.700005' depth='82.700005' height='79.0' modelSize='2551833' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-310ebe4c-365b-401b-8a84-758cff8d39de' level='level0' catalogId='wxbKXeOeVhYI2795Uq6o' name='Plante tropicale' creator='Space Mushrooms' model='188/tropical-plant-1/tropical-plant-1.obj' icon='187' x='1215.6996' y='952.60693' width='71.700005' depth='82.700005' height='79.0' modelSize='2551833' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-b7e3c5fe-5470-4979-a51c-fb6455a8b648' level='level0' catalogId='l7xLBQWguqZV01vEHmcr' name='Plante à larges feuilles' creator='Space Mushrooms' model='190/broadleaf-plant-2/broadleaf-plant-2.obj' icon='189' x='1111.5731' y='777.05' angle='1.7484555E-7' width='224.1' depth='91.1' height='215.2' modelSize='888481' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-db098053-2665-4f2f-8be7-1a7733fcc6ec' level='level0' catalogId='m8qtyVOjfsrfp0TPAw00' name='Plante à larges feuilles' creator='Space Mushrooms' model='192/broadleaf-plant-6/broadleaf-plant-6.obj' icon='191' x='1121.4996' y='951.8365' width='116.700005' depth='110.6' height='189.2' modelSize='2528003' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-999417ac-4cbf-4e48-b2b6-5fe441b45640' level='level0' catalogId='pyJFwyu6PcVNCiFMddvk' name='arbuste avec fleurs' creator='Space Mushrooms' model='194/shrub-with-flowers/shrub-with-flowers.obj' icon='193' x='1033.0164' y='775.55' angle='1.7484555E-7' width='76.8' depth='88.1' height='74.700005' modelSize='3462958' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-b8d151d3-3399-417e-8190-b4bf504c443f' level='level0' catalogId='wJBXXHMeEbsipAKib8b7' name='arbuste avec fleurs' creator='Space Mushrooms' model='196/shrub-with-flowers-1/shrub-with-flowers-1.obj' icon='195' x='1210.7894' y='786.05' angle='1.7484555E-7' width='76.6' depth='109.1' height='69.9' modelSize='3781590' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-57663f12-73b4-49ee-a178-6e8dea4d9a66' level='level0' catalogId='pencilart-gardenumbrella' name='Parasol' creator='Pencilart' model='38/gardenUmbrella.obj' icon='37' x='628.6019' y='903.266' width='256.7' depth='222.0' height='250.0' modelSize='110862' license='Free Art' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-cc8085d5-8d30-4fb4-9c08-fa39b1685496' level='level0' catalogId='P5DjxBQfXHT1sPehMVeQ' name='Portail noir' creator='Space Mushrooms' model='198/black-gate/black-gate.obj' icon='197' x='1929.1427' y='1161.3057' width='479.0' depth='18.0' height='180.0' shininess='0.0' modelSize='42201' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-22f529fa-3177-4973-9fd4-be2749f97b91' level='level0' catalogId='P5DjxBQfXHT1sPehMVeQ' name='Portail noir' creator='Space Mushrooms' model='198/black-gate/black-gate.obj' icon='197' x='-490.78494' y='708.4087' angle='1.5707964' width='479.0' depth='18.0' height='180.0' shininess='0.0' modelSize='42201' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-2d2a2aa8-acc3-4e45-a1c8-ab977bf83b80' level='level0' catalogId='P5DjxBQfXHT1sPehMVeQ' name='Portail noir' creator='Space Mushrooms' model='198/black-gate/black-gate.obj' icon='197' x='-492.86572' y='-73.03491' angle='1.5707964' width='562.0' depth='18.0' height='180.0' shininess='0.0' modelSize='42201' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-87ab2d15-5107-4638-a79f-2c0630a6e2ef' level='level0' catalogId='2AmvTANdIlSkq92Q52ke' name='Portail noir' creator='Space Mushrooms' model='200/black-gate-1/black-gate-1.obj' icon='199' x='-483.22333' y='344.94086' angle='1.5707964' width='184.7' depth='23.300001' height='180.0' shininess='0.0' modelSize='30110' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-777df988-978f-4813-8ed8-d55f44ee2bef' level='level2' catalogId='eol5ZyRU96HgKiaIL83c' name='Grand lit double' creator='Space Mushrooms' model='202/large-double-bed/large-double-bed.obj' icon='201' x='1812.5999' y='390.9361' angle='4.712389' width='280.5' depth='216.1' height='103.200005' modelSize='2566380' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Blanket' shininess='0.0'>
+      <texture name='Cabinet_30' creator='Space Mushrooms' width='-1.0' height='-1.0' image='203'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-f4f9f1cf-0a52-478a-b77a-7a6ffa56d8f5' level='level2' catalogId='osmpQSeVuq3xnMuLuYm4' name='Table de nuit en bois' creator='Space Mushrooms' model='205/nightstand-wood-24/nightstand-wood-24.obj' icon='204' x='1746.7817' y='517.5447' angle='4.712389' width='50.0' depth='47.0' height='50.0' modelSize='34779' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-c9024e05-57b2-4575-96fb-8976383793f0' level='level2' catalogId='osmpQSeVuq3xnMuLuYm4' name='Table de nuit en bois' creator='Space Mushrooms' model='205/nightstand-wood-24/nightstand-wood-24.obj' icon='204' x='1752.2996' y='271.68524' angle='4.712389' width='50.0' depth='47.0' height='50.0' modelSize='34779' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-de6208e9-2d07-4313-a34b-56ba2b1b045b' level='level2' catalogId='D3QznXFUVHQ7zON6wo5S' name='Placard en bois' creator='Space Mushrooms' model='207/wooden-cupboard-11/wooden-cupboard-11.obj' icon='206' x='2010.8154' y='677.6' angle='3.1415927' width='266.0' depth='61.8' height='210.0' modelSize='1901810' dropOnTopElevation='0.0'>
+    <material name='Base'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+    <material name='Base_2' color='FF3D3230'/>
+    <material name='Fabric' shininess='0.25'>
+      <texture name='Fabric_922' creator='Space Mushrooms' width='-1.0' height='-1.0' image='208'/>
+    </material>
+  </pieceOfFurniture>
+  <pieceOfFurniture id='pieceOfFurniture-24eb2733-5d14-4fbb-a271-c49ac57a6459' level='level2' catalogId='1AN3NAH34uwC7CnN5IjW' name='Mur TV moderne' creator='Space Mushrooms' model='210/modern-tv-wall-15/modern-tv-wall-15.obj' icon='209' x='2121.9355' y='368.4715' angle='1.5707964' width='305.1' depth='49.600002' height='250.0' modelSize='1716345' dropOnTopElevation='0.0'>
+    <material name='Ceramic'>
+      <texture name='acier brut rouillé' creator='galaw' width='100.0' height='131.95876' image='41'/>
+    </material>
+    <material name='Wood'>
+      <texture name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    </material>
+  </pieceOfFurniture>
+  <doorOrWindow id='doorOrWindow-bc19a088-86e5-4280-b37a-6b60d3cdc74f' level='level2' catalogId='Mchnz#craftsmanDoorClosed' name='Porte' creator='Mchnz' model='18/craftsmanDoorClosed.obj' icon='17' x='1972.4641' y='209.97546' angle='3.1415927' width='100.9' depth='12.091267' height='209.6' modelSize='122462' license='Free Art' movable='false' dropOnTopElevation='-0.0047709923' wallThickness='0.62032086' wallDistance='0.090909086' cutOutShape='M0.078,0.037 v0.963 h0.846 v-0.964 z' wallCutOutOnBothSides='true'>
+    <sash xAxis='0.101090185' yAxis='0.7112299' width='0.79484636' startAngle='0.0' endAngle='-1.5707964'/>
+  </doorOrWindow>
+  <pieceOfFurniture id='pieceOfFurniture-e3a6fbd5-7892-4bf8-ac53-b39a481e8099' level='level2' catalogId='uiodJKtlDgFnzR0UtHFr' name='Baignoire jacuzzi moderne' creator='Space Mushrooms' model='212/bath-tube-modern-jacuzzi-2/bath-tube-modern-jacuzzi-2.obj' icon='211' x='2104.3' y='104.57501' angle='1.5707964' width='171.5' depth='79.0' height='60.7' modelSize='1729808' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-5399c442-f068-44de-b58d-8371281999a0' level='level2' catalogId='RF120McYl1FUaxZ5gD2p' name='Double évier' creator='Space Mushrooms' model='214/double-sink-2/double-sink-2.obj' icon='213' x='1885.2048' y='28.830719' elevation='83.0' angle='6.282308' width='199.90001' depth='40.0' height='59.9' modelSize='726876' dropOnTopElevation='0.0'/>
+  <pieceOfFurniture id='pieceOfFurniture-b7caae7b-7280-48cf-8ed0-f28a7f1c02e0' level='level2' catalogId='0xVDGN7DxO1ufEvZWVzE' name='Douche Carrée Simple' creator='Space Mushrooms' model='216/squared-simple-shower-2/squared-simple-shower-2.obj' icon='215' x='1753.2772' y='147.22156' angle='4.712389' width='120.4' depth='100.200005' height='210.40001' modelSize='1604782' dropOnTopElevation='0.0'/>
+  <wall id='wall0' level='level0' wallAtStart='wall24' wallAtEnd='wall7' xStart='1692.1772' yStart='-2.0' xEnd='2154.2' yEnd='-2.0' height='390.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFCFCFCF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall1' level='level0' wallAtStart='wall7' wallAtEnd='wall20' xStart='2154.2' yStart='720.50006' xEnd='1692.1772' yEnd='720.5' height='390.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFCFCFCF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall2' level='level2' wallAtStart='wall23' wallAtEnd='wall38' xStart='1692.1772' yStart='-2.0' xEnd='2155.8' yEnd='-2.4066162' height='210.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FF3D3230'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall5' level='level2' wallAtStart='wall39' wallAtEnd='wall35' xStart='2155.8154' yStart='359.25' xEnd='2155.8154' yEnd='720.5' height='310.0' heightAtEnd='210.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FF3D3230'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall7' level='level0' wallAtStart='wall0' wallAtEnd='wall1' xStart='2154.2' yStart='-2.0' xEnd='2154.2' yEnd='720.50006' height='390.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFCFCFCF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall11' level='level0' wallAtStart='wall20' xStart='1221.5271' yStart='720.5' xEnd='577.35077' yEnd='720.5' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall12' level='level0' wallAtEnd='wall-55eb1fef-08ef-4e50-9c94-aa72c77cc04c' xStart='261.5' yStart='486.1875' xEnd='261.5' yEnd='359.24994' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall16' level='level0' wallAtEnd='wall17' xStart='577.35077' yStart='720.5' xEnd='261.5' yEnd='720.5' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFD9D2CC'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall17' level='level0' wallAtStart='wall16' xStart='261.5' yStart='720.5' xEnd='261.5' yEnd='483.5' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFD9D2CC'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall19' level='level1' wallAtStart='wall25' wallAtEnd='wall34' xStart='607.0271' yStart='720.5' xEnd='261.5' yEnd='720.5' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFAC9882'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall20' level='level0' wallAtStart='wall1' wallAtEnd='wall11' xStart='1692.1772' yStart='720.5' xEnd='1221.5271' yEnd='720.5' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall21' level='level1' xStart='1692.1772' yStart='720.5' xEnd='1220.5773' yEnd='720.5' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall22' level='level0' wallAtEnd='wall-3957528d-d3b6-4836-af2d-1c6a4a901bbf' xStart='1692.2' yStart='8.0' xEnd='1692.2' yEnd='423.0' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' leftSideColor='FFCFCFCF'>
+    <texture attribute='rightSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall23' level='level1' wallAtEnd='wall2' xStart='1221.5271' yStart='-2.0' xEnd='1692.1772' yEnd='-2.0' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFFFFFFF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall24' level='level0' wallAtEnd='wall0' xStart='1502.1772' yStart='-2.0' xEnd='1692.1772' yEnd='-2.0' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall25' level='level1' wallAtEnd='wall19' xStart='1221.5271' yStart='720.5' xEnd='607.0271' yEnd='720.5' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall27' level='level1' wallAtStart='wall34' wallAtEnd='wall-40dd42c8-1740-42f4-9c3a-76179d104b0b' xStart='261.5' yStart='359.25' xEnd='261.5' yEnd='-2.0' height='452.0' heightAtEnd='350.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFFFFFFF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall29' level='level1' wallAtStart='wall-6006e0c5-96f0-4598-88ba-74435fb7d7e0' xStart='607.0271' yStart='-2.0' xEnd='1222.103' yEnd='-2.0' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall34' level='level1' wallAtStart='wall19' wallAtEnd='wall27' xStart='261.5' yStart='720.5' xEnd='261.5' yEnd='359.25' height='350.0' heightAtEnd='452.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFFFFFFF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall35' level='level2' wallAtEnd='wall5' xStart='1692.1772' yStart='720.5' xEnd='2155.8154' yEnd='720.5' height='210.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' leftSideColor='FFFFFFFF'>
+    <texture attribute='rightSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall36' level='level2' wallAtEnd='wall37' xStart='1692.1772' yStart='-2.0' xEnd='1692.1772' yEnd='211.55469' height='210.0' heightAtEnd='268.74957' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' leftSideColor='FF3D3230' rightSideColor='FF9B9C8F'/>
+  <wall id='wall37' level='level2' wallAtStart='wall36' xStart='1692.1772' yStart='211.55469' xEnd='1692.1772' yEnd='357.0' height='268.74957' heightAtEnd='310.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' leftSideColor='FFFFFFFF' rightSideColor='FF9B9C8F'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall38' level='level2' wallAtStart='wall2' wallAtEnd='wall39' xStart='2155.8' yStart='-2.4066162' xEnd='2155.8' yEnd='211.17151' height='210.0' heightAtEnd='269.1629' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FF3D3230'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall39' level='level2' wallAtStart='wall38' wallAtEnd='wall5' xStart='2155.8' yStart='211.17151' xEnd='2155.8154' yEnd='359.25' height='269.1629' heightAtEnd='310.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FF3D3230'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-1cbe7730-1488-42ee-a3d9-ac84bbb14216' level='level1' wallAtEnd='wall-af6cdf4a-0ba9-47cd-b255-fb368ba1a0a5' xStart='603.3469' yStart='712.2377' xEnd='603.3469' yEnd='165.23764' height='343.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFAC9882' rightSideColor='FFADA599'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-956abe2f-a5bf-4c7a-a81b-7211ac95b0cf' level='level1' wallAtEnd='wall-36f6d6c5-76e8-4b93-8804-7f4e74af8958' xStart='1223.3671' yStart='8.0' xEnd='1223.3671' yEnd='500.0' height='343.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFFFFFFF' rightSideColor='FFADA599'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-36f6d6c5-76e8-4b93-8804-7f4e74af8958' level='level1' wallAtStart='wall-956abe2f-a5bf-4c7a-a81b-7211ac95b0cf' xStart='1223.3671' yStart='500.0' xEnd='1682.3671' yEnd='500.0' height='343.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFFFFFFF' rightSideColor='FFADA599'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-7a30f76f-4fc1-4206-b529-8b67739aa22f' level='level2' xStart='1703.2869' yStart='211.17151' xEnd='2147.2869' yEnd='211.17151' height='268.7' thickness='7.5' pattern='hatchUp' leftSideColor='FF3D3230' rightSideColor='FFFFFFFF'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-1a2f78b0-de71-4fcf-9535-059708ffe994' level='level0' wallAtEnd='wall-018f7105-d95a-4baa-82e1-deefbd611dab' xStart='395.0' yStart='9.0' xEnd='395.0' yEnd='240.0' height='250.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFADA599' rightSideColor='FFD9D2CC'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-018f7105-d95a-4baa-82e1-deefbd611dab' level='level0' wallAtStart='wall-1a2f78b0-de71-4fcf-9535-059708ffe994' xStart='395.0' yStart='240.0' xEnd='270.66254' yEnd='239.99998' height='250.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFADA599' rightSideColor='FFD9D2CC'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-55eb1fef-08ef-4e50-9c94-aa72c77cc04c' level='level0' wallAtStart='wall12' wallAtEnd='wall-45beec36-d281-485e-8d22-97d420be1b6a' xStart='261.5' yStart='359.24994' xEnd='261.5' yEnd='239.99998' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-45beec36-d281-485e-8d22-97d420be1b6a' level='level0' wallAtStart='wall-55eb1fef-08ef-4e50-9c94-aa72c77cc04c' wallAtEnd='wall-9b152b64-71f0-493a-8465-dbbd8fb9a001' xStart='261.5' yStart='239.99998' xEnd='261.5' yEnd='-2.0' height='250.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFD9D2CC'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+  </wall>
+  <wall id='wall-d7b81648-0d1b-4ae5-81f8-ab7e0c507300' level='level0' wallAtEnd='wall-32248112-529f-4dcc-ba2d-0d669a768077' xStart='577.35077' yStart='708.1195' xEnd='577.35077' yEnd='585.1195' height='250.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFD9D2CC' rightSideColor='FFADA599'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-32248112-529f-4dcc-ba2d-0d669a768077' level='level0' wallAtStart='wall-d7b81648-0d1b-4ae5-81f8-ab7e0c507300' wallAtEnd='wall-24354abe-bf9d-41c9-bb86-ddd4c39c49f3' xStart='577.35077' yStart='585.1195' xEnd='577.35077' yEnd='487.1195' height='250.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFD9D2CC' rightSideColor='FFADA599'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-24354abe-bf9d-41c9-bb86-ddd4c39c49f3' level='level0' wallAtStart='wall-32248112-529f-4dcc-ba2d-0d669a768077' wallAtEnd='wall-49a107fc-a872-4001-a687-523c85084715' xStart='577.35077' yStart='487.1195' xEnd='492.52344' yEnd='487.1195' height='250.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFD9D2CC' rightSideColor='FFADA599'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-49a107fc-a872-4001-a687-523c85084715' level='level0' wallAtStart='wall-24354abe-bf9d-41c9-bb86-ddd4c39c49f3' xStart='492.52344' yStart='487.1195' xEnd='270.66254' yEnd='487.11954' height='250.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFD9D2CC' rightSideColor='FFADA599'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-3957528d-d3b6-4836-af2d-1c6a4a901bbf' level='level0' wallAtStart='wall22' xStart='1692.2' yStart='423.0' xEnd='1692.2' yEnd='711.0' height='250.0' thickness='22.0' pattern='hatchUp'>
+    <texture attribute='rightSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-af6cdf4a-0ba9-47cd-b255-fb368ba1a0a5' level='level1' wallAtStart='wall-1cbe7730-1488-42ee-a3d9-ac84bbb14216' wallAtEnd='wall-200c3a1d-7053-4d8b-b1e9-681d531fb20e' xStart='603.3469' yStart='165.23764' xEnd='440.34692' yEnd='165.23764' height='343.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFFFFFFF' rightSideColor='FFADA599'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-200c3a1d-7053-4d8b-b1e9-681d531fb20e' level='level1' wallAtStart='wall-af6cdf4a-0ba9-47cd-b255-fb368ba1a0a5' xStart='440.34692' yStart='165.23764' xEnd='440.34692' yEnd='-2.0' height='343.0' thickness='7.5' pattern='hatchUp' leftSideColor='FFFFFFFF' rightSideColor='FFADA599'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-40dd42c8-1740-42f4-9c3a-76179d104b0b' level='level1' wallAtStart='wall27' wallAtEnd='wall-6006e0c5-96f0-4598-88ba-74435fb7d7e0' xStart='261.5' yStart='-2.0' xEnd='440.34692' yEnd='-2.0' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFFFFFFF'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-6006e0c5-96f0-4598-88ba-74435fb7d7e0' level='level1' wallAtStart='wall-40dd42c8-1740-42f4-9c3a-76179d104b0b' wallAtEnd='wall29' xStart='440.34692' yStart='-2.0' xEnd='607.0271' yEnd='-2.0' height='352.0' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' rightSideColor='FFADA599'>
+    <texture attribute='leftSideTexture' name='brique vieillie industrielle' creator='galaw' width='350.0' height='350.0' image='223'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-9ca57379-72c4-4188-9a9d-4c33a4f990b5' level='level2' xStart='1692.5498' yStart='356.53326' xEnd='1692.5498' yEnd='502.53326' height='310.0' heightAtEnd='268.7' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' leftSideColor='FFFFFFFF' rightSideColor='FF9B9C8F'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-f563c648-b342-4aa2-9e7b-671dfe96c3f9' level='level2' xStart='1692.5498' yStart='712.2377' xEnd='1692.5498' yEnd='502.23767' height='210.0' heightAtEnd='268.74957' thickness='22.0' pattern='reversedHatchUp' topColor='FF131313' leftSideColor='FFADA599' rightSideColor='FFFFFFFF'>
+    <baseboard attribute='leftSideBaseboard' thickness='1.0' height='7.0' color='FF424348'/>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-19b38efd-8fc2-4dd6-a5b2-cc1de3eb7de6' level='level1' wallAtEnd='wall-65027fdb-c2cf-496b-b0d8-89debc3f902a' xStart='1692.1772' yStart='-2.0' xEnd='1692.1772' yEnd='500.0' height='139.0' thickness='22.0' pattern='hatchUp' rightSideColor='FF9B9C8F'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-65027fdb-c2cf-496b-b0d8-89debc3f902a' level='level1' wallAtStart='wall-19b38efd-8fc2-4dd6-a5b2-cc1de3eb7de6' xStart='1692.1772' yStart='500.0' xEnd='1692.1772' yEnd='716.0' height='139.0' thickness='22.0' pattern='hatchUp' rightSideColor='FFADA599'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='parquet' width='100.0' height='150.14662' image='222'/>
+    </baseboard>
+  </wall>
+  <wall id='wall-9b152b64-71f0-493a-8465-dbbd8fb9a001' level='level0' wallAtStart='wall-45beec36-d281-485e-8d22-97d420be1b6a' wallAtEnd='wall-a699833c-d637-4e0d-9dec-7aac97d56afe' xStart='261.5' yStart='-2.0' xEnd='395.0' yEnd='-2.0' height='250.0' thickness='22.0' pattern='hatchUp' rightSideColor='FFD9D2CC'/>
+  <wall id='wall-a699833c-d637-4e0d-9dec-7aac97d56afe' level='level0' wallAtStart='wall-9b152b64-71f0-493a-8465-dbbd8fb9a001' xStart='395.0' yStart='-2.0' xEnd='1504.0' yEnd='-2.0' height='250.0' thickness='22.0' pattern='hatchUp' rightSideColor='FFADA599'>
+    <baseboard attribute='rightSideBaseboard' thickness='1.0' height='7.0'>
+      <texture name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    </baseboard>
+  </wall>
+  <room id='room-c2b82115-a239-4277-be6d-d827970b207e' level='level1' floorVisible='false'>
+    <texture attribute='ceilingTexture' name='Concrete' creator='Scopia' catalogId='eTeksScopia#concrete-wall-3' width='100.0' height='100.0' image='217'/>
+    <point x='1703.2001' y='9.0'/>
+    <point x='2144.5132' y='9.0'/>
+    <point x='2143.2202' y='709.50006'/>
+    <point x='1703.2001' y='709.5'/>
+  </room>
+  <room id='room-bd1463a0-e584-4767-9245-71a4872dfae8' level='level0' ceilingVisible='false'>
+    <texture attribute='floorTexture' name='Pavement' creator='Scopia' catalogId='eTeksScopia#pavement_2' width='100.0' height='100.0' angle='0.7853982' image='218'/>
+    <point x='250.5' y='1009.0722'/>
+    <point x='-505.4231' y='1009.0722'/>
+    <point x='-505.4231' y='-452.92786'/>
+    <point x='250.5' y='-452.92786'/>
+    <point x='250.5' y='-13.0'/>
+    <point x='250.5' y='-13.0'/>
+    <point x='250.49998' y='236.09998'/>
+    <point x='266.29364' y='236.09998'/>
+    <point x='266.29364' y='457.07214'/>
+    <point x='250.5' y='457.07214'/>
+  </room>
+  <room id='room-57bcabcd-7523-41df-9d53-f1019806dc33' level='level0' ceilingVisible='false'>
+    <texture attribute='floorTexture' name='Pavement' creator='Scopia' catalogId='eTeksScopia#pavement_2' width='100.0' height='100.0' angle='0.7853982' image='218'/>
+    <point x='1692.1772' y='731.5'/>
+    <point x='1692.1772' y='1198.7509'/>
+    <point x='2165.2' y='1198.7509'/>
+    <point x='2165.2' y='731.50006'/>
+  </room>
+  <room id='room-2e929b68-9327-45e6-ac59-cb84a2799e37' level='level0' name='Garage' nameXOffset='3.8426514' nameYOffset='-54.067383' areaXOffset='13.097534' areaYOffset='-0.71484375' ceilingVisible='false'>
+    <textStyle attribute='nameStyle' fontSize='35.0'/>
+    <textStyle attribute='areaStyle' fontSize='35.0'/>
+    <texture attribute='floorTexture' name='Asphalte clair' creator='Scopia' width='400.0' height='400.0' image='219'/>
+    <texture attribute='ceilingTexture' name='Concrete' creator='Scopia' catalogId='eTeksScopia#concrete-wall-3' width='100.0' height='100.0' image='217'/>
+    <point x='1703.2' y='9.0'/>
+    <point x='1703.2' y='592.8046'/>
+    <point x='1684.5873' y='592.8046'/>
+    <point x='1684.5873' y='689.0628'/>
+    <point x='1703.2' y='689.0628'/>
+    <point x='1703.2' y='709.5'/>
+    <point x='1718.568' y='709.5'/>
+    <point x='1718.568' y='731.5'/>
+    <point x='2130.4316' y='731.5'/>
+    <point x='2130.4316' y='709.50006'/>
+    <point x='2143.2' y='709.50006'/>
+    <point x='2143.2' y='9.0'/>
+  </room>
+  <room id='room-68f982a6-0506-4d3e-bd59-0d2b9221cf5a' level='level0' name='salle de bain' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    <point x='573.60077' y='490.8695'/>
+    <point x='573.60077' y='708.1195'/>
+    <point x='272.5' y='709.5'/>
+    <point x='272.5' y='490.86954'/>
+  </room>
+  <room id='room-b43914a0-5bf9-42cf-9624-33568a67fe9c' level='level0' name='WC' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    <point x='391.25' y='9.0'/>
+    <point x='391.25' y='236.25'/>
+    <point x='272.5' y='236.24998'/>
+    <point x='272.5' y='9.0'/>
+  </room>
+  <room id='room-7fe661b4-eac5-4e82-bd95-40747ffaaabb' level='level0' name='jardin' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='Gazon' creator='Scopia' catalogId='eTeksScopia#grass' width='80.0' height='80.0' image='221'/>
+    <point x='1692.1772' y='731.5'/>
+    <point x='1692.1772' y='1126.8364'/>
+    <point x='250.5' y='1126.8363'/>
+    <point x='250.49998' y='731.5'/>
+  </room>
+  <room id='room-7b1e69ec-696b-49f8-8f90-b8dcd9b49033' level='level0' areaVisible='true' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='Gazon' creator='Scopia' catalogId='eTeksScopia#grass' width='80.0' height='80.0' image='221'/>
+    <point x='250.5' y='1009.07214'/>
+    <point x='250.5' y='1126.8363'/>
+    <point x='-505.4231' y='1126.8364'/>
+    <point x='-505.4231' y='1009.07214'/>
+  </room>
+  <room id='room-d33155fc-aca5-4724-b264-b179e62731de' level='level0' name='jardin' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='Gazon' creator='Scopia' catalogId='eTeksScopia#grass' width='80.0' height='80.0' image='221'/>
+    <point x='2165.2' y='-452.92786'/>
+    <point x='2165.2' y='-13.0'/>
+    <point x='250.5' y='-12.999832'/>
+    <point x='250.5' y='-452.92786'/>
+  </room>
+  <room id='room-c5d3528e-a17b-4d16-a0d0-43b2f7fe79a8' level='level0' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    <point x='1681.1772' y='-2.0'/>
+    <point x='1681.2' y='-305.0'/>
+    <point x='1206.2' y='-305.0'/>
+    <point x='1206.2' y='-2.0'/>
+  </room>
+  <room id='room-eaeafa64-d4e4-4d98-960c-6762ff3c5a39' level='level0' name='cuisine' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    <point x='1242.412' y='-1.9999616'/>
+    <point x='1242.412' y='407.07892'/>
+    <point x='1679.5271' y='407.07892'/>
+    <point x='1681.1772' y='-2.0'/>
+  </room>
+  <room id='room-6f9084aa-a7a5-4715-86f3-c7cb3a6e6978' level='level0' name='salle de vie' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    <point x='1679.5271' y='407.07892'/>
+    <point x='1679.5271' y='721.49994'/>
+    <point x='581.10077' y='721.50006'/>
+    <point x='581.10077' y='483.3695'/>
+    <point x='270.66254' y='483.36954'/>
+    <point x='272.5' y='243.74998'/>
+    <point x='398.75' y='243.75'/>
+    <point x='398.75' y='9.0'/>
+    <point x='1242.412' y='9.0'/>
+    <point x='1242.412' y='407.07892'/>
+  </room>
+  <room id='room-44868a97-568e-46cd-88a5-512c0c827763' level='level3' ceilingVisible='false' ceilingFlat='true'>
+    <point x='250.5' y='-13.0'/>
+    <point x='607.0271' y='-13.0'/>
+    <point x='607.02704' y='731.5'/>
+    <point x='250.5' y='731.50006'/>
+  </room>
+  <room id='room-177ecfa9-1a71-4669-b7b0-c8cecbf16233' level='level3' ceilingFlat='true'>
+    <point x='1219.6171' y='9.0'/>
+    <point x='1681.1772' y='9.0'/>
+    <point x='1681.1772' y='709.5'/>
+    <point x='1220.5773' y='709.49994'/>
+  </room>
+  <room id='room-708ab097-b3f5-47ab-84b3-9bf43633e0f7' level='level1' name='chambre' areaVisible='true' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='parquet' width='100.0' height='150.14662' image='222'/>
+    <point x='599.5969' y='168.98764'/>
+    <point x='599.5969' y='709.5'/>
+    <point x='272.5' y='709.5'/>
+    <point x='272.49997' y='9.0'/>
+    <point x='436.59692' y='9.0'/>
+    <point x='436.59692' y='168.98764'/>
+  </room>
+  <room id='room-5bc782fc-07f3-42e9-a726-ca92b54627e0' level='level1' name='couloir ' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='parquet' width='100.0' height='150.14662' image='222'/>
+    <point x='607.0271' y='9.0'/>
+    <point x='607.0271' y='161.48764'/>
+    <point x='444.09692' y='161.48766'/>
+    <point x='444.09692' y='9.0'/>
+  </room>
+  <room id='room-23907ef3-dda2-420f-a90d-4115fabb49d5' level='level1' name='chambre' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='parquet' width='100.0' height='150.14662' image='222'/>
+    <point x='1227.1171' y='9.0'/>
+    <point x='1681.2' y='9.0'/>
+    <point x='1681.2' y='496.25'/>
+    <point x='1227.1171' y='496.25003'/>
+  </room>
+  <room id='room-741baad8-d53f-4468-abd5-722c35059967' level='level1' name='couloir ' areaVisible='true' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='parquet' width='100.0' height='150.14662' image='222'/>
+    <point x='1681.1772' y='503.75'/>
+    <point x='1681.2' y='709.5'/>
+    <point x='1221.5271' y='709.50006'/>
+    <point x='1221.5271' y='503.75'/>
+  </room>
+  <room id='room-b5ec3460-35c4-41b4-b475-118d17576150' level='level2' name='salle de bain' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='pierre' creator='galaw' width='100.0' height='100.0' image='220'/>
+    <point x='1703.2001' y='9.0'/>
+    <point x='2144.5132' y='9.0'/>
+    <point x='2144.8' y='207.42151'/>
+    <point x='1703.2869' y='207.42155'/>
+  </room>
+  <room id='room-9789ec80-cfcc-4afc-9962-69214ae3c744' level='level2' areaVisible='true' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='parquet' width='100.0' height='150.14662' image='222'/>
+    <point x='1703.2869' y='214.92151'/>
+    <point x='2144.8005' y='214.92151'/>
+    <point x='2143.2202' y='709.50006'/>
+    <point x='1703.5498' y='709.5'/>
+  </room>
+  <room id='room-502a5d64-0bc8-48e8-a681-b8ae184c539a' level='level0' name='terrace' areaVisible='true' ceilingVisible='false' ceilingFlat='true'>
+    <texture attribute='floorTexture' name='bois' creator='galaw' width='100.0' height='185.50723' image='42'/>
+    <point x='504.412' y='721.49994'/>
+    <point x='499.02527' y='1000.5'/>
+    <point x='1002.02527' y='1000.5'/>
+    <point x='1002.02527' y='897.5'/>
+    <point x='1242.412' y='897.5'/>
+    <point x='1242.412' y='1000.5'/>
+    <point x='1603.412' y='1000.5'/>
+    <point x='1603.412' y='721.49994'/>
+    <point x='1242.412' y='721.4999'/>
+    <point x='1242.412' y='802.49994'/>
+    <point x='995.412' y='802.49994'/>
+    <point x='995.412' y='721.49994'/>
+  </room>
+</home>

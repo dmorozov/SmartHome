@@ -4,7 +4,9 @@ This project is to build a Smart Home system: a custom neumorphic "dollhouse" to
 
 ## Architecture (decided 2026-07-30)
 
-Full reasoning with citations: [`docs/research/`](docs/research/) · Decision records: [`docs/adr/`](docs/adr/)
+Full reasoning with citations: [`docs/research/`](docs/research/) · Decision records: [`docs/adr/`](docs/adr/README.md)
+
+**Setting up the house:** [`panel/HOUSE-PLAN.md`](panel/HOUSE-PLAN.md) — the manual for drawing your floor plan and placing Devices on it. No programming required.
 
 | Layer | Decision |
 |---|---|

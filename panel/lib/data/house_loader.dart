@@ -190,9 +190,11 @@ void _checkWall(String floorId, Wall wall) {
 
 // ── Devices against the House Plan (Placements × bindings.yaml) ────────
 
-/// A Device pins to a point in its own Room. The position is house-global,
-/// so moving a Device between Rooms means editing two lines, and editing
-/// only `room:` is the mistake this catches (HOUSE-PLAN.md §5).
+/// A Device pins to a point in its own Room. The converter computes both
+/// the Room and the position from one marker in the drawing, so they can no
+/// longer disagree — this is the backstop for a `house.yaml` that was
+/// hand-edited or truncated, which is the escape hatch ADR-0004 kept and
+/// therefore the case that still needs guarding.
 void _checkPin(Room room, Device device) {
   if (room.contains(device.position)) return;
   for (var i = 0; i < room.footprint.length; i++) {

@@ -63,8 +63,9 @@ Run a Home Assistant to develop against — on this Mac, no appliance needed:
 
 ## House Plan pipeline (ADR-0004)
 
-**Full step-by-step runbook: [HOUSE-PLAN.md](HOUSE-PLAN.md)** — drawing
-rules, converter errors and fixes, and how to add/move Devices.
+**The manual: [HOUSE-PLAN.md](HOUSE-PLAN.md)** — written for whoever draws
+the house, start to finish: install, draw, place Devices, convert, bind,
+and every error message with what to do about it.
 
 Short version: draw the house in [Sweet Home 3D](https://www.sweethome3d.com)
 — one level per Floor, name every room in-tool, right angles only (square
