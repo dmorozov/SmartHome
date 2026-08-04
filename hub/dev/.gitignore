@@ -7,3 +7,15 @@ ha-config/*
 
 # The Panel long-lived token. Never commit it.
 token
+
+# ring-mqtt runtime state: holds the Ring REFRESH TOKEN. Never commit any
+# of it — there is nothing authored in this directory.
+ring-mqtt-data/
+
+# Mosquitto: persistence database (config stays tracked).
+mosquitto/data/
+
+# go2rtc: only the tracked EXAMPLE starter; the live go2rtc.yaml is ignored —
+# stream definitions embed camera credentials.
+go2rtc/*
+!go2rtc/go2rtc.example.yaml

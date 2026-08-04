@@ -5,24 +5,53 @@ machine you are coding on — including an Apple-silicon Mac (the HA image
 ships an arm64 variant, verified against the same `2026.7` pin the
 appliance uses).
 
-This exists so the Panel's WebSocket `HubClient` can be built and tested
-now, against real HA protocol traffic, instead of waiting for the mini PC.
+This started as HA-alone, so the Panel's WebSocket `HubClient` could be
+built against real HA protocol traffic instead of waiting for the mini PC.
+On 2026-08-03 it grew the rest of the non-multicast stack — Mosquitto,
+ring-mqtt, go2rtc — because every integration that does not need
+mDNS/multicast can be built right here: Ring, Wyze (RTSP), Kasa (by IP),
+Emporia. Real entities replace the generated stand-ins Device by Device.
 
 **It is not the appliance stack.** `../compose.yaml` — host networking,
-Mosquitto, Zigbee2MQTT, go2rtc — is the real Hub and still belongs on the
-Linux appliance. What this one cannot do, by construction:
+Zigbee2MQTT — is the real Hub and still belongs on the Linux appliance.
+What this one cannot do, by construction:
 
 - no mDNS/multicast (bridge networking), so no HomeKit-controller pairing
-  for the Ecobee and no Samsung TV discovery;
-- no Zigbee, no MQTT broker, no cameras.
+  for the Ecobee and no Samsung TV discovery — and no auto-discovery of
+  LAN devices generally: add Kasa/ESPHome devices manually by IP, and give
+  them DHCP reservations on the router;
+- no Zigbee (no coordinator hardware yet — the SLZB-06 is Ethernet, so
+  Zigbee2MQTT over TCP will work here once it is purchased).
 
-Everything the Panel binds to here is a generated stand-in (below).
+A Device the real integrations do not cover yet binds to a generated
+stand-in (below).
 
 ## Bring it up
 
 ```sh
 cd hub/dev
+cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml   # live file is gitignored
 docker compose up -d
+```
+
+`ring-mqtt-data/config.json` must exist before ring-mqtt starts (v5.x
+refuses to run without it; the whole directory is gitignored because
+ring-mqtt later stores the Ring refresh token next to it). If it is
+missing, recreate it:
+
+```json
+{
+    "mqtt_url": "mqtt://mosquitto:1883",
+    "mqtt_options": "",
+    "livestream_user": "",
+    "livestream_pass": "",
+    "disarm_code": "",
+    "enable_cameras": true,
+    "enable_modes": false,
+    "enable_panic": false,
+    "hass_topic": "homeassistant/status",
+    "ring_topic": "ring"
+}
 ```
 
 Then, **by hand in the browser** — these steps create credentials, so do
@@ -39,6 +68,37 @@ them yourself:
 The token and the account live in `ha-config/.storage/`, which is
 gitignored along with the database and logs; only `configuration.yaml` and
 `packages/` are tracked.
+
+## Real device integrations
+
+Ports for the services below are published on **127.0.0.1 only** — the web
+UIs and the broker are reachable from this machine, never from the LAN.
+
+**MQTT into HA** (once, before Ring): Settings → *Devices & Services* →
+*Add integration* → **MQTT**. Broker `mosquitto`, port `1883`, no
+credentials (the compose network hostname — NOT `localhost`, which inside
+the HA container is the HA container).
+
+**Ring** (ring-mqtt): open <http://localhost:55123>, log in with the Ring
+account + 2FA code; ring-mqtt stores the refresh token in
+`ring-mqtt-data/` (gitignored — it IS a credential). Devices then appear
+in HA via MQTT discovery. The doorbell's live-stream RTSP path for
+`go2rtc.yaml` is shown in the same UI. Known issue (HA core #177014, on
+the repo's calendar list): open Ring live streams on demand only — a held
+stream can suppress doorbell events.
+
+**Kasa plugs/switches**: no container — Settings → *Devices & Services* →
+*Add integration* → **TP-Link Smart Home**, enter the device's IP (broadcast
+discovery does not cross the bridge network). Local protocol, no cloud.
+
+**Cameras** (go2rtc): put stream URLs in `go2rtc/go2rtc.yaml` (gitignored;
+see the example file), `docker compose restart go2rtc`, preview at
+<http://localhost:1984>. Wyze cameras need the official RTSP firmware
+first — test one unit before flashing the fleet.
+
+As each real entity appears, point the Device's `entity:` at it in
+`panel/assets/house/bindings.yaml` — the stand-in fleet keeps covering
+whatever is not yet real.
 
 ## The stand-in fleet
 
@@ -111,6 +171,9 @@ docker compose down             # stop, keep the account and token
 docker compose down && rm -rf ha-config/.storage ha-config/*.db   # start over
 ```
 
-Nothing here migrates to the appliance. When the mini PC arrives, the real
-Hub is `../compose.yaml` with real integrations, and the Panel just points
-at a different host and token.
+No *state* here migrates to the appliance — the HA account, tokens and
+database stay put; the real Hub is `../compose.yaml`, and the Panel just
+points at a different host and token. What DOES carry over is authored
+config: `go2rtc.yaml` stream definitions, the ring-mqtt settings (env vars
+in `compose.yaml`; the Ring account gets re-authenticated on the
+appliance), and the list of Kasa/Emporia IPs to re-add there.

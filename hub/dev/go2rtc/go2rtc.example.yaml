@@ -1,0 +1,29 @@
+# go2rtc starter configuration for the DEVELOPMENT Hub — EXAMPLE FILE.
+#
+# Bring-up: copy this to go2rtc.yaml (which is gitignored) before first start:
+#   cp go2rtc.example.yaml go2rtc.yaml
+#
+# WHY the live file is gitignored: stream source URLs embed camera
+# credentials (RTSP user:pass, Ring stream paths). Same rule as the
+# appliance stack's ../../go2rtc/.
+#
+# Web UI: http://localhost:1984 — every stream gets an MSE/WebRTC preview
+# there, the fastest way to check a source works before touching the Panel.
+
+streams:
+  # Wyze v3 / Pan v3 after the official RTSP firmware flash
+  # (docs/research/hub-and-device-integrations.md §3.2):
+  # wyze_porch: rtsp://user:pass@CAMERA-LAN-IP/live
+
+  # Ring doorbell: ring-mqtt runs its own RTSP server INSIDE the compose
+  # network. The exact path (device id) is shown in the ring-mqtt web UI at
+  # http://localhost:55123 and in `docker compose logs ring-mqtt`:
+  # ring_doorbell: rtsp://ring-mqtt:8554/RING-CAMERA-ID_live
+
+webrtc:
+  candidates:
+    # The compose file publishes 8555 on 127.0.0.1 — this candidate is what
+    # makes WebRTC work for a browser on this machine (go2rtc would otherwise
+    # advertise its unreachable container IP). To view from another device,
+    # open the port binding in compose.yaml and add "LAN-IP:8555" here.
+    - 127.0.0.1:8555

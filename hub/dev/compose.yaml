@@ -1,21 +1,32 @@
-# Development Hub — Home Assistant alone, on the workstation.
+# Development Hub — Home Assistant + the non-multicast device services, on
+# the workstation.
 #
 # NOT the appliance stack. `../compose.yaml` is the real Hub (host
-# networking, Mosquitto, Zigbee2MQTT, go2rtc) and still belongs on the
-# Linux appliance. This one exists for a single purpose: giving the Panel a
-# real Home Assistant to develop its WebSocket `HubClient` against, on
-# whatever machine is at hand — including an Apple-silicon Mac, since the
-# HA image ships an arm64 variant.
+# networking, Zigbee2MQTT) and still belongs on the Linux appliance. This
+# one started as HA-alone for developing the Panel's WebSocket `HubClient`;
+# on 2026-08-03 it grew Mosquitto + ring-mqtt + go2rtc, because every
+# integration that does NOT need mDNS/multicast can be built right here —
+# including on an Apple-silicon Mac (all four images ship arm64 variants).
 #
-# What it deliberately does NOT do:
+# What runs here:
+#   - Home Assistant (same 2026.7 pin as the appliance stack)
+#   - Mosquitto      — broker for ring-mqtt and future MQTT devices
+#   - ring-mqtt      — Ring doorbell via Ring's cloud API -> MQTT discovery
+#   - go2rtc         — restream layer for camera live view (Wyze RTSP, Ring)
+#   Plus, needing no container at all: Kasa plugs/switches (HA's native
+#   tplink integration, local protocol — add each device manually BY IP,
+#   discovery broadcasts don't cross Docker bridge networking).
+#
+# What it still deliberately does NOT do:
 #   - No host networking, so no mDNS/multicast, so no HomeKit-controller
 #     pairing (Ecobee) and no Samsung TV discovery. Those need the Linux
 #     appliance; see ../README.md.
-#   - No Zigbee, no MQTT, no cameras. The entities here are generated
-#     helpers standing in for the real fleet (see README.md).
+#   - No Zigbee (no coordinator hardware yet; the SLZB-06 is Ethernet, so
+#     Z2M over TCP would work here once it arrives).
 #
-# Same image pin as the appliance stack — develop against the version we
-# actually ship.
+# Host-published ports are bound to 127.0.0.1 where only this machine needs
+# them (MQTT debugging, the two web UIs); containers talk to each other over
+# the compose network by service name.
 name: smarthome-dev-hub
 
 services:
@@ -30,4 +41,63 @@ services:
       - "8123:8123"
     volumes:
       - ./ha-config:/config
+    restart: unless-stopped
+
+  mosquitto:
+    # Same image pin as the appliance stack.
+    image: eclipse-mosquitto:2
+    container_name: mosquitto-dev
+    ports:
+      # localhost-only: for mosquitto_sub/pub debugging from this machine.
+      # ring-mqtt and HA reach the broker over the compose network instead.
+      - "127.0.0.1:1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+    restart: unless-stopped
+
+  ring-mqtt:
+    # Pinned exactly (5.9.3 was latest at first bring-up, 2026-08-03) — same
+    # deliberate-updates-only policy as the HA image.
+    # NOT a Home Assistant "Add-on": add-ons require HA OS/Supervised; on HA
+    # Container this standalone image is the same project, configured by
+    # ring-mqtt-data/config.json, discovered by HA through MQTT discovery.
+    # (v5.x REQUIRES the config file — the MQTTHOST-style env vars are gone.)
+    image: tsightler/ring-mqtt:5.9.3
+    container_name: ring-mqtt-dev
+    depends_on:
+      - mosquitto
+    environment:
+      TZ: ${TZ:-UTC}
+    ports:
+      # Web UI for the Ring login/2FA -> refresh-token flow, and for reading
+      # each camera's internal RTSP path. localhost-only.
+      - "127.0.0.1:55123:55123"
+    volumes:
+      # config.json (authored, no secrets — recreate from README.md if lost)
+      # plus runtime state including the Ring REFRESH TOKEN. The whole
+      # directory is gitignored because of that token.
+      - ./ring-mqtt-data:/data
+    restart: unless-stopped
+
+  go2rtc:
+    # Same image pin as the appliance stack (the version Frigate 0.17 embeds,
+    # per docs/research/frigate-amd-acceleration.md).
+    image: alexxit/go2rtc:1.9.10
+    container_name: go2rtc-dev
+    ports:
+      # API + web UI (stream preview via MSE works over this port alone).
+      - "127.0.0.1:1984:1984"
+      # RTSP out, for checking streams with VLC/ffprobe from this machine.
+      - "127.0.0.1:8554:8554"
+      # WebRTC media. Bound to localhost like the rest — the Panel runs in a
+      # browser on this machine; go2rtc.yaml lists 127.0.0.1:8555 as the
+      # candidate. To view from another device, publish these on the LAN and
+      # add this machine's LAN IP as a candidate.
+      - "127.0.0.1:8555:8555/tcp"
+      - "127.0.0.1:8555:8555/udp"
+    volumes:
+      # Stream definitions (may embed camera credentials — gitignored; copy
+      # go2rtc.example.yaml -> go2rtc.yaml first, see README.md).
+      - ./go2rtc:/config
     restart: unless-stopped

@@ -11,6 +11,7 @@ The decisions this project is built on, and the reasoning that would otherwise h
 | [0005](0005-devices-authored-in-the-drawing.md) | Devices are authored in the drawing | Supersedes one clause of 0004: Devices are markers in the plan, positions and Rooms computed |
 | [0006](0006-togglability-is-decided-by-the-house.md) | Togglability is a House-side fact | Whether a tap flips a Device follows from its kind, never from live state — this is what protects the HVAC |
 | [0007](0007-the-panel-recovers-alone-and-says-when-it-cannot.md) | Recover alone; say so when you can't | Reconnect forever with backoff, but a rejected token is terminal and names the action a human must take |
+| [0008](0008-device-integrations-on-a-linux-host-never-macos.md) | Integrations on a Linux host, never macOS | Docker-on-Mac can't do multicast in any form; the Hub runs on the laptop now, the mini PC later |
 
 ## Related reference material
 
