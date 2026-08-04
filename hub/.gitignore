@@ -21,6 +21,15 @@ z2m-data/*
 go2rtc/*
 !go2rtc/go2rtc.example.yaml
 
+# ring-mqtt: only the tracked EXAMPLE starter. The live config.json embeds
+# the `ring` MQTT password, and the directory accumulates runtime state
+# including the Ring REFRESH TOKEN — none of it may ever be committable.
+ring-mqtt-data/*
+!ring-mqtt-data/config.example.json
+
+# The laptop/appliance Hub's long-lived Panel token (phase-1 bring-up).
+token
+
 # Secrets in any form.
 secrets.yaml
 secret.yaml

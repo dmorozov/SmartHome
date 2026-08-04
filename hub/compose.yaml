@@ -1,24 +1,36 @@
-# Hub stack — Home Assistant + Mosquitto + Zigbee2MQTT + go2rtc.
+# Hub stack — Home Assistant + Mosquitto + ring-mqtt + go2rtc (+ Zigbee2MQTT,
+# parked behind the `zigbee` profile until the SLZB-06 coordinator exists).
 #
-# Runs on the dev laptop today and migrates UNCHANGED to the Ryzen AI mini PC
-# (copy this directory, including runtime state, and `docker compose up -d`).
+# Runs on the dev laptop today (ADR-0008) and migrates UNCHANGED to the Ryzen
+# AI mini PC (copy this directory, including runtime state, and
+# `docker compose up -d`).
 #
-# Start order: mosquitto -> zigbee2mqtt (depends_on) -> homeassistant.
+# Start order: mosquitto -> ring-mqtt/zigbee2mqtt (depends_on) -> homeassistant.
 #   `docker compose up -d` handles it; Home Assistant tolerates the broker
 #   appearing after it (the MQTT integration reconnects).
 #
-# Bring-up: see README.md in this directory. TL;DR:
-#   1. cp z2m-data/configuration.example.yaml z2m-data/configuration.yaml
-#      and put the SLZB-06 address into the copy (the live file is gitignored
-#      because Z2M injects the Zigbee network key into it at runtime).
-#   2. cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml (live file gitignored —
+# Bring-up: docs/plans/device-integrations/phase-1-hub-stack.md is the
+# current step-by-step; README.md in this directory has the standing notes.
+# TL;DR:
+#   1. Mosquitto auth bootstrap (auth is REQUIRED — the broker is
+#      LAN-exposed): create the passwd file, then add users after start —
+#      see mosquitto/config/mosquitto.conf.
+#   2. cp ring-mqtt-data/config.example.json ring-mqtt-data/config.json
+#      and put the `ring` MQTT password into the copy (live file gitignored —
+#      the directory also accumulates the Ring refresh token).
+#   3. cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml (live file gitignored —
 #      stream URLs embed camera credentials).
-#   3. docker compose up -d
-#   4. HA onboarding at http://<appliance>:8123, Z2M frontend at :8080.
+#   4. docker compose up -d   (zigbee2mqtt stays parked; when the SLZB-06
+#      arrives: configure z2m-data/, then docker compose --profile zigbee up -d)
+#   5. HA onboarding at http://<appliance>:8123; MQTT integration -> broker
+#      127.0.0.1:1883, user `ha`.
 #
 # Secrets are NOT in git:
-#   - The Panel's long-lived HA token lives in the Panel's own config.
+#   - The Panel's long-lived HA token lives in ./token (gitignored).
 #   - HA runtime state (./ha-config/.storage — credentials, tokens) is gitignored.
+#   - MQTT passwords live only in mosquitto/config/passwd (hashed, gitignored),
+#     ring-mqtt-data/config.json (gitignored), and HA's .storage.
+#   - ring-mqtt stores the Ring REFRESH TOKEN under ./ring-mqtt-data (gitignored).
 #   - Zigbee2MQTT writes the generated Zigbee network key into ./z2m-data
 #     after first start — see hub/.gitignore and README before committing.
 
@@ -62,6 +74,11 @@ services:
     # arrive silently.
     image: koenkk/zigbee2mqtt:2
     container_name: zigbee2mqtt
+    # PARKED until the SLZB-06 coordinator is purchased and on the LAN —
+    # without it the service just crash-loops. Plain `up -d` skips it; start
+    # with `docker compose --profile zigbee up -d` once z2m-data/ is
+    # configured (docs/plans/device-integrations/phase-1-hub-stack.md §1b).
+    profiles: ["zigbee"]
     depends_on:
       - mosquitto
     # host networking so the config's `mqtt://localhost:1883` reaches the
@@ -73,6 +90,36 @@ services:
     # NO usb device mapping on purpose: the coordinator is an SMLIGHT SLZB-06
     # reached over TCP (Ethernet), not a USB stick. The radio stays central in
     # the house and survives the laptop -> mini PC migration untouched.
+    restart: unless-stopped
+
+  ring-mqtt:
+    # Pinned exactly (latest at first bring-up, 2026-08-03) — same
+    # deliberate-updates-only policy as the HA image. Standalone container,
+    # NOT a Home Assistant "Add-on" (add-ons require HA OS/Supervised; on HA
+    # Container this same project runs standalone and reaches HA via MQTT
+    # discovery).
+    image: tsightler/ring-mqtt:5.9.3
+    container_name: ring-mqtt
+    depends_on:
+      - mosquitto
+    # Default bridge network ON PURPOSE, unlike most of this stack: ring-mqtt
+    # only needs the broker (service-name DNS: mqtt://mosquitto:1883) and the
+    # Ring cloud, and its internal RTSP server binds 8554 — host networking
+    # would collide with go2rtc's 8554.
+    environment:
+      TZ: ${TZ:-UTC}
+    ports:
+      # Web UI: the Ring login/2FA -> refresh-token flow, and each camera's
+      # RTSP path.
+      - "55123:55123"
+      # Internal RTSP server, remapped: 8554 belongs to go2rtc. go2rtc pulls
+      # Ring live streams from rtsp://127.0.0.1:8556/<device-id>_live.
+      - "8556:8554"
+    volumes:
+      # config.json (copy from config.example.json, add the MQTT password)
+      # plus runtime state including the Ring REFRESH TOKEN — everything but
+      # the example is gitignored.
+      - ./ring-mqtt-data:/data
     restart: unless-stopped
 
   go2rtc:

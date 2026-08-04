@@ -4,6 +4,10 @@
 edits first (done on the Mac, synced via git — they are plain repo files),
 then bring-up on the laptop.
 
+> **Status: §1 (all repo edits) applied 2026-08-03 on the Mac.** The
+> snippets below are kept as the record of what changed and why; on the
+> laptop, start at §2 after `git pull`.
+
 ## 1. Compose promotion (repo edits)
 
 ### 1a. Add ring-mqtt to `hub/compose.yaml`
@@ -33,24 +37,12 @@ server binds 8554 and would collide with go2rtc's host-networked 8554:
     restart: unless-stopped
 ```
 
-`hub/ring-mqtt-data/config.json` (create before first start; v5.x refuses
-to run without it). `mqtt_url` uses the compose-network service name, with
-the phase-1c credentials:
-
-```json
-{
-    "mqtt_url": "mqtt://ring:<ring-password>@mosquitto:1883",
-    "mqtt_options": "",
-    "livestream_user": "",
-    "livestream_pass": "",
-    "disarm_code": "",
-    "enable_cameras": true,
-    "enable_modes": false,
-    "enable_panic": false,
-    "hass_topic": "homeassistant/status",
-    "ring_topic": "ring"
-}
-```
+`hub/ring-mqtt-data/config.example.json` is the tracked starter (same
+example-file pattern as go2rtc and Z2M; v5.x refuses to start without a
+config.json). On the laptop:
+`cp ring-mqtt-data/config.example.json ring-mqtt-data/config.json`, then
+put the `ring` user's password from §1c into `mqtt_url` — it uses the
+compose-network service name: `mqtt://ring:<ring-password>@mosquitto:1883`.
 
 ### 1b. Park Zigbee2MQTT behind a compose profile
 
@@ -67,17 +59,27 @@ image tag at that point, per the existing comment in the service.)
 
 ### 1c. Mosquitto: authenticated access NOW (D4)
 
-Host networking exposes 1883 to the LAN, so the example config's "before
-the mini PC" deadline moves to today. In `hub/mosquitto/config/mosquitto.conf`:
-`allow_anonymous false`, `password_file /mosquitto/config/passwd`. On the
-laptop after first start (or via a throwaway mosquitto container):
+The published port exposes 1883 to the LAN, so the old config's "before
+the mini PC" deadline moved to today: `hub/mosquitto/config/mosquitto.conf`
+now sets `allow_anonymous false` + `password_file /mosquitto/config/passwd`.
+
+**Gotcha the config comment also documents**: mosquitto refuses to start
+if `password_file` names a missing file — so the file must exist (empty
+is fine: empty + no-anonymous = nobody connects until users are added)
+*before* first start. On the laptop, from `hub/`:
 
 ```sh
-docker exec mosquitto mosquitto_passwd -c -b /mosquitto/config/passwd ha    '<ha-password>'
-docker exec mosquitto mosquitto_passwd    -b /mosquitto/config/passwd ring  '<ring-password>'
-docker exec mosquitto mosquitto_passwd    -b /mosquitto/config/passwd z2m   '<z2m-password>'   # for later
+touch mosquitto/config/passwd
+sudo chown 1883:1883 mosquitto/config/passwd && sudo chmod 600 mosquitto/config/passwd
+docker compose up -d mosquitto
+docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd ha    '<ha-password>'
+docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd ring  '<ring-password>'
+docker exec mosquitto mosquitto_passwd -b /mosquitto/config/passwd z2m   '<z2m-password>'   # for later
 docker compose restart mosquitto
 ```
+
+(`1883` is the eclipse-mosquitto container's `mosquitto` uid; the chown
+lets the broker read a 600-permission file across the bind mount.)
 
 `passwd` is already covered by `hub/.gitignore`. Passwords live in the
 password store of your choice; they appear only in `passwd` (hashed),
@@ -86,7 +88,8 @@ later), and HA's `.storage` (gitignored).
 
 ### 1d. Gitignore + go2rtc starter
 
-- `hub/.gitignore`: add `ring-mqtt-data/` and `token`.
+- `hub/.gitignore`: `ring-mqtt-data/*` (except the example) and `token`
+  added.
 - `cp hub/go2rtc/go2rtc.example.yaml hub/go2rtc/go2rtc.yaml` (on the
   laptop). Host networking means WebRTC needs no candidate tricks — leave
   the file minimal until phase 3 adds streams.
@@ -95,6 +98,11 @@ later), and HA's `.storage` (gitignored).
 
 ```sh
 cd hub
+# 1. broker auth bootstrap — the touch/chown/mosquitto_passwd sequence from §1c
+# 2. live configs from the tracked examples:
+cp ring-mqtt-data/config.example.json ring-mqtt-data/config.json   # + set the ring password
+cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml
+# 3. everything up:
 docker compose up -d          # homeassistant, mosquitto, go2rtc, ring-mqtt
 docker compose ps             # 4 services Up; zigbee2mqtt absent (profile)
 ```
