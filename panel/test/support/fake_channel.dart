@@ -84,16 +84,40 @@ Map<String, dynamic> stateChangedFrame(Map<String, dynamic> entity) => {
       },
     };
 
+/// The `get_config` answer, trimmed to the one field the Panel reads.
+/// [temperature] is the symbol HA puts in `unit_system.temperature` — the
+/// house Hub says `°F`, the dev Hub `°C`, and a Hub that says something
+/// else is a case the Panel has to survive.
+Map<String, dynamic> configFrame(String temperature) => {
+      'id': 1,
+      'type': 'result',
+      'success': true,
+      'result': {
+        'location_name': 'Home',
+        'unit_system': {'temperature': temperature, 'length': 'km'},
+      },
+    };
+
 /// Runs the handshake on [channel] up to the point the Hub has answered
-/// `get_states` with [entities]. The result id is arbitrary: the Panel keys
-/// off the payload's shape, not off ids it sent.
+/// `get_config` and `get_states` with [entities]. The result ids are
+/// arbitrary: the Panel keys off the payload's shape, not off ids it sent.
+///
+/// [temperature] defaults to a Celsius Hub, which is what the dev Hub is —
+/// so a suite that is not *about* units gets a Hub that answered, like
+/// every real one does. Pass null for the Hub that never answers, and `°F`
+/// for the house.
 Future<void> connectAndSeed(
-    FakeChannel channel, List<Map<String, dynamic>> entities) async {
+    FakeChannel channel, List<Map<String, dynamic>> entities,
+    {String? temperature = '°C'}) async {
   channel.serverSays({'type': 'auth_required', 'ha_version': '2026.7'});
   await pumpEventQueue();
   channel.serverSays({'type': 'auth_ok', 'ha_version': '2026.7'});
   await pumpEventQueue();
+  if (temperature != null) {
+    channel.serverSays(configFrame(temperature));
+    await pumpEventQueue();
+  }
   channel.serverSays(
-      {'id': 1, 'type': 'result', 'success': true, 'result': entities});
+      {'id': 2, 'type': 'result', 'success': true, 'result': entities});
   await pumpEventQueue();
 }

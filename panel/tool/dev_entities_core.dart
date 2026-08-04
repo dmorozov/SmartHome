@@ -142,14 +142,14 @@ DevPackage generateDevPackage(
             '        unique_id: dev_$obj\n'
             '        state: "{{ states(\'input_text.${obj}_status\') }}"');
         binding[key] = 'sensor.$slug';
-      case ThermostatState(:final currentC, :final targetC):
+      case ThermostatState(:final current, :final target):
         // A real climate entity, built the only way that needs no hardware:
         // generic_thermostat over a helper "room temperature" sensor and a
         // dummy heater switch. It reports current_temperature + temperature
         // exactly as the Ecobee will.
         numbers.add('  ${obj}_current:\n'
             '    name: ${_q('${device.name} — measured °C')}\n'
-            '    initial: $currentC\n'
+            '    initial: $current\n'
             '    min: 0\n'
             '    max: 40\n'
             '    step: 0.1\n'
@@ -177,7 +177,7 @@ DevPackage generateDevPackage(
             // whole degrees and the Panel shows 21° for a 21.4° room.
             '    precision: 0.1\n'
             '    target_temp_step: 0.5\n'
-            '    target_temp: $targetC');
+            '    target_temp: $target');
         binding[key] = 'climate.$slug';
     }
   }

@@ -14,13 +14,78 @@ Run the Panel against the laptop Hub with `LOG=info` in the environment
   excluded by construction (they log nothing).
 - No lingering `hub.state_unusable` at rest.
 - Every binding's `connectivity:` matches reality per this plan's phases —
-  the Popup shows it, so a lie is user-visible. Expected split:
-  - `local`: Kasa ×3, Tesla WC, Ecobee (HomeKit), any RTSP-flashed Wyze
+  the Popup shows it, so a lie is user-visible. Expected split, **revised
+  2026-08-04** after phase 2 was measured:
+  - `local`: the EP40's **two** outlet children, Ecobee (HomeKit), any
+    RTSP-flashed Wyze. ~~Kasa ×3, Tesla WC~~ — see below.
   - `cloud`: Ring, wyze-bridge cams, LG ×2, Litter-Robot, Petlibro ×2,
     Emporia (until reflash day)
   - unbound (hardware absent): `garage-door` (awaits ratgdo),
+    `ev-charger` (the Tesla Wall Connector serves no API — phase 2 §2),
     `oven` (D3 — unless the October decision funds it), `tv-*` (out of
     scope), plus any `light-*`/`outlet-*` Key with no physical device yet.
+  - **in the Hub but bound to nothing, on purpose**: `switch.old_fridge`
+    and `switch.aquarium` (ADR-0006 single-tap hazard), the EP40 parent
+    switch (it drives both children), and all of Rachio (no irrigation
+    `DeviceKind` exists). None of these show up in `missing` — §1a.
+
+## 1a. `missing=0` is only half a check — the inverse pass
+
+**Structural gap, found 2026-08-04. The plan never had this check.** Read
+`panel/lib/data/ha_hub.dart`: `missing` is
+`_byEntity.keys.where((e) => !bound.contains(e))`, and `_byEntity` is built
+**from `bindings.yaml`**. So the number only ever answers *"is every entity
+I was told about present on the Hub?"* — one direction, and the narrow one.
+
+The consequence: **a real device that has no Key at all is invisible to this
+metric.** It puts nothing into `_byEntity`, so it can never be counted
+missing. `missing=0` is therefore reachable while devices sit in the Hub
+that the Dollhouse does not show and nobody can reach from the wall — which
+is the exact failure this phase exists to prevent, and it passes silently.
+
+Not hypothetical. Coming out of phase 2 there are **four live switchable
+Kasa sockets against three `outlet` Keys**, and two of those sockets (the
+fridge and the aquarium) are deliberately left unbound for the ADR-0006
+single-tap reason. All of Rachio is unbound too, for want of an irrigation
+`DeviceKind`. `missing` reports zero of them.
+
+So the sweep needs a **second, inverse check**: enumerate the Hub's entities
+and list the ones **no binding references**, then classify each. Run it from
+the **repo root** (the paths are relative; `hub/token` is 0600, so this must
+be your own login):
+
+```sh
+curl -sS -H "Authorization: Bearer $(cat hub/token)" \
+  http://192.168.68.81:8123/api/states \
+  | python3 -c '
+import json, re, sys
+states = {e["entity_id"] for e in json.load(sys.stdin)}
+text = open("panel/assets/house/bindings.yaml").read()
+bound = set(re.findall(r"entity:\s*([a-z_]+\.[a-z0-9_]+)", text))
+print("bound but absent from the Hub:")
+for e in sorted(bound - states): print("  ", e)
+print("on the Hub, referenced by no binding:")
+for e in sorted(states - bound): print("  ", e)
+'
+```
+
+The first list is what `hub.missing_entities` already tells you. The second
+is the new one, and it will be long — most of it is HA plumbing (`sun.*`,
+`person.*`, `update.*`, every `*_led` and `*_cloud_connection`). Length is
+not the point; **triage is**. Every entity in it lands in one of four
+buckets, and the buckets go into §2's table alongside the mapping:
+
+| Bucket | Meaning | Action |
+|---|---|---|
+| **Not a Device** | HA internals, diagnostics, LED and status children | none — expected noise |
+| **Deliberately unexposed** | real and controllable, and we chose not to pin it (`switch.old_fridge`, `switch.aquarium`) | record *why*, with the ADR reference — otherwise the next sweep re-litigates it |
+| **Redundant** | a parent whose children are bound (`switch.tp_link_smart_plug_722c`) | none — binding it too would double-drive the outlets |
+| **Genuinely unexposed** | a real Device with no Key | the only real finding. Needs a drawing session (ADR-0005), and possibly a new `DeviceKind` before that |
+
+The honest version of this phase's headline is `missing=0` **and** an empty
+"genuinely unexposed" bucket. Automating the inverse check — a test, or a
+`[panel]` diagnostic that logs unreferenced non-plumbing entities — is a
+reasonable follow-up; the classification is a judgement call and stays human.
 
 ## 2. Placeholder-Key hygiene (D5)
 
@@ -64,7 +129,10 @@ never rubber-stamp.
 
 ## Done when
 
-Every box above holds, `flutter test` is green, and a phone photo of the
+Every box above holds — including §1a's inverse pass with an empty
+"genuinely unexposed" bucket, not just `missing=0` — `flutter test` is
+green (with every integrated Key listed in `bindings_drift_test.dart`'s
+`_integrated` set), and a phone photo of the
 Panel showing live watts, a running washer, a doorbell popup, and a
 toggled real light exists in the family chat. That last one is the actual
 acceptance test.

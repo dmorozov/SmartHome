@@ -36,7 +36,10 @@ class DevicePresentation {
 
   /// Compact text face for the pin, or null for the icon face.
   String? get reading => switch (state) {
-        ThermostatState t => '${t.currentC.toStringAsFixed(1)}°',
+        // No unit on purpose, even when the Hub has stated one: at pin size
+        // the letter is noise, and a bare `°` asserts nothing that could be
+        // wrong. The Popup is where the unit gets said out loud.
+        ThermostatState t => _degrees(t.current, null),
         PowerState p => _watts(p.watts, compact: true),
         _ => null,
       };
@@ -57,7 +60,7 @@ class DevicePresentation {
         SwitchState s => s.on ? 'On' : 'Off',
         GarageDoorState g => g.open ? 'Open' : 'Closed',
         ThermostatState t =>
-          '${t.currentC.toStringAsFixed(1)} °C now · target ${t.targetC.toStringAsFixed(1)} °C',
+          '${_degrees(t.current, t.unit)} now · target ${_degrees(t.target, t.unit)}',
         PowerState p => _watts(p.watts, compact: false),
         StatusState s => s.status,
         null => 'Unknown',
@@ -69,4 +72,14 @@ class DevicePresentation {
   static String _watts(double watts, {required bool compact}) => watts >= 1000
       ? '${(watts / 1000).toStringAsFixed(1)}${compact ? 'kW' : ' kW'}'
       : '${watts.round()}${compact ? 'W' : ' W'}';
+
+  /// The one temperature-formatting rule, and the only place the Panel is
+  /// allowed to write a degree symbol.
+  ///
+  /// A null [unit] renders `21.4°` — not an abbreviated `°C`, but the
+  /// reading of a temperature nobody has stated the unit of. That is the
+  /// whole safety property: a suffix appears only when it came from the
+  /// Hub, so the wall can be uninformative but never wrong.
+  static String _degrees(double value, TemperatureUnit? unit) =>
+      '${value.toStringAsFixed(1)}${unit == null ? '°' : ' ${unit.symbol}'}';
 }

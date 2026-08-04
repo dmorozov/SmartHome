@@ -72,7 +72,7 @@ void main() {
 
     // The room also holds an outlet the fake Hub seeds on — a non-light
     // switch must not make the Room read as lit.
-    expect((hub.states['outlet-media'] as SwitchState).on, isTrue);
+    expect((hub.states['outlet-outdoor-a'] as SwitchState).on, isTrue);
     expect(controller.isRoomLit(room), isFalse);
 
     await hub.toggle('light-reading');

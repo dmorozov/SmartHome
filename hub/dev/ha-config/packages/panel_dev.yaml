@@ -14,7 +14,7 @@
 #   tv-family        input_boolean.tv_family
 #   light-family     input_boolean.light_family
 #   light-reading    input_boolean.light_reading
-#   outlet-media     input_boolean.outlet_media
+#   outlet-outdoor-a input_boolean.outlet_outdoor_a
 #   oven             sensor.oven
 #   light-kitchen    input_boolean.light_kitchen
 #   feeder-granary   sensor.granary_feeder
@@ -23,7 +23,7 @@
 #   light-living     input_boolean.light_living
 #   cam-living       sensor.living_cam
 #   light-office     input_boolean.light_office
-#   outlet-office    input_boolean.outlet_office
+#   outlet-outdoor-b input_boolean.outlet_outdoor_b
 #   cam-office       sensor.office_cam
 #   doorbell         sensor.ring_doorbell
 #   thermostat       climate.ecobee
@@ -54,8 +54,8 @@ input_boolean:
   light_reading:
     name: "Reading Lamp"
     initial: false
-  outlet_media:
-    name: "Media Outlet"
+  outlet_outdoor_a:
+    name: "Outdoor Outlet A"
     initial: true
   light_kitchen:
     name: "Kitchen Light"
@@ -69,8 +69,8 @@ input_boolean:
   light_office:
     name: "Office Light"
     initial: false
-  outlet_office:
-    name: "Desk Outlet"
+  outlet_outdoor_b:
+    name: "Outdoor Outlet B"
     initial: true
   thermostat_call_for_heat:
     name: "Ecobee — calling for heat"

@@ -109,7 +109,12 @@ KindSpec specOf(DeviceKind kind) => switch (kind) {
       DeviceKind.thermostat => KindSpec(
           slug: 'thermostat',
           family: StateFamily.thermostat,
-          seed: (id) => ThermostatState(id, currentC: 21.4, targetC: 21.0)),
+          // Celsius, and stated rather than assumed: an invented state has
+          // to be complete, and this seed is also what the dev-Hub
+          // generator writes `°C` helpers from. Only the real Hub gets to
+          // report a unit it was not told — see HaHubClient.
+          seed: (id) => ThermostatState(id,
+              current: 21.4, target: 21.0, unit: TemperatureUnit.celsius)),
       DeviceKind.energyMonitor => KindSpec(
           slug: 'energy-monitor',
           family: StateFamily.power,

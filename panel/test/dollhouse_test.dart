@@ -116,8 +116,8 @@ void main() {
 
     expect(find.text('21.4°'), findsOneWidget);
 
-    hub.pushState(
-        const ThermostatState('thermostat', currentC: 23.0, targetC: 21.0));
+    hub.pushState(const ThermostatState('thermostat',
+        current: 23.0, target: 21.0, unit: TemperatureUnit.celsius));
     await tester.pumpAndSettle();
 
     expect(find.text('23.0°'), findsOneWidget);

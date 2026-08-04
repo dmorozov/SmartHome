@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# hactl — run Home Assistant WebSocket commands from inside the HA container.
+#
+# WHY THE CONTAINER IS THE RUNTIME
+#   The Hub host has python3 but neither `aiohttp` nor `websockets` (measured
+#   2026-08-04: `python3 -c "import aiohttp"` -> ModuleNotFoundError, same for
+#   websockets). Installing either would need sudo, which this host does not
+#   hand out without a password. The homeassistant image already ships
+#   aiohttp on its own Python, and `docker exec` needs no sudo because the
+#   repo user is in the `docker` group. HA is host-networked, so 127.0.0.1
+#   inside the container is the same HA as 127.0.0.1 on the host.
+#
+# WHY THE TOKEN GOES THROUGH `docker exec -e`
+#   It never appears in a command line, in `ps`, or in `docker inspect` of a
+#   long-lived container.
+#
+# USAGE
+#   ./hactl '[{"type":"config_entries/flow/progress"}]'
+#   ./hactl '[{"type":"config_entries/get"},{"type":"config/entity_registry/list"}]'
+#
+#   The argument is a JSON ARRAY of command objects, run in order on one
+#   authenticated connection. The `id` field is added for you.
+#   Output is a JSON array of {cmd, success, result, error}, one element per
+#   command, in the order given. Non-result frames (events) are skipped.
+#
+# ENV
+#   HUB_DIR    directory holding the HA token file  (default: <repo>/hub)
+#   HA_CONTAINER  container name                    (default: homeassistant)
+#   HA_WS_URL  websocket URL as seen from inside it (default:
+#              http://127.0.0.1:8123/api/websocket)
+#
+# EXIT CODES
+#   0 ok · 1 usage/token/auth · plus whatever docker exec returns
+set -euo pipefail
+
+if [ $# -ne 1 ]; then
+  echo "usage: $(basename "$0") '<json-array-of-commands>'" >&2
+  echo "example: $(basename "$0") '[{\"type\":\"config_entries/flow/progress\"}]'" >&2
+  exit 1
+fi
+
+HUB_DIR="${HUB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../hub" && pwd)}"
+HA_CONTAINER="${HA_CONTAINER:-homeassistant}"
+HA_WS_URL="${HA_WS_URL:-http://127.0.0.1:8123/api/websocket}"
+
+if [ ! -r "$HUB_DIR/token" ]; then
+  echo "hactl: no readable token at $HUB_DIR/token (set HUB_DIR=…)" >&2
+  exit 1
+fi
+
+# Fail fast on malformed input, on the host, before paying for a docker exec.
+printf '%s' "$1" | python3 -c 'import json,sys; json.loads(sys.stdin.read())' 2>/dev/null || {
+  echo "hactl: argument is not valid JSON" >&2
+  exit 1
+}
+
+exec docker exec -i \
+  -e HA_TOKEN="$(cat "$HUB_DIR/token")" \
+  -e HA_WS_URL="$HA_WS_URL" \
+  -e HA_CMDS="$1" \
+  "$HA_CONTAINER" python3 - <<'PY'
+import asyncio, json, os, sys
+import aiohttp
+
+TOKEN = os.environ["HA_TOKEN"].strip()
+URL = os.environ["HA_WS_URL"]
+COMMANDS = json.loads(os.environ["HA_CMDS"])
+if isinstance(COMMANDS, dict):
+    COMMANDS = [COMMANDS]
+
+
+async def main(commands):
+    out = []
+    async with aiohttp.ClientSession() as sess:
+        async with sess.ws_connect(URL, heartbeat=30) as ws:
+            m = await ws.receive_json()
+            if m.get("type") != "auth_required":
+                print(json.dumps({"error": "handshake", "msg": m}), file=sys.stderr)
+                return 1
+            await ws.send_json({"type": "auth", "access_token": TOKEN})
+            m = await ws.receive_json()
+            if m.get("type") != "auth_ok":
+                print(json.dumps({"error": "auth", "msg": m}), file=sys.stderr)
+                return 1
+            for i, cmd in enumerate(commands, start=1):
+                await ws.send_json({"id": i, **cmd})
+                while True:
+                    r = await asyncio.wait_for(ws.receive_json(), timeout=90)
+                    if r.get("id") == i and r.get("type") == "result":
+                        out.append({
+                            "cmd": cmd.get("type"),
+                            "success": r.get("success"),
+                            "result": r.get("result"),
+                            "error": r.get("error"),
+                        })
+                        break
+    print(json.dumps(out, indent=2, default=str))
+    return 0 if all(e["success"] for e in out) else 1
+
+
+sys.exit(asyncio.run(main(COMMANDS)))
+PY

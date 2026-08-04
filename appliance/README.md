@@ -8,6 +8,8 @@ Everything here follows the spike runbook: [`../docs/research/flutter-cage-spike
 
 | File | What it does |
 |---|---|
+| `COMMISSIONING.md` | **Start here to stand the system up.** The master runbook: bare OS → Hub stack → Home Assistant → devices → pins on the Panel. Carries the consolidated "what the operator must obtain" table, the as-built vs instructions split, and the traps. Chapters live in `commissioning/` |
+| `commissioning/` | The seven chapters `COMMISSIONING.md` links — host and network, hub stack, Home Assistant, local devices, cloud devices, Panel and bindings, then device lifecycle (adding / renaming / repurposing / removing after the first time) — plus `commissioning/hactl`, the single WebSocket driver they all call (registries and pending flows have no REST view) |
 | `ansible/` | **The provisioning path**: packages, `cage` user, PAM, templated `cage@.service`, gated enable/hardening (inventory: laptop / minipc / test-appliance) — see `ansible/README.md` |
 | `scripts/check-hybrid-gpu.sh` | Interactive diagnostic, runbook Step 0a: which GPU owns HDMI; prints the `WLR_DRM_DEVICES` pin or mitigation advice; read-only |
 | `scripts/screen-power-probe.sh` | Interactive diagnostic, runbook Step 7: `wlr-randr` blank/wake cycle + read-only DDC/CI probe; never runs destructive `setvcp` |

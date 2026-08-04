@@ -106,8 +106,12 @@ class FakeHub implements HubClient {
         case ThermostatState t:
           pushState(ThermostatState(
             t.deviceId,
-            currentC: t.currentC + (_random.nextDouble() - 0.5) * 0.2,
-            targetC: t.targetC,
+            // Drift is in whatever unit the reading already carries: a
+            // tenth of a degree is a plausible wobble either way, and
+            // inventing a unit here is the thing the fake must not model.
+            current: t.current + (_random.nextDouble() - 0.5) * 0.2,
+            target: t.target,
+            unit: t.unit,
           ));
         case PowerState p:
           pushState(PowerState(

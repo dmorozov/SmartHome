@@ -19,6 +19,7 @@ void main() {
   DevicePresentation present(DeviceKind kind, DeviceState? state) =>
       DevicePresentation(device(kind), state);
 
+
   group('glows', () {
     test('switch on glows; switch off does not', () {
       expect(
@@ -46,9 +47,7 @@ void main() {
 
     test('thermostat, power, status and unknown states never glow', () {
       expect(
-        present(DeviceKind.thermostat,
-                const ThermostatState('d1', currentC: 21.4, targetC: 21))
-            .glows,
+        present(DeviceKind.thermostat, _celsius(21.4, 21)).glows,
         isFalse,
       );
       expect(
@@ -65,13 +64,20 @@ void main() {
   });
 
   group('reading', () {
-    test('thermostat reads one-decimal degrees', () {
-      expect(
-        present(DeviceKind.thermostat,
-                const ThermostatState('d1', currentC: 21.4, targetC: 21))
-            .reading,
-        '21.4°',
-      );
+    test('thermostat reads one-decimal degrees, unit-free whatever the Hub '
+        'speaks', () {
+      // The pin says the number and nothing more. At pin size the unit
+      // letter is noise, and a bare `°` cannot contradict the Hub — so all
+      // three of these render identically on the Dollhouse and only the
+      // Popup distinguishes them.
+      for (final state in [
+        _celsius(21.4, 21),
+        const ThermostatState('d1',
+            current: 21.4, target: 21, unit: TemperatureUnit.fahrenheit),
+        const ThermostatState('d1', current: 21.4, target: 21, unit: null),
+      ]) {
+        expect(present(DeviceKind.thermostat, state).reading, '21.4°');
+      }
     });
 
     test('power under 1 kW reads whole watts', () {
@@ -182,13 +188,55 @@ void main() {
       );
     });
 
-    test('thermostat wording: now and target', () {
+    test('thermostat wording: now and target, in the Hub\'s own unit', () {
       expect(
-        present(DeviceKind.thermostat,
-                const ThermostatState('d1', currentC: 21.4, targetC: 21))
-            .statusText,
+        present(DeviceKind.thermostat, _celsius(21.4, 21)).statusText,
         '21.4 °C now · target 21.0 °C',
       );
+    });
+
+    test('a °F Hub reads °F on the wall — the number is never re-labelled',
+        () {
+      // The defect this pins: the house Hub is `us_customary`, so
+      // climate.main_floor reports 83 and the Panel used to render
+      // "83.0 °C now". Same numbers, honest suffix.
+      expect(
+        present(
+                DeviceKind.thermostat,
+                const ThermostatState('d1',
+                    current: 83.0, target: 72.0, unit: TemperatureUnit.fahrenheit))
+            .statusText,
+        '83.0 °F now · target 72.0 °F',
+      );
+    });
+
+    test('an unstated unit is rendered as no unit, never as a guess', () {
+      // The Hub has not said (yet). A bare `°` is uninformative; a `°C`
+      // here would be a claim the Panel has no basis for, and half the time
+      // it would be wrong by 30 degrees.
+      final text = present(
+              DeviceKind.thermostat,
+              const ThermostatState('d1', current: 83.0, target: 72.0, unit: null))
+          .statusText;
+
+      expect(text, '83.0° now · target 72.0°');
+      expect(text, isNot(contains('C')));
+      expect(text, isNot(contains('F')));
+    });
+
+    test('no thermostat wording can ever carry a unit the state did not name',
+        () {
+      // The property, over the whole matrix rather than three examples: a
+      // unit letter appears in the Popup only when it came from the Hub.
+      for (final unit in [...TemperatureUnit.values, null]) {
+        final text = present(DeviceKind.thermostat,
+                ThermostatState('d1', current: 83.0, target: 72.0, unit: unit))
+            .statusText;
+        for (final other in TemperatureUnit.values) {
+          expect(text.contains(other.symbol), other == unit,
+              reason: 'state in ${unit?.symbol ?? 'no unit'} rendered "$text"');
+        }
+      }
     });
 
     test("power full variant shares the pin's precision", () {
@@ -213,3 +261,8 @@ void main() {
     });
   });
 }
+
+/// A thermostat on a metric Hub — the ordinary case, spelled once so the
+/// cases that are *about* the unit stand out.
+ThermostatState _celsius(double current, double target) => ThermostatState('d1',
+    current: current, target: target, unit: TemperatureUnit.celsius);

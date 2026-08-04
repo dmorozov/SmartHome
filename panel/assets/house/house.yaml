@@ -126,8 +126,8 @@ devices:
     kind: light
     room: family-room
     position: [6.7, 5.2]
-  - key: outlet-media
-    name: "Media Outlet"
+  - key: outlet-outdoor-a
+    name: "Outdoor Outlet A"
     kind: outlet
     room: family-room
     position: [12.4, 0.7]
@@ -171,8 +171,8 @@ devices:
     kind: light
     room: office
     position: [8.5, 8.5]
-  - key: outlet-office
-    name: "Desk Outlet"
+  - key: outlet-outdoor-b
+    name: "Outdoor Outlet B"
     kind: outlet
     room: office
     position: [6.6, 10.4]

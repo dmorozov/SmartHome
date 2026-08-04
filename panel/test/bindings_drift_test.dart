@@ -20,7 +20,12 @@ import 'package:yaml/yaml.dart';
 /// hardware and are therefore *expected* not to resolve against the dev
 /// Hub. It is empty today; adding a Device to it is the deliberate act of
 /// saying "this one is real now".
-const _integrated = <String>{};
+const _integrated = <String>{
+  // Phase 2, 2026-08-04 — real hardware on the laptop Hub.
+  'outlet-outdoor-a', // Kasa EP40 outdoor socket A -> switch.outdoor_outlet_a
+  'outlet-outdoor-b', // Kasa EP40 outdoor socket B -> switch.outdoor_outlet_b
+  'thermostat', // ecobee "Main Floor" -> climate.main_floor (HomeKit, local)
+};
 
 void main() {
   test('every binding resolves against the dev Hub stand-ins', () {

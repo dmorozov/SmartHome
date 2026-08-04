@@ -71,6 +71,12 @@ class HaHubClient implements HubClient {
   final _unusable = <String>{};
   final _changes = StreamController<String>.broadcast();
 
+  /// The unit this Hub states climate temperatures in, learned from
+  /// `get_config` — null until it answers. Survives a reconnect: the last
+  /// unit the Hub stated is a better guess than none while the socket is
+  /// down.
+  TemperatureUnit? _unit;
+
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _retryTimer;
@@ -193,8 +199,15 @@ class HaHubClient implements HubClient {
         _retryIn = Duration.zero;
         status.value = HubStatus.up;
         Log.info('hub', 'connected', {'url': _url, 'devices': _byEntity.length});
-        // Snapshot first, then the delta subscription. Both ids are ours;
-        // HA echoes them back on the results.
+        // What unit does this Hub speak, snapshot, then the delta
+        // subscription. All three ids are ours; HA echoes them back on the
+        // results.
+        //
+        // The unit goes first so that on a well-behaved Hub it is known
+        // before the first reading lands — but nothing here *depends* on
+        // that, and it is asked again on every reconnect, because the unit
+        // system is a setting the owner can change under us.
+        _send({'id': _nextId++, 'type': 'get_config'});
         _send({'id': _nextId++, 'type': 'get_states'});
         _send({
           'id': _nextId++,
@@ -219,6 +232,12 @@ class HaHubClient implements HubClient {
               {'id': message['id'], 'error': message['error']});
         }
         final result = message['result'];
+        if (result is Map && result['unit_system'] is Map) {
+          // The `get_config` answer, recognised by its shape rather than by
+          // the id we sent — the same rule the snapshot below follows, and
+          // the one thing that lets the two results arrive in either order.
+          _adoptUnit((result['unit_system'] as Map)['temperature']);
+        }
         if (result is List) {
           // The only List result the Panel asks for is the get_states
           // snapshot.
@@ -254,6 +273,36 @@ class HaHubClient implements HubClient {
           final newState = event['data']?['new_state'];
           if (newState is Map) _applyEntity(newState);
         }
+    }
+  }
+
+  /// The Hub has said which unit its climate readings are in.
+  ///
+  /// Re-states every thermostat already folded, because the answer can
+  /// arrive after the snapshot: those were labelled `null` and are on the
+  /// wall as a bare `°`, and the next report that would fix them is
+  /// whenever the room next moves — minutes, on a real thermostat. This is
+  /// also what makes the send order above an optimisation rather than a
+  /// correctness assumption.
+  void _adoptUnit(Object? symbol) {
+    final unit = TemperatureUnit.fromSymbol(symbol);
+    if (unit == null) {
+      // Not fatal — the readings still render, unitless, which is the
+      // honest thing to show for a unit we cannot name. Worth a line
+      // anyway: a wall of bare degrees has no other explanation, and
+      // "unitless" is indistinguishable from "the Hub never answered".
+      Log.warn('hub', 'temperature_unit_unknown', {'unit': symbol});
+      return;
+    }
+    if (unit == _unit) return;
+    Log.info('hub', 'temperature_unit', {'unit': unit.symbol});
+    _unit = unit;
+    for (final entry in _states.entries.toList()) {
+      final state = entry.value;
+      if (state is! ThermostatState) continue;
+      _states[entry.key] = ThermostatState(entry.key,
+          current: state.current, target: state.target, unit: unit);
+      if (!_changes.isClosed) _changes.add(entry.key);
     }
   }
 
@@ -318,7 +367,21 @@ class HaHubClient implements HubClient {
         final current = _number(attrs['current_temperature']);
         final target = _number(attrs['temperature']);
         if (current == null || target == null) return null;
-        return ThermostatState(device.id, currentC: current, targetC: target);
+        // Straight through, unconverted, carrying the Hub's own unit.
+        //
+        // Normalising to Celsius here was the obvious alternative and is
+        // rejected on three counts. It buys nothing: HA hands climate
+        // temperatures over already converted and the entity never names
+        // the unit, so converting needs the same `get_config` lookup this
+        // does, plus arithmetic. It has no honest answer while that lookup
+        // is outstanding — it would have to assume a source unit, which is
+        // precisely the bug being fixed. And it would put `28.3 °C` on the
+        // wall beside an Ecobee reading 83 °F, in a house where every other
+        // Home Assistant surface is `us_customary`; setting the Hub metric
+        // to make the Panel's assumption true is the same disagreement with
+        // the owner, moved somewhere harder to see.
+        return ThermostatState(device.id,
+            current: current, target: target, unit: _unit);
       case StateFamily.power:
         final watts = _number(raw);
         return watts == null ? null : PowerState(device.id, watts: watts);

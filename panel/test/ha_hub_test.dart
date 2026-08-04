@@ -34,16 +34,20 @@ void main() {
 
     channel.serverSays({'type': 'auth_ok', 'ha_version': '2026.7'});
     await pumpEventQueue();
-    expect(channel.sent[1]['type'], 'get_states');
-    expect(channel.sent[2]['type'], 'subscribe_events');
-    expect(channel.sent[2]['event_type'], 'state_changed');
+    // The unit system is asked for first, so that on a Hub that answers in
+    // order no reading is ever folded before the Panel knows what unit it
+    // is in. (Correctness does not rest on that — see the out-of-order test
+    // below — but the wall should not flicker unitless for no reason.)
+    expect(channel.sent.map((m) => m['type']),
+        ['auth', 'get_config', 'get_states', 'subscribe_events']);
+    expect(channel.sent[3]['event_type'], 'state_changed');
     expect(hub.status.value, HubStatus.up);
   });
 
   test('folds entity states down to Device states by kind', () async {
     await connectAndSeed(channel, [
       entityFrame('input_boolean.light_hall', 'on'),
-      entityFrame('climate.ecobee', 'heat',
+      entityFrame('climate.main_floor', 'heat',
           {'current_temperature': 21.4, 'temperature': 21.0}),
       entityFrame('sensor.emporia_vue', '812.5'),
       entityFrame('sensor.lg_washer', 'Idle'),
@@ -52,8 +56,8 @@ void main() {
 
     expect((hub.states['light-hall'] as SwitchState).on, isTrue);
     final thermostat = hub.states['thermostat'] as ThermostatState;
-    expect(thermostat.currentC, 21.4);
-    expect(thermostat.targetC, 21.0);
+    expect(thermostat.current, 21.4);
+    expect(thermostat.target, 21.0);
     expect((hub.states['energy-monitor'] as PowerState).watts, 812.5);
     expect((hub.states['washer'] as StatusState).status, 'Idle');
     expect((hub.states['garage-door'] as GarageDoorState).open, isFalse);
@@ -115,7 +119,7 @@ void main() {
     addTearDown(() => Log.sink = Log.printRecord);
 
     await connectAndSeed(channel, [
-      entityFrame('climate.ecobee', 'heat',
+      entityFrame('climate.main_floor', 'heat',
           {'current_temperature': 21.4, 'temperature': 21.0}),
     ]);
     channel.sent.clear();
@@ -152,6 +156,88 @@ void main() {
     // integration not set up — shows only as a pin that never fills in.
     expect(snapshot['missing'], greaterThan(0));
     expect(records.map((r) => r.event), contains('missing_entities'));
+  });
+
+  /// Home Assistant converts climate temperatures into the Hub's own unit
+  /// system before they reach the API, and the entity payload never names
+  /// the unit — measured on the house Hub, whose `climate.main_floor`
+  /// reports `current_temperature: 83` with `unit_system.temperature: °F`
+  /// and nothing else. So the unit is a fact about the *Hub*, learned once
+  /// from `get_config`, and every reading has to carry it.
+  group('temperature unit', () {
+    /// The thermostat as the Hub reports it after [connectAndSeed].
+    Future<ThermostatState> thermostat({String? temperature}) async {
+      await connectAndSeed(channel, [
+        entityFrame('climate.main_floor', 'cool',
+            {'current_temperature': 83.0, 'temperature': 72.0}),
+      ], temperature: temperature);
+      return hub.states['thermostat'] as ThermostatState;
+    }
+
+    test('a °F Hub reading is labelled °F and left alone', () async {
+      final state = await thermostat(temperature: '°F');
+
+      // Unconverted: 83 is what the Ecobee's own display says, what the HA
+      // app says, and what the wall must say. The bug this replaced named
+      // this same 83 `currentC` and rendered "83.0 °C".
+      expect(state.current, 83.0);
+      expect(state.target, 72.0);
+      expect(state.unit, TemperatureUnit.fahrenheit);
+    });
+
+    test('a °C Hub reading is labelled °C and left alone', () async {
+      final state = await thermostat(temperature: '°C');
+
+      expect(state.current, 83.0);
+      expect(state.unit, TemperatureUnit.celsius);
+    });
+
+    test('a Hub that never answers get_config leaves the unit unstated',
+        () async {
+      final state = await thermostat(temperature: null);
+
+      // Null, not a default. Defaulting is what put a Fahrenheit number
+      // behind a °C suffix; unknown renders as a bare `°` instead.
+      expect(state.unit, isNull);
+      expect(state.current, 83.0);
+    });
+
+    test('a unit symbol the Panel cannot name is unknown, and says so',
+        () async {
+      final records = <LogRecord>[];
+      Log.sink = records.add;
+      addTearDown(() => Log.sink = Log.printRecord);
+
+      final state = await thermostat(temperature: 'K');
+
+      expect(state.unit, isNull);
+      // Otherwise a wall of unitless degrees has no explanation anywhere.
+      final unknown =
+          records.singleWhere((r) => r.event == 'temperature_unit_unknown');
+      expect(unknown.level, LogLevel.warn);
+      expect(unknown.fields, {'unit': 'K'});
+    });
+
+    test('a unit that lands after the snapshot re-labels what is already on '
+        'the wall', () async {
+      // The Hub answers get_states first. Nothing forbids it, and the pin
+      // is already showing a number by then — the next report that would
+      // fix it is whenever the room moves, which on a real thermostat is
+      // minutes.
+      await thermostat(temperature: null);
+      final changes = <String>[];
+      hub.stateChanges.listen(changes.add);
+
+      channel.serverSays(configFrame('°F'));
+      await pumpEventQueue();
+
+      final state = hub.states['thermostat'] as ThermostatState;
+      expect(state.unit, TemperatureUnit.fahrenheit);
+      expect(state.current, 83.0, reason: 'the reading itself must not move');
+      // A relabel is a change like any other: without the emit the pin
+      // keeps its unitless face until something unrelated repaints.
+      expect(changes, ['thermostat']);
+    });
   });
 
   // Reconnection lives in ha_hub_recovery_test.dart, where a fake clock and

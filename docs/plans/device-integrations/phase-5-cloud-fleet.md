@@ -94,7 +94,7 @@ power readings.
     entity: sensor.<vue3>_total_power     # W-valued; PowerState kind
     connectivity: cloud
   # Emporia plugs: bind to outlet-* Keys matching their real rooms, e.g.
-  outlet-office:
+  outlet-master:
     entity: switch.<emporia_plug_1>
     connectivity: cloud
 ```

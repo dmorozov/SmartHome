@@ -40,8 +40,14 @@ bindings:
   light-reading:
     entity: input_boolean.light_reading
     connectivity: local
-  outlet-media:
-    entity: input_boolean.outlet_media
+  outlet-outdoor-a:
+    # Kasa EP40 outdoor plug, socket A (phase 2, 2026-08-04). The Key says
+    # "media" and the socket is on the patio — a placeholder-house mismatch
+    # accepted under D5: Keys are stable identities, and re-keying once the
+    # real drawing lands is a bindings.yaml-only edit by design (ADR-0005).
+    # Nothing is wired to it yet; outdoor lighting is a future purchase, and
+    # binding it now is what makes it usable the day it is.
+    entity: switch.outdoor_outlet_a
     connectivity: local
 
   # Kitchen
@@ -73,8 +79,11 @@ bindings:
   light-office:
     entity: input_boolean.light_office
     connectivity: local
-  outlet-office:
-    entity: input_boolean.outlet_office
+  outlet-outdoor-b:
+    # Kasa EP40 outdoor plug, socket B — same D5 caveat as outlet-outdoor-a.
+    # Bind the CHILDREN, never switch.tp_link_smart_plug_722c: the parent
+    # drives both sockets, so one pin would silently toggle the other's load.
+    entity: switch.outdoor_outlet_b
     connectivity: local
   cam-office:
     entity: sensor.office_cam
@@ -85,8 +94,14 @@ bindings:
     entity: sensor.ring_doorbell
     connectivity: cloud
   thermostat:
-    entity: climate.ecobee
-    connectivity: local # HomeKit-controller
+    # ecobee Smart Thermostat Premium "Main Floor", paired LOCALLY over
+    # HomeKit 2026-08-04 (homekit_controller). This id comes from the
+    # homekit_controller entry, NOT the ecobee cloud one — the same HAP
+    # advert raises two discovery cards and the branded one is the cloud
+    # integration, which would make `connectivity: local` a lie. See
+    # appliance/commissioning/04-devices-local.md.
+    entity: climate.main_floor
+    connectivity: local
   light-hall:
     entity: input_boolean.light_hall
     connectivity: local

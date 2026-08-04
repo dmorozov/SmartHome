@@ -141,9 +141,9 @@
     <property name="kind" value="light"/>
     <property name="placementKey" value="light-reading"/>
   </pieceOfFurniture>
-  <pieceOfFurniture id="pf-outlet-media" catalogId="SmartHome#outlet" name="Media Outlet" creator="SmartHome" level="level0" x="940" y="-130" width="10" depth="10" height="10">
+  <pieceOfFurniture id="pf-outlet-outdoor-a" catalogId="SmartHome#outlet" name="Outdoor Outlet A" creator="SmartHome" level="level0" x="940" y="-130" width="10" depth="10" height="10">
     <property name="kind" value="outlet"/>
-    <property name="placementKey" value="outlet-media"/>
+    <property name="placementKey" value="outlet-outdoor-a"/>
   </pieceOfFurniture>
   <pieceOfFurniture id="pf-oven" catalogId="SmartHome#oven" name="Oven" creator="SmartHome" level="level0" x="1060" y="-130" width="10" depth="10" height="10">
     <property name="kind" value="oven"/>
@@ -177,9 +177,9 @@
     <property name="kind" value="light"/>
     <property name="placementKey" value="light-office"/>
   </pieceOfFurniture>
-  <pieceOfFurniture id="pf-outlet-office" catalogId="SmartHome#outlet" name="Desk Outlet" creator="SmartHome" level="level0" x="360" y="840" width="10" depth="10" height="10">
+  <pieceOfFurniture id="pf-outlet-outdoor-b" catalogId="SmartHome#outlet" name="Outdoor Outlet B" creator="SmartHome" level="level0" x="360" y="840" width="10" depth="10" height="10">
     <property name="kind" value="outlet"/>
-    <property name="placementKey" value="outlet-office"/>
+    <property name="placementKey" value="outlet-outdoor-b"/>
   </pieceOfFurniture>
   <pieceOfFurniture id="pf-cam-office" catalogId="SmartHome#camera" name="Office Cam" creator="SmartHome" level="level0" x="740" y="460" width="10" depth="10" height="10">
     <property name="kind" value="camera"/>

@@ -82,8 +82,15 @@ void main() {
     final thermostat = hub.states['thermostat'] as ThermostatState;
     // closeTo, not equals: the Hub reports at the entity's own
     // precision, which is a property of the thermostat, not of us.
-    expect(thermostat.currentC, closeTo(seed.currentC, 0.05));
-    expect(thermostat.targetC, seed.targetC);
+    expect(thermostat.current, closeTo(seed.current, 0.05));
+    expect(thermostat.target, seed.target);
+    // Not a specific unit — that is the Hub owner's setting, and this test
+    // is pointed at whichever Hub the invoker chose. What has to be true of
+    // any of them is that `get_config` was asked and answered, because a
+    // reading with no unit is a reading the wall renders bare.
+    expect(thermostat.unit, isNotNull,
+        reason: 'get_config never landed — the Panel does not know whether '
+            'this Hub speaks °C or °F');
 
     final washer = specOf(DeviceKind.washer).seed('x') as StatusState;
     expect((hub.states['washer'] as StatusState).status, washer.status);

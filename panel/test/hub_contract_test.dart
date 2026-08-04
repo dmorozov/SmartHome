@@ -26,7 +26,8 @@ typedef HubWorld = ({
   HubClient hub,
 
   /// Brings the world to the fixture: `light-hall` known off, `thermostat`
-  /// known 21.4 °C now / 21.0 °C target.
+  /// known 21.4 °C now / 21.0 °C target — on a Hub that states Celsius,
+  /// which both adapters have to reproduce in their own way.
   Future<void> Function() seed,
   Future<void> Function(DeviceState state) push,
   Future<void> Function(String deviceId) makeUnknown,
@@ -162,8 +163,8 @@ Future<HubWorld> _fakeWorld() async {
       // FakeHub seeds every Device already; this only pins the two the
       // contract talks about (lights are seeded randomly).
       hub.pushState(const SwitchState('light-hall', on: false));
-      hub.pushState(
-          const ThermostatState('thermostat', currentC: 21.4, targetC: 21.0));
+      hub.pushState(const ThermostatState('thermostat',
+          current: 21.4, target: 21.0, unit: TemperatureUnit.celsius));
     },
     push: (state) async => hub.pushState(state),
     makeUnknown: (deviceId) async => hub.dropDevice(deviceId),
@@ -198,8 +199,11 @@ Future<HubWorld> _haWorld() async {
   Map<String, dynamic> frameFor(DeviceState state) => switch (state) {
         SwitchState s =>
           entityFrame(entityOf[s.deviceId]!, s.on ? 'on' : 'off'),
+        // The unit does not travel in the entity: HA states it once, for
+        // the whole Hub, and connectAndSeed below is where this world says
+        // it. That asymmetry is exactly what the adapter has to bridge.
         ThermostatState t => entityFrame(entityOf[t.deviceId]!, 'heat',
-            {'current_temperature': t.currentC, 'temperature': t.targetC}),
+            {'current_temperature': t.current, 'temperature': t.target}),
         _ => throw UnsupportedError('the contract fixture reports only '
             'switches and thermostats; ${state.runtimeType} needs a frame'),
       };
