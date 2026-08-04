@@ -6,7 +6,8 @@
 #   iGPU  Intel Raptor Lake-S UHD Graphics, i915, PCI 00:02.0  -> card2
 #   dGPU  NVIDIA RTX 4090 Laptop, nvidia,     PCI 01:00.0      -> card1
 #   NIC   Realtek Killer E3000 2.5GbE (enp162s0) + Intel AX210 Wi-Fi (wlp164s0)
-#   OS    Ubuntu 25.10 at bring-up; 26.04 LTS upgrade pending (phase 0 step 1)
+#   OS    Ubuntu 26.04 LTS (resolute), kernel 7.0.0-28-generic, systemd 259 —
+#         upgraded from 25.10 on 2026-08-03 (phase 0 step 1 / open item 1: done)
 
 # Hybrid-GPU pin (runbook Step 0a) — MANDATORY before enabling the kiosk here:
 # cage/wlroots must never open the NVIDIA card. Pinned by stable PCI path
@@ -15,14 +16,14 @@
 # enumeration the old amdgpu-oriented notes assumed).
 wlr_drm_devices: /dev/dri/by-path/pci-0000:00:02.0-card
 
-# CAVEAT for spike day: appliance/scripts/check-hybrid-gpu.sh only recognises
-# `amdgpu` as the integrated card, so on this Intel box it reports "HDMI is
-# wired to the 'nvidia' card" and prints the mitigation branch. That verdict is
-# an artefact — with no display attached every connector reads `disconnected`,
-# and the script's tie-break picks the first card carrying an HDMI-A-*, which
-# is the NVIDIA one. Both cards expose HDMI connectors (card1: HDMI-A-5;
-# card2: HDMI-A-1..4). Which card actually owns the physical HDMI port is
-# STILL UNVERIFIED — plug the touchscreen in and re-check before the spike.
+# STILL UNVERIFIED for spike day: which card actually owns the physical HDMI
+# port. With no display attached every connector reads `disconnected`, so the
+# owner cannot be read out of sysfs — and both cards advertise HDMI-A-*
+# connectors (2026-08-03 boot: card1/nvidia HDMI-A-1, card2/i915 HDMI-A-2..5;
+# those names move with the card numbering). Plug the touchscreen in and re-run
+# appliance/scripts/check-hybrid-gpu.sh, which now recognises i915 and says so
+# when nothing is connected. The pin above is correct either way: cage opens
+# the i915 card and nothing else.
 
 # DAILY-DRIVER GUARANTEE: a plain converge leaves this a normal GNOME laptop.
 # All kiosk gates default false — cage is installed but never enabled, gdm is
@@ -36,7 +37,11 @@ wlr_drm_devices: /dev/dri/by-path/pci-0000:00:02.0-card
 # manual for now (phase 0 step 5 done by hand: docker-ce 29.7.1 +
 # compose v5.4.0, login user in the docker group); becomes a 'hub' role later.
 #
-# kiosk_hwe_kernel: the group default (true) installs `linux-generic-hwe-24.04`,
-# which on this host is a verified no-op — 25.10 ships the same 6.17 kernel from
-# the same linux-meta source. That name will NOT resolve on 26.04, so this must
-# be revisited with the OS upgrade (see phase-0 as-built notes).
+# kiosk_hwe_kernel: the group default (true) applies, with NO per-host override.
+# On 26.04 kiosk_hwe_kernel_packages resolves to `linux-generic-hwe-26.04`,
+# already installed at 7.0.0-28.28: `apt-get install -s` reports 0 upgraded,
+# 0 newly installed. The role's apt-mark step is the part that does work here —
+# after the release upgrade this host had linux-generic-hwe-26.04 marked *auto*,
+# held only by the transitional `linux-generic-hwe-24.04` (a shim Ubuntu
+# documents as safe to remove). The first fixed converge claims it as manual;
+# only after that is it safe to purge the shim.

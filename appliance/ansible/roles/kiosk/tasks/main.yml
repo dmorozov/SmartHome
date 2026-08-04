@@ -8,12 +8,49 @@
 # user's shell, home, and password lock are corrected on every run.
 ---
 - name: Install the HWE kernel stack (real hardware only — runbook Step 0)
-  ansible.builtin.apt:
-    name: linux-generic-hwe-24.04
-    state: present
-    update_cache: true
-    cache_valid_time: 3600
   when: kiosk_hwe_kernel | bool
+  block:
+    # The package name is never written here: it embeds the LTS release it
+    # backports INTO, so it is resolved per host from
+    # kiosk_hwe_kernel_packages (group_vars/all.yml).
+    - name: Refuse to guess an HWE package for an unknown release
+      ansible.builtin.assert:
+        that: kiosk_hwe_kernel_package | length > 0
+        fail_msg: >-
+          kiosk_hwe_kernel is true but no HWE meta-package is known for
+          {{ ansible_distribution | default('?') }}
+          {{ ansible_distribution_version | default('?') }}. HWE stacks exist
+          only on Ubuntu LTS releases. Add the release to
+          kiosk_hwe_kernel_packages (group_vars/all.yml), set
+          kiosk_hwe_kernel_package for this host, or set kiosk_hwe_kernel to
+          false where a kernel is meaningless (the test container).
+        quiet: true
+
+    - name: "Install {{ kiosk_hwe_kernel_package }}"
+      ansible.builtin.apt:
+        name: "{{ kiosk_hwe_kernel_package }}"
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    # `state: present` is satisfied by "already installed" and so never touches
+    # the apt auto/manual mark. On a release-upgraded host the HWE meta can be
+    # present yet marked *auto*: measured on the laptop 2026-08-03, the only
+    # manual parent of linux-generic-hwe-26.04 was the transitional
+    # linux-generic-hwe-24.04 — the package Ubuntu itself calls "safe to
+    # remove", leaving the whole kernel stack one `apt autoremove` from
+    # deletion. Claim it explicitly, in keeping with this role's desired-state
+    # semantics (see the header note).
+    - name: Check whether the HWE stack is only auto-installed
+      ansible.builtin.command: apt-mark showauto {{ kiosk_hwe_kernel_package }}
+      register: kiosk_hwe_auto
+      changed_when: false
+      check_mode: false
+
+    - name: Claim the HWE stack as manually installed
+      ansible.builtin.command: apt-mark manual {{ kiosk_hwe_kernel_package }}
+      when: kiosk_hwe_kernel_package in kiosk_hwe_auto.stdout_lines
+      changed_when: true
 
 - name: Install kiosk, Flutter toolchain, and SDK bootstrap packages
   ansible.builtin.apt:
@@ -38,6 +75,67 @@
     owner: root
     group: root
     mode: "0644"
+
+# --- Panel runtime settings. These MUST land before the unit is templated:
+# --- the template's notify fires "Restart cage" at the flush_handlers below,
+# --- and the kiosk_enable gate after it is what a real first start follows.
+# --- Nothing in this role can start cage before this file exists.
+
+- name: Look for a Panel token already on the appliance
+  ansible.builtin.stat:
+    path: "{{ panel_env_file }}"
+  register: panel_env
+
+# A tokenless HUB=ha Panel throws out of bootPanel and restart-loops behind a
+# screen nobody is standing in front of (ADR-0001). Fail the converge instead.
+- name: Refuse HUB=ha with no token anywhere
+  ansible.builtin.assert:
+    # size, NOT exists: the "Ensure the Panel environment file exists" task
+    # below creates this file EMPTY on every converge, including the default
+    # HUB=fake one. Guarding on existence would therefore pass on every host
+    # converged more than once — exactly the case this assert is for.
+    that: (panel_ha_token | length > 0) or (panel_env.stat.size | default(0) > 0)
+    fail_msg: >-
+      panel_hub_kind=ha needs a token: PANEL_HA_TOKEN is unset on the
+      controller and {{ panel_env_file }} is missing or empty on the host.
+      Supply it for this converge —
+      PANEL_HA_TOKEN="$(cat ../../hub/token)" ansible-playbook site.yml -l <host>
+  when: panel_hub_kind == 'ha'
+
+- name: Create the appliance config directory
+  ansible.builtin.file:
+    path: "{{ panel_env_file | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# force:false — creates the file with the right ownership and mode when it is
+# absent, and NEVER clobbers a token already on the box when a converge runs
+# without PANEL_HA_TOKEN exported. Attributes are still enforced either way, so
+# a hand-edited file cannot drift to a looser mode.
+- name: Ensure the Panel environment file exists at 0600
+  ansible.builtin.copy:
+    dest: "{{ panel_env_file }}"
+    content: ""
+    force: false
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: "0600"
+
+# no_log: this task's entire content is the one string that must never reach a
+# log, a --diff, or a callback plugin. Single-quoted per systemd.exec(5): a
+# '-quoted value is taken verbatim, so no escape rule can mangle a token.
+- name: Write the Panel HA token
+  ansible.builtin.copy:
+    dest: "{{ panel_env_file }}"
+    content: "HA_TOKEN='{{ panel_ha_token }}'\n"
+    owner: "{{ kiosk_user }}"
+    group: "{{ kiosk_user }}"
+    mode: "0600"
+  no_log: true
+  when: panel_ha_token | length > 0
+  notify: Restart cage
 
 - name: Install the cage@ systemd unit (templated)
   ansible.builtin.template:

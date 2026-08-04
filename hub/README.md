@@ -25,7 +25,7 @@ included) with a generated stand-in for the device fleet — see
 
 ## Prerequisites
 
-- The Appliance (dev laptop for now): Ubuntu 24.04 LTS with Docker Engine and
+- The Appliance (dev laptop for now): Ubuntu 26.04 LTS with Docker Engine and
   the Compose plugin installed. The hub stack must run on this Linux machine —
   Docker-on-macOS breaks the multicast/mDNS that Ecobee HomeKit pairing and
   Samsung TV discovery require.
@@ -90,8 +90,11 @@ database and network keys, Mosquitto persistence) to the mini PC, and
 laptop-specific — the SLZB-06 is on the LAN, not on USB, so even the Zigbee
 radio needs no re-pairing.
 
-Before the mini PC is treated as production, switch Mosquitto off anonymous
-access — see the loud comment in `mosquitto/config/mosquitto.conf`.
+Mosquitto is already off anonymous access (`allow_anonymous false` +
+`password_file`, decision D4 — see the comment block in
+`mosquitto/config/mosquitto.conf`). Carry `mosquitto/config/passwd` across with
+the rest of the runtime state, and re-`chown 1883:1883` it on the new box, or
+nothing will be able to connect there.
 
 ## Layout
 
@@ -100,6 +103,7 @@ access — see the loud comment in `mosquitto/config/mosquitto.conf`.
 | `compose.yaml` | yes | The stack definition (pinned images) |
 | `ha-config/` | starter files only | HA `/config`; runtime state gitignored |
 | `custom_components/` | yes | Our own extensions/fixes slot (see its README) |
-| `mosquitto/config/` | yes | Broker config; `data/` and `log/` gitignored |
+| `mosquitto/config/` | yes | Broker config (`mosquitto.conf`); `passwd` + `passwd.backup.*` gitignored |
+| `mosquitto/data/`, `mosquitto/log/` | directory only (`.gitkeep`) | Bind-mount targets; contents gitignored. Tracked so `docker compose up` does not have dockerd create them root-owned in the working tree |
 | `z2m-data/` | example starter only | Z2M state; live config, DB, and keys gitignored |
 | `go2rtc/` | example starter only | Stream definitions; live config gitignored (camera credentials) |

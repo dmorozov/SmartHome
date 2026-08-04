@@ -5,8 +5,8 @@ and the docs say what is now true.
 
 ## 1. The sweep
 
-Run the Panel against the laptop Hub with `--dart-define=LOG=info` and
-work the diagnostics until clean:
+Run the Panel against the laptop Hub with `LOG=info` in the environment
+(`--dart-define=LOG=info` on web) and work the diagnostics until clean:
 
 - `hub.snapshot entities=<n> bound=<m> missing=0` — **missing=0 is the
   phase's headline number** for every Device whose hardware exists.

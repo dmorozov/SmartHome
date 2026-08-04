@@ -5,7 +5,7 @@ A single always-on home appliance: a custom touch "dollhouse" panel for the hous
 ## Language
 
 **Appliance**:
-The always-on computer hosting the Hub and driving the Panel — the AMD laptop during development, the Ryzen AI mini PC in production.
+The always-on computer hosting the Hub and driving the Panel — the Intel dev laptop during development, the Ryzen AI mini PC in production.
 _Avoid_: server, box, host
 
 **Panel**:

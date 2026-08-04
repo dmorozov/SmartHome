@@ -1,9 +1,34 @@
 # Test Appliance (Docker)
 
-A disposable Ubuntu 24.04 container with **systemd as PID 1** and **real SSH**,
-for exercising the Appliance deployment tooling without the laptop/mini PC:
-the Ansible playbooks (`../ansible/`, targeting it over SSH exactly like a
-real host) and `spike/bootstrap.sh`.
+A disposable Ubuntu container with **systemd as PID 1** and **real SSH**, for
+exercising the Appliance deployment tooling without the laptop/mini PC: the
+Ansible playbooks (`../ansible/`, targeting it over SSH exactly like a real
+host) and `spike/bootstrap.sh`.
+
+## Which Ubuntu — 24.04 by default, and that is not an oversight
+
+This container stands in for an **Appliance**, not for the Hub host (it tests
+no part of `hub/compose.yaml` — see the caveat at the end). There are two
+Appliances and they no longer share an OS:
+
+| Appliance | OS | Needs a stand-in? |
+|---|---|---|
+| Production mini PC | Ubuntu Server **24.04 LTS** (ADR-0001) | **Yes** — not purchased yet, so this container is its only pre-flight |
+| Dev laptop | Ubuntu **26.04 LTS** (upgraded 2026-08-03) | No — it is real, reachable, and a plain converge is safe there (every kiosk gate defaults `false`) |
+
+So the default models the mini PC. Model the laptop when a failure looks
+OS-specific, or to isolate one from the laptop's GNOME/daily-driver state:
+
+```sh
+UBUNTU_TAG=26.04 ./run.sh rebuild   # one flavour at a time: the images are
+                                    # tagged apart, the container name and
+                                    # port 2222 are shared
+```
+
+Neither flavour exercises the HWE-kernel task — `host_vars/test-appliance.yml`
+sets `kiosk_hwe_kernel: false`, because a kernel package is meaningless in a
+container. Kernel-meta names must be checked on a real host with
+`apt-cache policy`, never here.
 
 Debug loop: scripts are fixed in the repo and re-tested by **reset-and-rerun**
 (`./run.sh reset`) — never by hand-fixing container state.
@@ -12,12 +37,12 @@ Debug loop: scripts are fixed in the repo and re-tested by **reset-and-rerun**
 
 | Deployment logic — ✅ testable here | Hardware behavior — ❌ needs the real Appliance |
 |---|---|
-| Package set installs on clean noble | cage actually compositing (no GPU/DRM seat) |
+| Package set installs on a clean base (24.04 or 26.04) | cage actually compositing (no GPU/DRM seat) |
 | `cage` user creation, unit/PAM installs | Touch input end-to-end |
 | systemd unit syntax, `daemon-reload`, enable | Boot-to-TTY, getty eviction, gdm interplay |
 | Flutter toolchain + `flutter build linux` | Rendering, fling/pinch behavior |
 | `bootstrap.sh` seds, git guard, idempotency | Screen blank/wake, DDC/CI |
-| Ansible plays over SSH (future) | Hybrid-GPU pinning |
+| Ansible plays over real SSH (the tested path) | Hybrid-GPU pinning; the HWE-kernel task (`kiosk_hwe_kernel: false`) |
 
 ## Usage
 

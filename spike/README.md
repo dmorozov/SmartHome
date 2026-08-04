@@ -9,16 +9,17 @@ unknowns, and fallback ladder: [`../docs/research/flutter-cage-spike.md`](../doc
 
 ## Prerequisites
 
-- The dev laptop (AMD Radeon iGPU): Ubuntu 24.04 LTS + HWE kernel, the
-  HDMI/USB-HID touchscreen attached.
+- The dev laptop (Intel UHD iGPU / `i915`, plus an NVIDIA RTX 4090 dGPU):
+  Ubuntu 26.04 LTS, the HDMI/USB-HID touchscreen attached.
 - System packages (cage, wlr-randr, evtest, Flutter Linux toolchain deps):
   the ansible kiosk role: [`../appliance/ansible/`](../appliance/ansible/)
   (`ansible-playbook site.yml -l laptop`).
 - Flutter >= 3.44 stable on PATH — never 3.41.x (Wayland touch regression;
   runbook Step 5).
-- Hybrid GPU: know which `/dev/dri/cardN` is the amdgpu iGPU and pin cage to
-  it with `WLR_DRM_DEVICES` (runbook Step 0a) — cage must never open the
-  NVIDIA card.
+- Hybrid GPU: pin cage to the Intel iGPU with
+  `WLR_DRM_DEVICES=/dev/dri/by-path/pci-0000:00:02.0-card` (runbook Step 0a) —
+  by PCI path, not `/dev/dri/cardN`, whose numbering is not guaranteed stable
+  across boots. cage must never open the NVIDIA card.
 
 ## Run
 
@@ -27,8 +28,8 @@ seat — stop GNOME first: `sudo systemctl stop gdm`). From `spike/`:
 
 ```sh
 ./bootstrap.sh    # verify Flutter, generate + patch the Linux runner, build release bundle
-WLR_DRM_DEVICES=/dev/dri/card<N-of-amdgpu> cage -- "$PWD/app/build/linux/x64/release/bundle/spike_app"
-WLR_DRM_DEVICES=/dev/dri/card<N-of-amdgpu> GDK_BACKEND=x11 cage -- "$PWD/app/build/linux/x64/release/bundle/spike_app"
+WLR_DRM_DEVICES=/dev/dri/by-path/pci-0000:00:02.0-card cage -- "$PWD/app/build/linux/x64/release/bundle/spike_app"
+WLR_DRM_DEVICES=/dev/dri/by-path/pci-0000:00:02.0-card GDK_BACKEND=x11 cage -- "$PWD/app/build/linux/x64/release/bundle/spike_app"
 ```
 
 Run the same touch battery on both launches — the Wayland default and the

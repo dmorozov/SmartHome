@@ -14,7 +14,7 @@ keep for months and use for nothing else.
 
 **Decision (2026-08-03):** the Hub stack with device integrations
 (`hub/compose.yaml`, host networking) runs only on x86 Linux hosts — the
-AMD dev laptop now, the mini PC later. The Mac keeps exactly two roles:
+Intel dev laptop now, the mini PC later. The Mac keeps exactly two roles:
 Panel development (Flutter web/macOS against the laptop's Hub over LAN)
 and the disposable protocol sandbox `hub/dev/` (bridge networking,
 generated stand-in entities, cloud-only services — nothing

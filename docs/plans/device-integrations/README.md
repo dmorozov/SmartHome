@@ -2,7 +2,7 @@
 
 Goal: every device the house owns today is integrated into the Hub and
 visible/controllable on the Panel, with only two machines involved — the
-**AMD dev laptop** as the Hub host (ADR-0008) and the Mac for Panel
+**Intel dev laptop** as the Hub host (ADR-0008) and the Mac for Panel
 development. The Ryzen mini PC stays unpurchased; the kiosk/cage spike stays
 the project's final step. Samsung TVs are explicitly out of scope (user
 decision 2026-08-03); the oven is a dated decision, not a task (D3).
@@ -37,7 +37,7 @@ Decisions the user confirmed are marked ✅; the rest were cut short when the
 user called for the plan — each carries my recommendation and is **applied
 by default** unless overridden before its phase starts.
 
-- **D0 ✅ Environment**: Hub on the AMD laptop, real `hub/compose.yaml`,
+- **D0 ✅ Environment**: Hub on the Intel dev laptop, real `hub/compose.yaml`,
   host networking (ADR-0008). macOS Docker workarounds investigated and
   rejected (host-networking mode, docker-mac-net-connect, Colima bridged,
   UTM/Fusion VM — the VM would work but adds a layer used for nothing else).

@@ -56,7 +56,18 @@ services:
     restart: unless-stopped
 
   mosquitto:
-    image: eclipse-mosquitto:2
+    # Pinned exactly 2026-08-03, replacing a floating `:2`. Measured, not
+    # assumed: `:2` had already moved to the 2.1 line, and 2.1 DEPRECATES
+    # `password_file` and `allow_anonymous` (removal in 3.0) — the two
+    # directives mosquitto/config/mosquitto.conf and phase 1 §1c stand on. A
+    # floating major meant that config could go stale under a `compose pull`,
+    # on a broker whose 1883 is published to the LAN.
+    #
+    # The tag looks odd on purpose: there is NO unsuffixed `2.1.2` on Docker
+    # Hub — upstream publishes the 2.1 line only as `-alpine`. This tag is the
+    # exact image `:2` already resolved to (amd64 digest sha256:6dba0f1b2795…,
+    # identical to `2.1-alpine`; `2.0.22` is a different image).
+    image: eclipse-mosquitto:2.1.2-alpine
     container_name: mosquitto
     ports:
       - "1883:1883"

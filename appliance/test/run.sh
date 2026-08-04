@@ -7,6 +7,12 @@
 #   ./run.sh ssh       open a shell in the container over real SSH
 #   ./run.sh destroy   remove container (image and keys stay)
 #
+# Which Ubuntu it models: UBUNTU_TAG, default 24.04 — the production mini
+# PC's OS (ADR-0001) and the only Appliance with no hardware to converge.
+#   UBUNTU_TAG=26.04 ./run.sh rebuild   models the 26.04 dev laptop instead.
+# One flavour at a time: the images are tagged apart, the container name and
+# port 2222 are shared.
+#
 # The container is DISPOSABLE by design: deployment scripts are debugged by
 # reset-and-rerun, never by hand-fixing container state.
 
@@ -15,7 +21,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-IMAGE=smarthome-appliance-test
+UBUNTU_TAG="${UBUNTU_TAG:-24.04}"   # 24.04 = mini PC (ADR-0001); 26.04 = dev laptop
+IMAGE="smarthome-appliance-test:${UBUNTU_TAG}"
 CONTAINER=smarthome-test
 SSH_PORT=2222
 KEY_DIR="${SCRIPT_DIR}/.keys"          # gitignored
@@ -27,8 +34,8 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 command -v docker >/dev/null 2>&1 || die "docker not found on PATH."
 
 build_image() {
-    say "Building image ${IMAGE}"
-    docker build -t "${IMAGE}" "${SCRIPT_DIR}"
+    say "Building image ${IMAGE} (Ubuntu ${UBUNTU_TAG})"
+    docker build --build-arg "UBUNTU_TAG=${UBUNTU_TAG}" -t "${IMAGE}" "${SCRIPT_DIR}"
 }
 
 ensure_image() {
@@ -55,7 +62,7 @@ up() {
     ensure_key
     destroy
 
-    say "Starting ${CONTAINER} (systemd PID 1; SSH on localhost:${SSH_PORT})"
+    say "Starting ${CONTAINER} from ${IMAGE} (systemd PID 1; SSH on localhost:${SSH_PORT})"
     # --privileged + cgroup mount: required for systemd as PID 1 under
     # Docker Desktop's Linux VM. The docker.sock bind exposes the HOST's
     # daemon inside (sibling containers — debuggable from outside); target
@@ -113,5 +120,5 @@ case "${1:-}" in
             ubuntu@localhost "${@:2}"
         ;;
     *)
-        sed -n '2,12p' "$0"; exit 1 ;;
+        sed -n '2,17p' "$0"; exit 1 ;;
 esac

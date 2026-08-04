@@ -166,10 +166,12 @@ repro path — both backends must pass):
   GDK_BACKEND=x11 cage -- $BUNDLE
 
 Hybrid-GPU laptop (runbook Step 0a): cage must NEVER open the
-NVIDIA card. Pin it to the amdgpu iGPU:
+NVIDIA card. Pin it to the Intel iGPU by stable PCI path —
+/dev/dri/cardN numbering is not guaranteed stable across boots:
 
-  readlink /sys/class/drm/card*/device/driver   # find the amdgpu cardN
-  WLR_DRM_DEVICES=/dev/dri/card<N> cage -- $BUNDLE
+  ls -l /dev/dri/by-path/                       # pci-<addr>-card -> ../cardN
+  readlink /sys/class/drm/card*/device/driver   # which cardN is i915 (iGPU)
+  WLR_DRM_DEVICES=/dev/dri/by-path/pci-0000:00:02.0-card cage -- $BUNDLE
 
 Work through the 13-item pass/fail checklist: $RUNBOOK section 4.
 ============================================================

@@ -14,12 +14,21 @@ import 'ui/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Log.installErrorHandlers();
+  // Read once, handed to both resolvers: `main()` is the only thing in the
+  // Panel that touches the process environment, which is what keeps
+  // `bootPanel` and `Log` reachable from plain data in a test.
+  final environment = runtimeEnvironment();
+  // Before the first line is emitted, or `LOG=off` could not silence the
+  // boot lines it is asked to silence. Environment first, like the Hub
+  // settings below: turning the logs up on a Panel already on the wall must
+  // not mean rebuilding it.
+  final logFrom = Log.applyLevel(environment);
   // Runtime environment first, build defines second (config/hub_config.dart).
   // The Hub's address is an operational setting, not a property of the
   // binary: on the appliance systemd supplies it, so a Hub that moves costs
   // a restart rather than a Flutter rebuild.
   final config = resolveHubConfig(
-    environment: runtimeEnvironment(),
+    environment: environment,
     buildKind: _buildHubKind,
     buildUrl: _buildHaUrl,
     buildToken: _buildHaToken,
@@ -33,6 +42,10 @@ Future<void> main() async {
             : 'debug',
     'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
     'log': Log.level.name,
+    // Which origin set it — the same argument as `hub.config`: with two
+    // possible origins, `log=info log_from=build` on a run that exported
+    // LOG=debug is how a web build says the environment was discarded.
+    'log_from': logFrom,
   });
   // Which origin won, per setting. With two possible origins, a Panel
   // pointed at a stale address and a Panel pointed at a dead Hub look the

@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # check-hybrid-gpu.sh — runbook Step 0a: which GPU owns the HDMI connector?
 #
-# On the hybrid-graphics laptop (Radeon iGPU + NVIDIA dGPU), cage/wlroots must
-# run on the amdgpu iGPU — the NVIDIA proprietary driver is the worst-supported
-# wlroots combo and would contaminate the spike verdict. This script enumerates
-# /sys/class/drm, reports each card's driver and connectors, identifies which
-# card owns HDMI-A-*, and prints the recommended WLR_DRM_DEVICES pin (or the
-# mitigation advice if HDMI is wired to the dGPU).
+# On the hybrid-graphics laptop (Intel UHD iGPU / i915 + NVIDIA RTX 4090 dGPU)
+# cage/wlroots must run on the integrated card — the NVIDIA proprietary driver
+# is the worst-supported wlroots combo and would contaminate the spike verdict.
+# The mini PC is AMD (amdgpu), so both driver families are treated as valid
+# integrated cards here. This script enumerates /sys/class/drm, reports each
+# card's driver and connectors, identifies which card owns HDMI-A-*, and prints
+# the recommended WLR_DRM_DEVICES pin as a stable /dev/dri/by-path/... path.
 #
 # Read-only: inspects sysfs, modifies nothing.
 # Runbook: docs/research/flutter-cage-spike.md (Step 0a).
@@ -21,8 +22,33 @@ fi
 shopt -s nullglob
 
 found_cards=0
-amdgpu_card=""            # first card driven by amdgpu
+igpu_card=""              # first card driven by an integrated-GPU KMS driver
+igpu_driver=""
 nvidia_present=0
+
+# Integrated / open-source KMS drivers cage may safely composite on: i915 and
+# xe are Intel (this laptop), amdgpu and radeon are AMD (the mini PC). Anything
+# else — nvidia, nouveau — stays out of the compositor's path.
+is_igpu_driver() {
+    case "$1" in
+        i915|xe|amdgpu|radeon) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# cardN numbering is NOT guaranteed stable across boots: it follows driver probe
+# order, so a kernel/driver change can renumber the cards even when the hardware
+# does not move. Always pin by PCI path, which is fixed by the bus topology.
+stable_pin() {
+    local card="$1" link
+    for link in /dev/dri/by-path/*-card; do
+        if [[ "$(readlink "${link}")" == "../${card}" ]]; then
+            printf '%s\n' "${link}"
+            return
+        fi
+    done
+    printf '/dev/dri/%s\n' "${card}"   # by-path absent: last resort
+}
 hdmi_owner_card=""        # card owning an HDMI-A-* connector (connected wins)
 hdmi_owner_driver=""
 hdmi_owner_connected=0
@@ -45,8 +71,9 @@ for card_path in /sys/class/drm/card*; do
     echo
     echo "${name}  (/dev/dri/${name})  driver: ${driver}"
 
-    if [[ "${driver}" == "amdgpu" && -z "${amdgpu_card}" ]]; then
-        amdgpu_card="${name}"
+    if is_igpu_driver "${driver}" && [[ -z "${igpu_card}" ]]; then
+        igpu_card="${name}"
+        igpu_driver="${driver}"
     fi
     if [[ "${driver}" == "nvidia" || "${driver}" == "nouveau" ]]; then
         nvidia_present=1
@@ -92,20 +119,33 @@ if [[ -z "${hdmi_owner_card}" ]]; then
     echo "No HDMI-A-* connector found on any card."
     echo "If the touchscreen is meant to be on HDMI, plug it in and re-run;"
     echo "for full detail run: drm_info | less   (installed by the ansible kiosk role)."
-elif [[ "${hdmi_owner_driver}" == "amdgpu" ]]; then
-    echo "HDMI (${hdmi_owner_card}) is wired to the amdgpu card — good."
+elif [[ ${hdmi_owner_connected} -eq 0 ]]; then
+    echo "No HDMI-A-* connector reads 'connected' — nothing is plugged in, so"
+    echo "which card owns the physical HDMI port is UNDETERMINED. Several cards"
+    echo "advertise HDMI-A-* connectors that are not routed to a socket; the"
+    echo "tie-break below would just pick the first one. Plug the touchscreen in"
+    echo "and re-run before spike day."
+    if [[ -n "${igpu_card}" ]]; then
+        echo
+        echo "Meanwhile the pin is unambiguous — cage runs on the integrated card"
+        echo "(${igpu_card}, driver ${igpu_driver}), never on a discrete one:"
+        echo
+        echo "    WLR_DRM_DEVICES=$(stable_pin "${igpu_card}")"
+    fi
+elif is_igpu_driver "${hdmi_owner_driver}"; then
+    echo "HDMI (${hdmi_owner_card}) is wired to the integrated '${hdmi_owner_driver}' card — good."
     echo
-    echo "Pin cage to it (mandatory on this laptop — never let cage open the"
-    echo "NVIDIA card):"
+    echo "Pin cage to it (mandatory wherever a discrete GPU is also present —"
+    echo "on this laptop, never let cage open the NVIDIA card):"
     echo
-    echo "    WLR_DRM_DEVICES=/dev/dri/${hdmi_owner_card}"
+    echo "    WLR_DRM_DEVICES=$(stable_pin "${hdmi_owner_card}")"
     echo
-    echo "For boot: set this as the Environment= line in"
-    echo "/etc/systemd/system/cage@.service (a commented template is in the unit)."
-    echo "For manual runs: WLR_DRM_DEVICES=/dev/dri/${hdmi_owner_card} cage -- <app>"
+    echo "For boot: set wlr_drm_devices in appliance/ansible/host_vars/<host>.yml;"
+    echo "the kiosk role templates it into cage@.service as Environment=."
+    echo "For manual runs: WLR_DRM_DEVICES=$(stable_pin "${hdmi_owner_card}") cage -- <app>"
 else
     echo "HDMI (${hdmi_owner_card}) is wired to the '${hdmi_owner_driver}' card,"
-    echo "NOT amdgpu. Do not run cage on it. Mitigations, in order (Step 0a):"
+    echo "not the integrated GPU. Do not run cage on it. Mitigations, in order (Step 0a):"
     echo
     echo "  (a) Check BIOS/UEFI for a MUX / 'hybrid graphics' / 'iGPU only'"
     echo "      switch and route the HDMI port to the iGPU."
@@ -114,15 +154,15 @@ else
     echo "  (c) Last resort: run the spike's software layers on the laptop's"
     echo "      built-in screen and accept that touch tests wait for an"
     echo "      iGPU-driven output."
-    if [[ -n "${amdgpu_card}" ]]; then
+    if [[ -n "${igpu_card}" ]]; then
         echo
-        echo "Either way, pin cage to the amdgpu card:"
+        echo "Either way, pin cage to the integrated '${igpu_driver}' card:"
         echo
-        echo "    WLR_DRM_DEVICES=/dev/dri/${amdgpu_card}"
+        echo "    WLR_DRM_DEVICES=$(stable_pin "${igpu_card}")"
     fi
 fi
 
-if [[ ${nvidia_present} -eq 1 && -n "${amdgpu_card}" ]]; then
+if [[ ${nvidia_present} -eq 1 && -n "${igpu_card}" ]]; then
     echo
     echo "Note: an NVIDIA card is present — WLR_DRM_DEVICES pinning is mandatory"
     echo "for every cage invocation on this machine, manual or systemd."

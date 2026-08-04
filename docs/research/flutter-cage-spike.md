@@ -3,16 +3,22 @@
 Date: 2026-07-30. Audience: the developer executing the spike on the target box.
 
 **Scope.** The OS/platform decision is already made and is not re-litigated here: plain Linux
-(Ubuntu 24.04 LTS + HWE kernel), `cage` as the kiosk compositor, Flutter GTK bundle as the app —
+(the **mini PC** target is Ubuntu Server **24.04 LTS + HWE kernel** per ADR-0001; the **spike
+box** — this dev laptop, which is also the Hub host — is Ubuntu **26.04 LTS**, see "Spike host"
+below), `cage` as the kiosk compositor, Flutter GTK bundle as the app —
 see `docs/research/platform-os-feasibility.md` §4 and §7. This runbook verifies the things
 research could not settle from sources alone.
 
-**Spike host (decided after this research ran):** NOT the mini PC (not yet purchased) but the
-AMD-CPU laptop (Radeon iGPU + NVIDIA dGPU, fresh Ubuntu 24.04, also the primary dev box) with the
-actual HDMI/USB-HID touchscreen. The Radeon iGPU uses the same Mesa/`amdgpu` path as the Strix
-Point target, so the verdict transfers — **provided the NVIDIA dGPU stays out of the compositor's
-path** (see Step 0a). Re-run the §4 pass/fail checklist on the mini PC when it arrives; only
-regressions need investigation then.
+**Spike host (decided after this research ran; hardware corrected 2026-08-03):** NOT the mini PC
+(not yet purchased) but the dev laptop — a Lenovo Legion 9 16IRX8: **Intel Core i9-13980HX with
+an Intel UHD iGPU (`i915`) and an NVIDIA RTX 4090 Laptop dGPU**, Ubuntu 26.04 LTS — with the
+actual HDMI/USB-HID touchscreen. It is *not* the AMD/Radeon machine this runbook was written
+against, so the original "same Mesa/`amdgpu` path as Strix Point, therefore the verdict transfers"
+argument is void. What transfers is the driver-independent half: cage/wlroots seat and
+compositing, the Flutter GTK embedder, libinput touch, the systemd/PAM boot recipe. What does
+**not** transfer is everything below the Mesa API — GL/EGL init, Iris-vs-radeonsi quirks, VAAPI,
+gfx1150 enablement. So the §4 checklist is a **full re-run** on the mini PC, not a
+regression-check. Either way the NVIDIA dGPU must stay out of the compositor's path (Step 0a).
 
 Compiled from the research fragments: cage-on-Ubuntu, Flutter-GTK-on-Wayland, touch-input/display
 layer, and prior-art/fallbacks (all researched 2026-07-30 against primary sources). Inline
@@ -184,7 +190,10 @@ The spike runs landscape/native: do neither.
 **Rendering.** The embedder renders Skia-on-OpenGL via EGL on Wayland; Impeller on Linux is
 "Experimental … not recommended" through 3.44 ([docs.flutter.dev/perf/impeller](https://docs.flutter.dev/perf/impeller)).
 No open AMD/radeonsi Flutter bugs found (the one open GL-on-Wayland bug is NVIDIA-specific,
-[#188966](https://github.com/flutter/flutter/issues/188966)). Strix Point wants the HWE stack:
+[#188966](https://github.com/flutter/flutter/issues/188966)) — **but 2026-08-03**: that survey
+covered the *mini PC's* driver, not the spike box's. The spike box is Intel `i915`/Iris, for which
+no equivalent bug survey was ever run; treat its GL path as UNSURVEYED, not clean.
+Strix Point wants the HWE stack:
 noble-updates has HWE kernel `7.0.0-28` and **Mesa 25.2.8**
 ([packages.ubuntu.com](https://packages.ubuntu.com/noble-updates/linux-generic-hwe-24.04)) —
 comfortably past gfx1150 enablement. The GA 6.8 kernel + Mesa 24.0 stack is the one combination
@@ -196,7 +205,10 @@ exit code** — so `Restart=always` in the unit restarts compositor + app togeth
 **Build logistics.** Cross-compiling from macOS is impossible (`'"build linux" only supported on
 Linux hosts.'` —
 [build_linux.dart](https://github.com/flutter/flutter/blob/master/packages/flutter_tools/lib/src/commands/build_linux.dart));
-build **on the box** (or an x64 `ubuntu-24.04` CI runner). `flutter build linux --release` needs
+build **on the box** (or on an x64 CI runner whose image matches the **oldest** box the bundle
+must run on — `ubuntu-24.04` for the mini PC's Ubuntu Server 24.04, *not* the dev laptop's 26.04.
+glibc is backward- but not forward-compatible, so a bundle linked against 26.04's glibc will not
+start on 24.04, while a 24.04-built one runs on both). `flutter build linux --release` needs
 no display server — SSH is fine.
 
 **Prior art.** Canonical's Ubuntu Frame Flutter demo proves the identical architecture — a stock
@@ -205,7 +217,7 @@ supervised restart-always
 ([iot-example-graphical-snap, branch 24/Flutter-demo](https://github.com/canonical/iot-example-graphical-snap)).
 Cage itself was written *for a home-automation panel*
 ([author's page](https://www.hjdskes.nl/projects/cage/)). Keep `GDK_GL=gles` in the back pocket
-if GL context creation fails (from the Frame demo; should be unnecessary on amdgpu full GL).
+if GL context creation fails (from the Frame demo; should be unnecessary on the i915 iGPU's full GL).
 
 ---
 
@@ -216,7 +228,8 @@ attributable to the right layer.
 
 ### Step 0 — OS install
 
-1. On the laptop (primary dev box), install **Ubuntu Desktop 24.04 LTS amd64** (GNOME wanted for
+1. On the laptop (primary dev box), install **Ubuntu Desktop LTS amd64** — 26.04 as of
+   2026-08-03, not the 24.04 this runbook was written against (GNOME wanted for
    daily dev; it includes `libpam-systemd`). Enable OpenSSH. During spike runs, GNOME's display
    manager must release the seat: either `sudo systemctl stop gdm3` (or `gdm`, depending on
    package) before launching cage from a TTY, or run the Step 8 boot test with
@@ -224,37 +237,50 @@ attributable to the right layer.
    final mini PC appliance: Ubuntu **Server** standard install, no DE at all.)
 ### Step 0a — Hybrid-graphics check (laptop-specific, do this FIRST)
 
-The laptop pairs a Radeon iGPU with an NVIDIA dGPU. cage/wlroots must run on the iGPU — the
+The laptop pairs an Intel UHD iGPU (`i915`) with an NVIDIA RTX 4090 dGPU. cage/wlroots must run on the iGPU — the
 NVIDIA proprietary driver is the worst-supported wlroots combo, and a failure there would
 contaminate the spike verdict. **UNVERIFIED for this specific laptop model**: which GPU the HDMI
 connector is wired to (on many performance laptops it is the dGPU).
 
 ```bash
 sudo apt install -y drm-info
-drm_info | less        # per /dev/dri/cardN: driver (amdgpu vs nvidia) and connector list
+drm_info | less        # per /dev/dri/cardN: driver (i915 vs nvidia) and connector list
 # Simpler: for each card, which connectors does it own?
 ls -l /sys/class/drm/ | grep -E 'card[0-9]-'   # e.g. card1-HDMI-A-1 → card1 owns HDMI
-readlink /sys/class/drm/card*/device/driver    # which card is amdgpu
+readlink /sys/class/drm/card*/device/driver    # which card is i915 (iGPU), which is nvidia
+ls -l /dev/dri/by-path/                        # the stable pin path — cardN is not guaranteed stable
 ```
 
-- If **HDMI belongs to the amdgpu card**: pin cage to it and proceed —
-  `WLR_DRM_DEVICES=/dev/dri/card<N-of-amdgpu> cage -- <app>` (add as `Environment=` in the
-  Step 8 unit).
+- If **HDMI belongs to the iGPU (`i915`) card**: pin cage to it and proceed —
+  `WLR_DRM_DEVICES=/dev/dri/by-path/pci-0000:00:02.0-card cage -- <app>` (add as `Environment=`
+  in the Step 8 unit). Pin by `by-path`, never `/dev/dri/cardN`: cardN follows driver probe
+  order and is not guaranteed stable across boots or kernel changes. Do not assume the iGPU is
+  the low-numbered card either — on this laptop the NVIDIA dGPU enumerates as `card1` and the
+  i915 iGPU as `card2` (2026-08-03).
 - If **HDMI belongs to the NVIDIA card**: (a) check BIOS/UEFI for a MUX / "hybrid graphics" /
   "iGPU only" switch; (b) try a **USB-C DP-alt-mode → HDMI adapter** — USB-C outputs are commonly
   iGPU-wired (**UNVERIFIED** per model); (c) last resort, run the spike on the laptop's built-in
   screen for the software layers and accept that touch tests wait for an iGPU-driven output.
 - Never let cage open the NVIDIA card: `WLR_DRM_DEVICES` pinning above is mandatory either way.
 
-2. Install the HWE stack and fully update (Strix Point needs it):
+2. Install the HWE stack and fully update (the mini PC's Strix Point graphics need it):
+
+   The HWE meta-package name embeds the LTS release it backports *into*, so it must never be
+   hardcoded: `linux-generic-hwe-24.04` on the mini PC's 24.04, `linux-generic-hwe-26.04` on the
+   26.04 dev laptop. Derive it from the running release. This is the manual mirror of
+   `kiosk_hwe_kernel_packages` in `appliance/ansible/group_vars/all.yml`, which is the automated
+   path (the kiosk role does the same lookup and asserts on an unmapped release). HWE stacks
+   exist **only on Ubuntu LTS releases** — on an interim release there is nothing to install.
 
    ```bash
    sudo apt update
-   sudo apt install -y linux-generic-hwe-24.04
+   HWE="linux-generic-hwe-$(lsb_release -rs)"   # LTS releases only; 26.04 on this laptop
+   sudo apt install -y "$HWE"
+   sudo apt-mark manual "$HWE"   # else a release upgrade can leave it auto and autoremovable
    sudo apt full-upgrade -y
    sudo reboot
    # after reboot, sanity-check:
-   uname -r                      # expect the HWE kernel, not 6.8 GA
+   uname -r                      # expect the HWE kernel, not the GA one (6.8 on 24.04)
    dpkg -l libpam-systemd        # must be installed (PAM session -> logind)
    ```
 

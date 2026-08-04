@@ -174,7 +174,7 @@ A healthy start against the development Hub — verbatim from the browser
 console, from the `flutter build web` command above plus `--dart-define=LOG=info`:
 
 ```
-[panel] I panel.start hub=ha mode=profile platform=web log=info
+[panel] I panel.start hub=ha mode=profile platform=web log=info log_from=build
 [panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build env=unavailable
 [panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33
 [panel] I hub.configured url=http://localhost:8123 token=set
@@ -200,10 +200,17 @@ a Device pin that never fills in is otherwise completely silent, and the
 cause is always an `entity:` the Hub has never heard of.
 
 Level is `debug` in debug builds and `info` in release; override with
-`--dart-define=LOG=debug|info|warn|error|off`. Debug adds every state
-change and every tap. `Log.installErrorHandlers()` routes framework and
-uncaught errors through the same channel, so a crash leaves a `[panel] E`
-line rather than only a red screen nobody is standing in front of.
+`LOG=debug|info|warn|error|off` in the environment, or
+`--dart-define=LOG=…` (the only route on web). It resolves **environment
+first**, exactly like `HUB`/`HA_URL`/`HA_TOKEN` — turning the logs up on a
+Panel already on the wall must not mean rebuilding it — and `log_from=` on
+the `panel.start` line names the origin that won. Debug adds every state
+change and every tap. A value neither origin can parse is reported as
+`W panel.bad_log_level`, never thrown: a typo in a diagnostics flag must
+not be why the wall panel comes up black. `Log.installErrorHandlers()`
+routes framework and uncaught errors through the same channel, so a crash
+leaves a `[panel] E` line rather than only a red screen nobody is standing
+in front of.
 
 **Never log a secret** — the Hub token in particular. `main.dart` logs
 `token=set`, not the token. (Home Assistant's own websocket debug logging

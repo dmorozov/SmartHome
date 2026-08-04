@@ -6,7 +6,7 @@ all:
       hosts:
         laptop:
           # Lenovo Legion 9 16IRX8 (Intel i9-13980HX, Intel UHD iGPU + NVIDIA
-          # RTX 4090 dGPU), Ubuntu 25.10 -> 26.04 LTS. Current Hub host.
+          # RTX 4090 dGPU), Ubuntu 26.04 LTS (resolute). Current Hub host.
           #
           # REAL address as of phase 0 (2026-08-03). This is a Wi-Fi lease
           # (wlp164s0, AX210) and it is deliberately NOT DHCP-reserved — see

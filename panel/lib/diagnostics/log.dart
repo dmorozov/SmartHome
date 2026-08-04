@@ -24,7 +24,8 @@ enum LogLevel {
   warn('W'),
   error('E'),
 
-  /// Emit nothing. Tests use it; `--dart-define=LOG=off` silences a build.
+  /// Emit nothing. Tests use it; `LOG=off` in the environment — or
+  /// `--dart-define=LOG=off`, the only route on web — silences a Panel.
   off('-');
 
   const LogLevel(this.mark);
@@ -69,13 +70,70 @@ class LogRecord {
 }
 
 abstract final class Log {
-  static const _configured = String.fromEnvironment('LOG');
+  /// The `LOG` compiled into this build; empty where the define was omitted.
+  /// Still a const: web has no process environment, so on `-d chrome` a
+  /// `--dart-define` stays the only route (see `config/runtime_env.dart`).
+  static const _buildLevel = String.fromEnvironment('LOG');
 
   /// Everything at this level or above is emitted. A debug build is chatty
   /// (every state change, every tap); the kiosk's release build is not.
-  /// Override either way with `--dart-define=LOG=debug|info|warn|error|off`.
-  static LogLevel level =
-      _parseLevel(_configured) ?? (kReleaseMode ? LogLevel.info : LogLevel.debug);
+  ///
+  /// This is the value before anything has said otherwise — the build's
+  /// `--dart-define=LOG=…`, else the per-mode default. [applyLevel] is what
+  /// gives the *environment* the last word, and `main()` calls it: a wall
+  /// panel whose log level can only be raised by rebuilding it is a wall
+  /// panel whose logs cannot be raised.
+  static LogLevel level = _parseLevel(_buildLevel) ??
+      (kReleaseMode ? LogLevel.info : LogLevel.debug);
+
+  /// Resolves [level] from the runtime [environment], then the build's
+  /// `--dart-define=LOG=…` ([buildLevel], defaulted from it), then the
+  /// per-mode default — the **environment-first** order `resolveHubConfig`
+  /// uses for `HUB`/`HA_URL`/`HA_TOKEN`, for the same reason: on the
+  /// appliance the level is an operational setting, not a property of the
+  /// binary. An empty value counts as absent there too, so a shell that
+  /// exports `LOG=` cannot blank out a deliberate define.
+  ///
+  /// Returns the winning origin — `environment` | `build` | `default` — for
+  /// the `panel.start` line. A level that did not take is otherwise
+  /// invisible, most of all on web, where there is no process environment
+  /// and `LOG=debug flutter run -d chrome` silently changes nothing.
+  ///
+  /// **Takes the environment; never reads it.** [Log] is reachable from
+  /// every module, `bootPanel` included, and `bootPanel`'s contract is that
+  /// it reads no files and no environment. A static initializer reading
+  /// `Platform.environment` would break that contract transitively, at
+  /// whichever arbitrary moment the first log line happened to be emitted.
+  /// `main()` stays the only thing in the Panel that touches the
+  /// environment; [buildLevel] exists so every precedence case is reachable
+  /// from a test.
+  ///
+  /// A value neither origin can parse is reported, not thrown: a typo in a
+  /// diagnostics flag must never be the reason a wall panel comes up to a
+  /// black screen — precisely the situation this logging exists to explain.
+  static String applyLevel(
+    Map<String, String> environment, {
+    String? buildLevel,
+  }) {
+    final fromBuild = buildLevel ?? _buildLevel;
+    final fromEnv = environment['LOG'] ?? '';
+    final chosen = fromEnv.isNotEmpty ? fromEnv : fromBuild;
+    final origin = fromEnv.isNotEmpty
+        ? 'environment'
+        : (fromBuild.isNotEmpty ? 'build' : 'default');
+    final parsed = _parseLevel(chosen);
+    level = parsed ?? (kReleaseMode ? LogLevel.info : LogLevel.debug);
+    if (parsed != null) return origin;
+    if (chosen.isNotEmpty) {
+      warn('panel', 'bad_log_level', {
+        'value': chosen,
+        'from': origin,
+        'using': level.name,
+        'expected': LogLevel.values.map((l) => l.name).join('|'),
+      });
+    }
+    return 'default';
+  }
 
   /// Guard for call sites that would build a map per frame or per Hub
   /// message: `if (Log.isDebug) Log.debug(...)`.
@@ -120,16 +178,6 @@ abstract final class Log {
   /// error handling, and this would report every deliberately-thrown error
   /// twice.
   static void installErrorHandlers() {
-    if (_configured.isNotEmpty && _parseLevel(_configured) == null) {
-      // Reported, not thrown. A typo in a diagnostics flag must never be the
-      // reason a wall panel comes up to a black screen — which is precisely
-      // the situation this logging exists to explain.
-      warn('panel', 'bad_log_level', {
-        'value': _configured,
-        'using': level.name,
-        'expected': LogLevel.values.map((l) => l.name).join('|'),
-      });
-    }
     final previous = FlutterError.onError;
     FlutterError.onError = (details) {
       Log.error(

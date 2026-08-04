@@ -38,6 +38,45 @@ Environment=WLR_DRM_DEVICES={{ wlr_drm_devices }}
 # Tolerate a late-enumerating USB touchscreen (cage wiki Troubleshooting).
 Environment=WLR_LIBINPUT_NO_DEVICES=1
 {% endif %}
+{% if panel_hub_kind %}
+# Panel settings, resolved environment-first (panel/lib/config/hub_config.dart).
+# This is the delivery half of that change: the Hub's address stops being a
+# property of the binary, so a drifted DHCP lease costs a converge and a
+# restart instead of a Flutter rebuild.
+#
+# NON-SECRETS ONLY on these lines. `systemctl show -p Environment` hands their
+# values to any local user without authentication, and this unit file is 0644.
+Environment=HUB={{ panel_hub_kind }}
+{% endif %}
+{% if panel_ha_url %}
+Environment=HA_URL={{ panel_ha_url }}
+{% endif %}
+{% if panel_log_level %}
+# Same environment-first rule (panel/lib/diagnostics/log.dart), and the reason
+# it is delivered here rather than baked in: raising the level on a Panel that
+# is already on a wall must not mean rebuilding it. Unset upstream, so no line
+# is emitted and the Panel keeps its own per-mode default. A level is not a
+# secret, so it belongs in this 0644 unit file rather than in the 0600 file
+# below — that is the only reason it sits here. NOT a precedence claim:
+# systemd.exec(5) applies these in file order and the LAST assignment wins, so
+# anything in EnvironmentFile= would override these lines, not the reverse.
+Environment=LOG={{ panel_log_level }}
+{% endif %}
+# HA_TOKEN travels by file instead: `systemctl show` reports EnvironmentFiles=
+# as a PATH only, never the contents, and the file is 0600 {{ kiosk_user }}.
+# systemd (PID 1, root) reads it at every START — so a rotated token needs a
+# restart, not a daemon-reload, which is what the Restart cage handler does.
+#
+# The leading '-' is deliberate. Without it systemd.exec(5) is explicit: "If
+# the file does not exist, cannot be read, or contains invalid content, the
+# service will fail to start." On a box running the default HUB=fake there is
+# no token to have, and a hard requirement would turn "no HA yet" into a dead
+# screen restart-looping forever (Restart=always + StartLimitIntervalSec=0 —
+# see the [Unit] comment above). When a token IS genuinely missing under
+# HUB=ha, the Panel names it far better than systemd can: `hub.configured
+# token=absent` in the journal, plus a converge-time assert in the role that
+# refuses the combination before it ever reaches this unit.
+EnvironmentFile=-{{ panel_env_file }}
 User={{ kiosk_user }}
 # Log this user with utmp, letting it show up with commands 'w' and
 # 'who'. This is needed since we replace (a)getty.

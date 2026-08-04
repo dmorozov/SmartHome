@@ -74,4 +74,47 @@ void main() {
       'error="FormatException: duplicate room id"',
     );
   });
+
+  // The level is the one setting an operator reaches for when the Panel is
+  // already on the wall and misbehaving, so it resolves the way the Hub
+  // settings do (config/hub_config.dart): environment, then the build's
+  // define, then the per-mode default. `buildLevel` is passed explicitly so
+  // these cases hold whether or not the suite itself was run with
+  // `--dart-define=LOG=…`.
+  group('level resolution', () {
+    test('the environment beats a build define', () {
+      expect(Log.applyLevel(const {'LOG': 'error'}, buildLevel: 'debug'),
+          'environment');
+      expect(Log.level, LogLevel.error);
+    });
+
+    test('a build define is used when the environment is silent', () {
+      expect(Log.applyLevel(const {}, buildLevel: 'off'), 'build');
+      expect(Log.level, LogLevel.off);
+    });
+
+    test('an empty environment value does not defeat the define', () {
+      // A shell that exports LOG= must not blank out a deliberate define,
+      // exactly as for HA_TOKEN.
+      expect(Log.applyLevel(const {'LOG': ''}, buildLevel: 'warn'), 'build');
+      expect(Log.level, LogLevel.warn);
+    });
+
+    test('the per-mode default stands when neither speaks', () {
+      expect(Log.applyLevel(const {}, buildLevel: ''), 'default');
+      // `flutter test` runs in debug mode; the release build starts at info.
+      expect(Log.level, LogLevel.debug);
+    });
+
+    test('a typo is reported, never thrown', () {
+      expect(
+          Log.applyLevel(const {'LOG': 'verbose'}, buildLevel: ''), 'default');
+      expect(Log.level, LogLevel.debug);
+      expect(
+        records.single.toString(),
+        '[panel] W panel.bad_log_level value=verbose from=environment '
+        'using=debug expected=debug|info|warn|error|off',
+      );
+    });
+  });
 }

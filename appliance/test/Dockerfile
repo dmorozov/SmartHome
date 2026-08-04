@@ -1,15 +1,32 @@
-# Test Appliance — Ubuntu 24.04 with systemd + sshd, for exercising the
-# deployment tooling (appliance/scripts/*, later the Ansible playbooks)
+# Test Appliance — Ubuntu with systemd + sshd, for exercising the Appliance
+# deployment tooling (appliance/ansible/ over real SSH, spike/bootstrap.sh)
 # without the real laptop/mini PC.
 #
+# WHICH Ubuntu — build arg UBUNTU_TAG, default 24.04. That default is
+# deliberate and is NOT "whatever the Hub host runs". This container stands
+# in for an *Appliance*, and there are two:
+#   24.04 LTS  the production mini PC (ADR-0001). Not purchased yet, so this
+#              container is its ONLY pre-flight. Hence the default.
+#   26.04 LTS  the dev laptop since 2026-08-03. That box is real, reachable
+#              and safe to converge directly (every kiosk gate defaults
+#              false), so it needs no stand-in — but
+#              `UBUNTU_TAG=26.04 ./run.sh rebuild` reproduces it when a
+#              failure is suspected to be OS-specific.
+# Both resolve every package below and in group_vars/all.yml (checked
+# 2026-08-03 on the 26.04 host; libstdc++-12-dev is still in 26.04 universe
+# at 12.5.0 even though gcc 15 is the default compiler).
+#
 # What this image deliberately does NOT preinstall: the kiosk package set,
-# the cage user, the systemd units — installing those is install-kiosk.sh's
-# job, and this container exists to test that script from a clean slate.
+# the cage user, the systemd units — installing those is the ansible kiosk
+# role's job, and this container exists to test it from a clean slate.
 #
 # Cannot test here (needs the real Appliance): cage compositing (no GPU/DRM
-# seat), touch input, boot-to-TTY/gdm, screen power. See README.md.
+# seat), touch input, boot-to-TTY/gdm, screen power. Nor the HWE-kernel task,
+# at any UBUNTU_TAG: host_vars/test-appliance.yml pins kiosk_hwe_kernel to
+# false, so that task is always skipped here. See README.md.
 
-FROM ubuntu:24.04
+ARG UBUNTU_TAG=24.04
+FROM ubuntu:${UBUNTU_TAG}
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -25,9 +42,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && systemctl mask docker.service containerd.service \
     && systemctl enable ssh
 
-# The noble base image ships the 'ubuntu' user (uid 1000) — it plays the
-# admin-over-SSH role the real Appliance will have. Key-only SSH; the key is
-# injected at 'run.sh up' time (never baked into the image).
+# The base image ships the 'ubuntu' user (uid 1000) — added in noble and kept
+# by later releases; it plays the admin-over-SSH role the real Appliance will
+# have. run.sh's key injection and host_vars/test-appliance.yml both assume
+# it exists: after a first build on a NEW UBUNTU_TAG, confirm with
+# `docker exec smarthome-test id ubuntu`. Key-only SSH; the key is injected
+# at 'run.sh up' time (never baked into the image).
 # The host docker socket is bound at /docker.sock — NOT /var/run/docker.sock,
 # because systemd mounts a tmpfs over /run at boot and would shadow it there.
 RUN usermod -aG docker ubuntu 2>/dev/null || true; \

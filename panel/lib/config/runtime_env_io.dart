@@ -7,9 +7,14 @@ const environmentIsAvailable = true;
 
 /// The real process environment — the appliance path.
 ///
-/// The intent is that `cage@.service` will carry `Environment=HA_URL=…`, the
-/// same seam ansible already uses for `WLR_DRM_DEVICES`. **Not wired yet**:
-/// the unit template sets no HA_* variables and `kiosk_app` still points at
-/// the spike app, so today this path serves `flutter run -d linux`, `flutter
-/// test`, and any hand-started bundle. See the phase-0 open items.
+/// `cage@.service` supplies it: `Environment=HUB=`/`HA_URL=` from ansible
+/// vars, the same seam already used for `WLR_DRM_DEVICES`, and `HA_TOKEN`
+/// from an `EnvironmentFile=` at mode 0600 — a secret must not sit on an
+/// `Environment=` line, which `systemctl show` reads out to any local user.
+/// See `appliance/ansible/roles/kiosk/`.
+///
+/// `kiosk_app` still launches the spike app, which ignores all three; the
+/// wiring goes live unchanged when it points at the Panel bundle. This path
+/// also serves `flutter run -d linux`, `flutter test`, and any hand-started
+/// bundle.
 Map<String, String> runtimeEnvironment() => Platform.environment;

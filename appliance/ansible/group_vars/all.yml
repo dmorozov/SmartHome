@@ -6,8 +6,70 @@ kiosk_tty: tty1
 # The app cage launches at boot — the spike bundle today, the Panel app later.
 kiosk_app: "/home/{{ kiosk_user }}/spike_app/bundle/spike_app"
 
+# --- Panel runtime settings (panel/lib/config/hub_config.dart) --------------
+# The Panel resolves HUB/HA_URL/HA_TOKEN from the process environment FIRST,
+# so delivering them from cage@.service is what makes the Hub's address an
+# operational setting: a moved Hub costs a converge plus a restart, never a
+# Flutter rebuild. Inert while kiosk_app is the spike app (which ignores
+# them), live the moment kiosk_app points at the Panel bundle — which is why
+# the two changes are deliberately decoupled.
+
+# EMPTY on purpose, and it must stay that way — the same rule as
+# panel_log_level below. Resolution is environment-FIRST, so any value here
+# beats a `--dart-define` compiled into the bundle. Naming the hub_config.dart
+# defaults (`fake`, `http://localhost:8123`) would look harmless and would
+# silently force a Panel built with `--dart-define=HUB=ha` back onto the fake
+# Hub. Empty emits no Environment= line at all, which is what actually makes
+# "a converge changes nothing until someone asks it to" true.
+#
+# `ha` opts in to the real Hub and REQUIRES a token; the role refuses that
+# combination without one rather than shipping a crash-looping black screen.
+panel_hub_kind: ""
+
+# Set together with panel_hub_kind. While the Hub and the Panel share a box
+# (ADR-0008) the Panel's own default is already right; override per host when
+# they split, or for a Hub whose lease drifted.
+panel_ha_url: ""
+
+# LOG resolves environment-first too (panel/lib/diagnostics/log.dart), and the
+# appliance is precisely the case that change was made for: turning the logs up
+# on a Panel already on the wall must not mean rebuilding it. Empty = emit no
+# Environment=LOG line at all, so an unset value changes nothing and the Panel
+# keeps its own default (info in release, debug otherwise). Raise it for a
+# converge with `-e panel_log_level=debug`. NOT a secret — a level belongs in
+# the unit file, unlike the token below.
+panel_log_level: ""
+
+# The token's delivery, and the reason it is NOT an Environment= line:
+# `systemctl show -p Environment` echoes every Environment= value to any local
+# user with no authentication (D-Bus grants Properties.Get/GetAll to
+# context="default"; polkit defines no action for property reads), and the
+# unit file itself is 0644. `EnvironmentFile=` exposes only the PATH.
+panel_env_file: /etc/smarthome/panel.env
+
+# WHERE THE OPERATOR PUTS THE TOKEN: nowhere in this repo. It lives in
+# `hub/token`, which hub/.gitignore already reserves for exactly this ("The
+# laptop/appliance Hub's long-lived Panel token"), on whichever machine runs
+# the playbook. It reaches this converge through the controller's environment:
+#
+#   cd appliance/ansible
+#   PANEL_HA_TOKEN="$(cat ../../hub/token)" \
+#     ansible-playbook site.yml -l laptop -e panel_hub_kind=ha
+#
+# `$(cat …)` keeps the value out of shell history; ansible.cfg's
+# pipelining=True keeps it out of any temp file on the target. Deliberately
+# NOT ansible-vault: vault puts ciphertext in a TRACKED file and adds a second
+# secret (the vault password) to manage exactly one value, and it makes token
+# rotation a commit. Unset here the lookup yields '', and an empty token never
+# overwrites the one already on the box. Do NOT pass `-e panel_ha_token=…` —
+# extra-vars land in `ps` output.
+panel_ha_token: "{{ lookup('ansible.builtin.env', 'PANEL_HA_TOKEN') }}"
+
 # Hybrid-GPU pin (runbook Step 0a): empty = no pin. On the laptop this MUST be
-# set to the amdgpu card (see host_vars/laptop.yml and check-hybrid-gpu.sh).
+# set to the integrated card — Intel i915 there, amdgpu on the mini PC — and
+# always as /dev/dri/by-path/pci-<addr>-card, never /dev/dri/cardN (numbering
+# is not guaranteed stable across boots). See host_vars/laptop.yml and
+# check-hybrid-gpu.sh.
 wlr_drm_devices: ""
 
 # Uncomment-equivalents of the unit's optional Environment lines:
@@ -21,10 +83,38 @@ kiosk_enable: false        # enable cage@<tty> + graphical.target default
 kiosk_disable_gdm: false   # laptop only: clear gdm's display-manager.service claim
 kiosk_hardening: false     # grub silent boot, logind NAutoVTs/ReserveVT
 
-# HWE kernel (runbook Step 0): required on real hardware — Strix Point
-# graphics want the newest kernel Ubuntu 24.04 offers. Off only where a
-# kernel is meaningless (the test container).
+# HWE kernel (runbook Step 0): required on real hardware — the mini PC's
+# Strix Point graphics want the newest kernel its LTS offers (ADR-0001).
+# Off only where a kernel is meaningless (the test container).
 kiosk_hwe_kernel: true
+
+# The HWE meta-package name embeds the LTS release it backports INTO, so it
+# differs per target and must NEVER be hardcoded in the role. Keyed by
+# ansible_distribution_version so a release-upgraded host self-corrects.
+#
+# Measured 2026-08-03:
+#   24.04  linux-generic-hwe-24.04 -> linux-image-generic-hwe-24.04
+#          7.0.0-28.28~24.04.1 (noble-updates). Plain `linux-generic` there is
+#          linux-image-generic 6.8.0-136.136 — the GA stack, NOT the HWE one.
+#          Never collapse this map to `linux-generic`.
+#   26.04  linux-generic-hwe-26.04 -> linux-image-generic-hwe-26.04
+#          7.0.0-28.28 (== `linux-generic` today; the two diverge from 26.04.2
+#          on, when HWE rolls forward to the next interim kernel).
+# `linux-generic-hwe-24.04` still resolves on 26.04, but only as a transitional
+# shim (Depends: linux-generic-hwe-26.04, "can be safely removed"). Ubuntu
+# keeps such shims one cycle — hwe-22.04 is already absent from 26.04 — which
+# is why the old hardcode was a time bomb rather than an immediate failure.
+#
+# HWE metas exist only for Ubuntu LTS releases: an interim release (25.10 had
+# no linux-generic-hwe-25.10), a non-Ubuntu host, or any unlisted release
+# resolves to '' and the role asserts instead of guessing. A box that genuinely
+# needs a different kernel meta overrides kiosk_hwe_kernel_package in host_vars.
+kiosk_hwe_kernel_packages:
+  "24.04": linux-generic-hwe-24.04
+  "26.04": linux-generic-hwe-26.04
+kiosk_hwe_kernel_package: >-
+  {{ kiosk_hwe_kernel_packages[ansible_distribution_version | default('')]
+     | default('') }}
 
 # Package sets (runbook Step 1, plus drm-info for Step 0a; verified in the
 # appliance/test container).

@@ -6,9 +6,16 @@ ha-config/*
 !ha-config/configuration.yaml
 !ha-config/automations.yaml
 
-# Mosquitto: persistence database and logs (config stays tracked).
-mosquitto/data/
-mosquitto/log/
+# Mosquitto: persistence database and logs. The config stays tracked, and so do
+# the two runtime DIRECTORIES themselves (via .gitkeep) — compose bind-mounts
+# them, and compose sets CreateMountpoint, so a missing source is created by
+# dockerd as root:root inside this working tree. Note the `dir/*` + negation
+# form: git will not descend into an excluded directory, so `mosquitto/data/`
+# plus `!mosquitto/data/.gitkeep` would never have worked.
+mosquitto/data/*
+!mosquitto/data/.gitkeep
+mosquitto/log/*
+!mosquitto/log/.gitkeep
 
 # Zigbee2MQTT: only the tracked EXAMPLE starter; the live configuration.yaml
 # is ignored on purpose — Z2M rewrites it at runtime and injects the generated
@@ -35,3 +42,6 @@ secrets.yaml
 secret.yaml
 *.env
 passwd
+# mosquitto_passwd 2.1 writes a `<file>.backup.XXXXXX` next to the file it edits
+# — same hashes, same secrecy, and `passwd` alone does not match it.
+passwd.backup.*
