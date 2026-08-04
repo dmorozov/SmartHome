@@ -96,9 +96,11 @@ rule, and battery-cam courtesy generally).
   `video-stream.js` is the reference implementation to crib from).
   Non-web builds keep the placeholder for now (the appliance target gets
   its treatment at spike time).
-- **Config**: the Panel needs the go2rtc base URL — new
-  `--dart-define=GO2RTC_URL=http://<hub-ip>:1984` alongside `HA_URL`,
-  logged at startup as `panel.start … go2rtc=set`.
+- **Config**: the Panel needs the go2rtc base URL — a new `GO2RTC_URL`
+  alongside `HA_URL`, logged at startup as `panel.start … go2rtc=set`.
+  Add it to `resolveHubConfig` (`panel/lib/config/hub_config.dart`) rather
+  than as a bare `--dart-define`, so it resolves environment-first like the
+  others and one more address does not re-bake the binary.
 - **Diagnostics**: `[panel] I popup.stream_open name=wyze_porch` /
   `popup.stream_closed` / `W popup.stream_failed reason=…` — a wall
   panel's video failure must be greppable, not a black rectangle.

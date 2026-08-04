@@ -1,9 +1,28 @@
-# AMD laptop — dev Appliance (Radeon iGPU + NVIDIA dGPU, Ubuntu Desktop 24.04).
+# Lenovo Legion 9 16IRX8 — dev Appliance and current Hub host (ADR-0008).
+#
+# HARDWARE, verified on the box 2026-08-03 (the repo previously described this
+# machine as an AMD laptop with a Radeon iGPU — it is not):
+#   CPU   Intel Core i9-13980HX (Raptor Lake-HX)
+#   iGPU  Intel Raptor Lake-S UHD Graphics, i915, PCI 00:02.0  -> card2
+#   dGPU  NVIDIA RTX 4090 Laptop, nvidia,     PCI 01:00.0      -> card1
+#   NIC   Realtek Killer E3000 2.5GbE (enp162s0) + Intel AX210 Wi-Fi (wlp164s0)
+#   OS    Ubuntu 25.10 at bring-up; 26.04 LTS upgrade pending (phase 0 step 1)
 
-# MANDATORY before enabling the kiosk here (runbook Step 0a): pin cage to the
-# amdgpu iGPU so the NVIDIA card stays out of the compositor's path. Find the
-# right card with appliance/scripts/check-hybrid-gpu.sh, then set e.g.:
-# wlr_drm_devices: /dev/dri/card1
+# Hybrid-GPU pin (runbook Step 0a) — MANDATORY before enabling the kiosk here:
+# cage/wlroots must never open the NVIDIA card. Pinned by stable PCI path
+# rather than /dev/dri/cardN, because card numbering is not guaranteed stable
+# across boots (observed: card1=nvidia, card2=i915 — the reverse of the
+# enumeration the old amdgpu-oriented notes assumed).
+wlr_drm_devices: /dev/dri/by-path/pci-0000:00:02.0-card
+
+# CAVEAT for spike day: appliance/scripts/check-hybrid-gpu.sh only recognises
+# `amdgpu` as the integrated card, so on this Intel box it reports "HDMI is
+# wired to the 'nvidia' card" and prints the mitigation branch. That verdict is
+# an artefact — with no display attached every connector reads `disconnected`,
+# and the script's tie-break picks the first card carrying an HDMI-A-*, which
+# is the NVIDIA one. Both cards expose HDMI connectors (card1: HDMI-A-5;
+# card2: HDMI-A-1..4). Which card actually owns the physical HDMI port is
+# STILL UNVERIFIED — plug the touchscreen in and re-check before the spike.
 
 # DAILY-DRIVER GUARANTEE: a plain converge leaves this a normal GNOME laptop.
 # All kiosk gates default false — cage is installed but never enabled, gdm is
@@ -14,5 +33,10 @@
 # kiosk_disable_gdm: true
 #
 # Not yet automated here: Docker Engine + the hub stack (hub/compose.yaml) —
-# manual for now (sudo apt install docker.io; cd hub && docker compose up -d);
-# becomes a 'hub' role in site.yml later.
+# manual for now (phase 0 step 5 done by hand: docker-ce 29.7.1 +
+# compose v5.4.0, login user in the docker group); becomes a 'hub' role later.
+#
+# kiosk_hwe_kernel: the group default (true) installs `linux-generic-hwe-24.04`,
+# which on this host is a verified no-op — 25.10 ships the same 6.17 kernel from
+# the same linux-meta source. That name will NOT resolve on 26.04, so this must
+# be revisited with the OS upgrade (see phase-0 as-built notes).

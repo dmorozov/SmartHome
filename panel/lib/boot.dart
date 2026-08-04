@@ -115,8 +115,9 @@ HubClient _hub(
   Log.info('hub', 'configured',
       {'url': url, 'token': token.isEmpty ? 'absent' : 'set'});
   if (token.isEmpty) {
-    throw ArgumentError('HUB=ha needs --dart-define=HA_TOKEN=<long-lived '
-        'token>; keep it out of the repo (hub/dev/token)');
+    throw ArgumentError('HUB=ha needs HA_TOKEN=<long-lived token> — in the '
+        'environment, or --dart-define for web builds; keep it out of the '
+        'repo (hub/dev/token)');
   }
   return HaHubClient(
     house: house,

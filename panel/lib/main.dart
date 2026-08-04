@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'boot.dart';
+import 'config/hub_config.dart';
+import 'config/runtime_env.dart';
 import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
@@ -12,8 +14,18 @@ import 'ui/theme.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   Log.installErrorHandlers();
+  // Runtime environment first, build defines second (config/hub_config.dart).
+  // The Hub's address is an operational setting, not a property of the
+  // binary: on the appliance systemd supplies it, so a Hub that moves costs
+  // a restart rather than a Flutter rebuild.
+  final config = resolveHubConfig(
+    environment: runtimeEnvironment(),
+    buildKind: _buildHubKind,
+    buildUrl: _buildHaUrl,
+    buildToken: _buildHaToken,
+  );
   Log.info('panel', 'start', {
-    'hub': _hubKind,
+    'hub': config.kind,
     'mode': kReleaseMode
         ? 'release'
         : kProfileMode
@@ -22,26 +34,51 @@ Future<void> main() async {
     'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
     'log': Log.level.name,
   });
+  // Which origin won, per setting. With two possible origins, a Panel
+  // pointed at a stale address and a Panel pointed at a dead Hub look the
+  // same on the badge; this line is what separates them. Origins only — the
+  // token's *value* never appears (log.dart: Never log a secret). `env=` says
+  // whether a process environment existed at all, because on web it does not
+  // and a discarded `HA_URL=…` otherwise looks like a healthy default.
+  Log.info('hub', 'config', {
+    ...config.logFields,
+    'env': environmentIsAvailable ? 'available' : 'unavailable',
+  });
+  // An ambient variable beating the flag the operator typed is the one
+  // genuinely surprising consequence of environment-first order. Warn, don't
+  // fail: the environment is still the answer we want, just not silently.
+  if (config.overridden.isNotEmpty) {
+    Log.warn('hub', 'config_override',
+        {'settings': config.overridden.join(','), 'winner': 'environment'});
+  }
   // The House Plan (ADR-0005): everything drawn — geometry and Device
   // Placements — generated into house.yaml, joined with the hand-maintained
   // Hub bindings.
   final boot = bootPanel(
-    hubKind: _hubKind,
-    hubUrl: _haUrl,
-    hubToken: _haToken,
+    hubKind: config.kind,
+    hubUrl: config.url,
+    hubToken: config.token,
     houseYaml: await rootBundle.loadString('assets/house/house.yaml'),
     bindingsYaml: await rootBundle.loadString('assets/house/bindings.yaml'),
   );
   runApp(PanelApp(controller: boot.controller, hubLabel: boot.hubLabel));
 }
 
-/// Which Hub the build talks to. Defaults to the in-memory fake hub; pass
-/// `--dart-define=HUB=ha` (plus `HA_URL` and `HA_TOKEN`) for a real Home
-/// Assistant — see hub/dev/README.md.
-const _hubKind = String.fromEnvironment('HUB', defaultValue: 'fake');
-const _haUrl =
-    String.fromEnvironment('HA_URL', defaultValue: 'http://localhost:8123');
-const _haToken = String.fromEnvironment('HA_TOKEN');
+/// What this build was compiled with, or null where the define was omitted —
+/// `bool.hasEnvironment` is what separates "not passed" from "passed the
+/// same string the default would have used", which is what lets the boot log
+/// name the real origin.
+///
+/// Defaults live in `config/hub_config.dart`, not here, so the environment
+/// path and the build path cannot drift apart. Pass `--dart-define=HUB=ha`
+/// (plus `HA_URL` and `HA_TOKEN`) for a real Home Assistant, or set the same
+/// names in the environment — see hub/dev/README.md.
+const String? _buildHubKind =
+    bool.hasEnvironment('HUB') ? String.fromEnvironment('HUB') : null;
+const String? _buildHaUrl =
+    bool.hasEnvironment('HA_URL') ? String.fromEnvironment('HA_URL') : null;
+const String? _buildHaToken =
+    bool.hasEnvironment('HA_TOKEN') ? String.fromEnvironment('HA_TOKEN') : null;
 
 class PanelApp extends StatelessWidget {
   const PanelApp({

@@ -27,8 +27,9 @@ codebase via the Flutter Web build. What exists:
   placeholder), everything else shows its state
 - Two Hubs behind one interface: `FakeHub` (in-memory, seeded from the real
   fleet, drifts readings so the UI visibly lives) and `HaHubClient` (the real
-  Home Assistant WebSocket API). Pick with `--dart-define=HUB=fake|ha`; the
-  header badge names the Hub and shows whether it is reachable
+  Home Assistant WebSocket API). Pick with `HUB=fake|ha` in the environment,
+  or `--dart-define=HUB=fake|ha` (the only route on web); the header badge
+  names the Hub and shows whether it is reachable
 
 Still to come: the real house drawing (the pipeline below is built; the
 shipped House Plan is a placeholder resembling it), the actual design system,
@@ -38,7 +39,7 @@ patches) once the spike passes.
 
 ## Talking to the Hub
 
-`HubClient` has two implementations; `lib/main.dart` picks one at build time.
+`HubClient` has two implementations; `lib/main.dart` picks one at boot.
 
 ```sh
 flutter run -d chrome                       # FakeHub (default)
@@ -46,6 +47,46 @@ flutter run -d chrome --dart-define=HUB=ha \
   --dart-define=HA_URL=http://localhost:8123 \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
+
+`HUB`, `HA_URL` and `HA_TOKEN` are read from the **process environment
+first**, falling back to the build's `--dart-define`, then to the built-in
+defaults (`config/hub_config.dart`).
+
+**The environment form works on every target except web.** `-d chrome` is a
+web build, and web has no process environment — a `HA_URL=…` prefix there is
+silently discarded and you get FakeHub on `localhost:8123`. So use
+`--dart-define` with `-d chrome`, and the environment with `-d linux`
+(the kiosk/cage target), `-d macos`, or `flutter test`:
+
+```sh
+HUB=ha HA_URL=http://localhost:8123 HA_TOKEN="$(cat ../hub/dev/token)" \
+  flutter run -d linux
+```
+
+The order matters on the appliance: the Hub's address is an operational
+setting, not a property of the binary. A Hub that moves — or an unreserved
+DHCP lease that drifts — should cost a restart, never a Flutter rebuild.
+(The delivery half is **not wired yet**: `cage@.service` carries no `HA_*`
+variables and `kiosk_app` still points at the spike app. See the phase-0
+open items.)
+
+Which origin won is logged at boot, values withheld — `env=` says whether a
+process environment existed at all, so a discarded `HA_URL=…` on web is
+visible rather than looking like a healthy default:
+
+```
+[panel] I hub.config HUB=build HA_URL=environment HA_TOKEN=environment env=available
+```
+
+If an ambient variable overrode a `--dart-define` you passed, that is called
+out too — the one genuinely surprising consequence of environment-first:
+
+```
+[panel] W hub.config_override settings=HA_URL winner=environment
+```
+
+That line exists because with two possible origins, a Panel pointed at a
+stale address and a Panel pointed at a dead Hub look identical on the badge.
 
 `HaHubClient` authenticates with a long-lived token, seeds from `get_states`,
 follows `state_changed`, and commands through `homeassistant.toggle` (which
@@ -134,6 +175,7 @@ console, from the `flutter build web` command above plus `--dart-define=LOG=info
 
 ```
 [panel] I panel.start hub=ha mode=profile platform=web log=info
+[panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build env=unavailable
 [panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33
 [panel] I hub.configured url=http://localhost:8123 token=set
 [panel] I hub.connecting url=ws://localhost:8123/api/websocket

@@ -5,11 +5,15 @@ all:
     appliances:
       hosts:
         laptop:
-          # AMD laptop (Radeon iGPU + NVIDIA dGPU), Ubuntu Desktop 24.04.
-          # PLACEHOLDER (.invalid is unresolvable by design — a real .local
-          # name here could make an untargeted run SSH into a random LAN
-          # device with become). Set the real address when Ubuntu is on:
-          ansible_host: laptop.placeholder.invalid
+          # Lenovo Legion 9 16IRX8 (Intel i9-13980HX, Intel UHD iGPU + NVIDIA
+          # RTX 4090 dGPU), Ubuntu 25.10 -> 26.04 LTS. Current Hub host.
+          #
+          # REAL address as of phase 0 (2026-08-03). This is a Wi-Fi lease
+          # (wlp164s0, AX210) and it is deliberately NOT DHCP-reserved — see
+          # the phase-0 as-built notes for why that was judged acceptable and
+          # what it costs. It CAN drift; if the Hub stops answering, re-check
+          # here first. Wired enp162s0 (Killer E3000) is cabled-down.
+          ansible_host: 192.168.68.81
         minipc:
           # Ryzen AI mini PC (production Appliance), Ubuntu Server 24.04.
           # PLACEHOLDER — machine not purchased yet:

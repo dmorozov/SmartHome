@@ -128,6 +128,20 @@ flutter run -d chrome \
   --dart-define=HA_TOKEN="$(cat ../hub/token)"
 ```
 
+`-d chrome` is a **web** build, and web has no process environment — so the
+dart-defines above are the only route here. On a native target the same
+settings resolve from the environment first, which is what makes an
+unreserved lease (phase 0 as-built) cheap to correct:
+
+```sh
+HUB=ha HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)" \
+  flutter run -d linux        # or -d macos
+```
+
+Either way, confirm which origin won in the console — `env=unavailable` is
+how a web run tells you an `HA_URL=…` prefix was discarded:
+`[panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build env=unavailable`.
+
 ## Done when
 
 - `docker compose ps`: 4 services Up, none restarting; `docker compose
@@ -139,8 +153,10 @@ flutter run -d chrome \
   `hub.snapshot` line. `hub.missing_entities` will list ~everything —
   correct: the laptop Hub has no stand-in fleet and no real devices yet.
   Phases 2–5 drain that list; this phase only proves the wiring.
-- `flutter test test/ha_hub_live_test.dart --dart-define=HA_TOKEN=...`
-  passes against `HA_URL=http://<hub-ip>:8123`.
+- `PANEL_LIVE_HUB=1 HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)"
+  flutter test test/ha_hub_live_test.dart` passes. (`flutter test` is a VM
+  target, so it honours the environment; `PANEL_LIVE_HUB` is the deliberate
+  opt-in that keeps a plain `flutter test` from ever dialling a real house.)
 
 ## Note: what happens to `hub/dev/`
 

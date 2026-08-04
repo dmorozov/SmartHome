@@ -18,8 +18,9 @@ enum HubStatus {
   retrying,
 
   /// The Hub rejected the token. Retrying cannot fix that, so the client
-  /// has stopped: a human must mint a new long-lived token and rebuild
-  /// (`--dart-define=HA_TOKEN`, see hub/dev/README.md).
+  /// has stopped: a human must mint a new long-lived token and restart the
+  /// Panel with it (`HA_TOKEN` in the environment; `--dart-define=HA_TOKEN`
+  /// for web builds, which have no environment — see hub/dev/README.md).
   gaveUp,
 }
 

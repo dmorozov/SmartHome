@@ -24,7 +24,7 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 
 - `appliance/` — provisioning for the Appliance (laptop now, mini PC later): Ansible playbooks (`ansible/`), interactive diagnostics (`scripts/`), disposable Docker test host (`test/`)
 - `hub/` — the Hub stack: Docker Compose (HA, Mosquitto, Zigbee2MQTT, go2rtc, pinned), HA config, `custom_components/` for future device fixes (volume-mounted — no custom image until system deps demand one)
-- `panel/` — the Panel Flutter app: dollhouse UI prototype, `FakeHub` and the real Home Assistant WebSocket client (pick with `--dart-define=HUB=fake|ha`), structured `[panel]` logging, and golden tests that render the UI headlessly (runs on web/macOS today; Linux/kiosk validation comes with the spike)
+- `panel/` — the Panel Flutter app: dollhouse UI prototype, `FakeHub` and the real Home Assistant WebSocket client (pick with `HUB=fake|ha` in the environment, or `--dart-define=HUB=fake|ha` — the only route on web), structured `[panel]` logging, and golden tests that render the UI headlessly (runs on web/macOS today; Linux/kiosk validation comes with the spike)
 - `spike/` — the Flutter-under-cage validation app + bootstrap script; runbook in `docs/research/flutter-cage-spike.md`
 - `docs/` — research (cited), ADRs, agent docs; `CONTEXT.md` — domain glossary
 

@@ -39,7 +39,8 @@ cd panel
 flutter test                          # full suite, including new Popup tests
 flutter test --update-goldens test/golden   # regenerate, EYEBALL the diffs
 python3 tool/test_sh3d_to_yaml.py
-flutter test test/ha_hub_live_test.dart --dart-define=HA_TOKEN=... # against the laptop
+PANEL_LIVE_HUB=1 HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)" \
+  flutter test test/ha_hub_live_test.dart                    # against the laptop
 ```
 
 Goldens will legitimately change (pins now carry real state shapes);
@@ -54,7 +55,7 @@ never rubber-stamp.
 - `hub/README.md`: bring-up notes gain ring-mqtt + wyze-bridge sections
   (promote the relevant text from `hub/dev/README.md`).
 - `panel/README.md`: Popup video (MSE/go2rtc) section; `GO2RTC_URL`
-  dart-define documented next to `HA_URL`.
+  documented next to `HA_URL`, environment-first via `resolveHubConfig`.
 - This plan directory: each phase file's "Done when" boxes checked with
   dates; A1 camera inventory and §2's Key-mapping table filled in.
 - Calendar items (root README) re-checked: the oven decision (Oct 2026)

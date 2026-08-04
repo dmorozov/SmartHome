@@ -62,8 +62,9 @@ them yourself:
 2. Create the Panel's long-lived token: click your user (bottom left) →
    **Security** → *Long-lived access tokens* → **Create token**. Copy it —
    HA shows it once.
-3. Keep it out of git. It will be passed to the Panel at build time
-   (`--dart-define`), the same way the appliance's token will be.
+3. Keep it out of git. It reaches the Panel as `HA_TOKEN` — in the process
+   environment on native targets, or `--dart-define` for web builds — the
+   same way the appliance's token will.
 
 The token and the account live in `ha-config/.storage/`, which is
 gitignored along with the database and logs; only `configuration.yaml` and
@@ -143,8 +144,21 @@ flutter run -d chrome \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
 
+From the environment instead — which wins over the dart-defines
+(`panel/lib/config/hub_config.dart`). **Not on `-d chrome`:** web has no
+process environment, so an `HA_URL=…` prefix there is discarded and you
+silently get FakeHub. Use a native target:
+
+```sh
+cd panel
+HUB=ha HA_URL=http://localhost:8123 HA_TOKEN="$(cat ../hub/dev/token)" \
+  flutter run -d linux        # or -d macos
+```
+
 Without `HUB=ha` the Panel runs on `FakeHub` as before. The header badge
-shows which Hub the build talks to and whether it is currently reachable.
+shows which Hub the Panel talks to and whether it is currently reachable;
+`[panel] I hub.config … env=available|unavailable` names where each setting
+came from, and whether the environment was consulted at all.
 
 The end-to-end check — real handshake, real snapshot, real command
 round-trip — is a test:
@@ -153,9 +167,17 @@ round-trip — is a test:
 cd panel
 flutter test test/ha_hub_live_test.dart \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
+
+# or, pointing at a different Hub without recompiling the test:
+PANEL_LIVE_HUB=1 HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)" \
+  flutter test test/ha_hub_live_test.dart
 ```
 
-It is skipped without the token, so plain `flutter test` stays hermetic.
+Plain `flutter test` stays hermetic: the test only runs for a
+`--dart-define=HA_TOKEN` (already per-invocation) or an explicit
+`PANEL_LIVE_HUB`. Gating on `HA_TOKEN` alone would not be enough now that
+settings resolve environment-first — a token merely exported in your shell
+would be enough to reach a real house and toggle a real light.
 
 ## Housekeeping
 
