@@ -144,12 +144,59 @@ kiosk_packages:
   - wev
   - drm-info
 
+# Flutter's documented Linux-desktop dependency list, minus the parts that
+# arrive by another route (`git` is in flutter_bootstrap_packages below).
+#
+# Measured 2026-08-04 on the Hub host, the only machine where
+# `flutter build linux --release` is known to succeed (Flutter 3.44.8, Dart
+# 3.12.2): clang 21.1.8, cmake 4.2.3, ninja 1.13.2, pkg-config 2.5.1,
+# gtk+-3.0 3.24.52, liblzma 5.8.3, xkbcommon 1.13.1.
+#
+# `liblzma-dev` added 2026-08-04. It is on Flutter's own list and it is on the
+# host that builds — the owner installed it by hand — but it was never in this
+# variable, so a converge of a fresh box would NOT have reproduced the working
+# machine. That gap is the whole reason it is here.
+# Rejected alternative: leave it out, on the evidence that nothing in the
+# artefact links it (`ldd` across `bundle/panel` and both `bundle/lib/*.so`
+# finds liblzma zero times — ~70 shared objects each for the binary and the
+# engine .so, and libapp.so is statically linked). Rejected because
+# nobody has run the build WITHOUT it — proving that needs sudo and would
+# break the only host known to build — so "absent from ldd" is a weaker claim
+# than "the build does not need it", and this list exists to reproduce a
+# measured host rather than to re-derive it from first principles.
+#
+# `libstdc++-12-dev` is KEPT, and is KNOWN STALE on 26.04. Deliberately not
+# corrected here: the replacement has never been converged anywhere, and a
+# variable nobody has run is worse than a variable known to be wrong.
+# Measured 2026-08-04 on the host that builds:
+#   - libstdc++-12-dev  -> Installed: (none), candidate 12.5.0-9ubuntu1, and
+#     it comes out of resolute/UNIVERSE, not main.
+#   - libstdc++-15-dev  -> 15.2.0-16ubuntu1 from resolute/main.
+#   - `clang++ -v` reports "Selected GCC installation:
+#     /usr/lib/gcc/x86_64-linux-gnu/15".
+# So the release build succeeded with no gcc-12 headers on the box at all, and
+# this entry is a copy of Flutter's docs (which still name -12-dev) rather than
+# a measurement.
+#
+# The likely correct fix is to DELETE the line, not bump it to -15-dev:
+# `apt-cache depends clang-21` shows "Depends: libstdc++-15-dev", so the
+# `clang` entry in this very list already pulls the release-matched C++ headers,
+# and a hand-written version can only ever disagree with the compiler apt
+# actually installed. Not done, because that is a claim about apt's graph on
+# BOTH targets and has been converged on neither.
+# It does not fail a converge here — the candidate resolves while universe is
+# enabled — it just installs a universe package nothing in the build uses.
+# UNVERIFIED from this host: whether 24.04 (the mini PC) offers -12-dev at all
+# and from which component, and whether 24.04's clang declares its libstdc++
+# dev the same way. See Ch. 1 §1.7a; closing it means a converge on both
+# releases, which is agent work, not an edit.
 flutter_toolchain_packages:
   - clang
   - cmake
   - ninja-build
   - pkg-config
   - libgtk-3-dev
+  - liblzma-dev
   - libstdc++-12-dev
 
 # Flutter SDK bootstrap tools — absence found by the test container

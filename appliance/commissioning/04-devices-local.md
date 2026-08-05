@@ -749,6 +749,15 @@ same command as §4.2.2.
 | **Cloud — `rachio`** | **DONE.** Config entry `rachio` / title `den.morozov@gmail.com` / source `homekit` / `state: loaded`. 5 zone switches plus standby, rain delay, one schedule switch, and two binary sensors — all listed in §4.3.4 |
 | **Local — `homekit_controller` (Bridge)** | **Not done.** Its card is still pending (`handler: homekit_controller`, `category: Bridge`, step `pair`) and the accessory still advertises `sf=1`. Needs the HomeKit setup code off the hardware — §4.3.3 |
 
+**Zone-run duration (owner item E4): DONE 2026-08-04.** `manual_run_mins` is now
+**5**; the code default it replaced is **10**. Recorded in §4.3.2. It changes what
+a mis-tap costs and *nothing else* — in particular it does not touch the Rachio
+app's schedule, which is the confusion §4.3.7 exists to clear up.
+
+**Also new 2026-08-04:** two Home Assistant scripts, `hub/ha-config/scripts.yaml`
+— un-ignored in git so it *can* be committed, but not committed yet (§4.3.9).
+Neither has ever been run.
+
 **Owner decision: the Rachio gets both, like the Ecobee.** The local bridge is
 not a replacement for the cloud entry (see below) and the cloud entry is not
 resilient. Do not dismiss the pending card.
@@ -818,10 +827,46 @@ reachable external URL to be genuinely push; without one it degrades to polling.
 Whether an external URL is configured on this Hub is **UNVERIFIED** and is a
 question for the cloud-fleet chapter, not this one.
 
-There is one option worth setting after the entry exists: *"Duration in minutes
-to run when activating a zone switch"*. A zone switch turned on from the Panel
-runs for that long and then stops. The default is short. Decide it deliberately
-— this is the knob that decides what a mis-tap costs in water.
+#### The zone-run duration — owner item E4, DONE 2026-08-04
+
+One option is worth setting once the entry exists: *"Duration in minutes to run
+when activating a zone switch"*. It is stored as `manual_run_mins` in the config
+entry's `options`, and it is the knob that decides what a mis-tap costs in water.
+
+It is now set. Measured from the entry itself, not from the UI:
+
+```bash
+jq '.data.entries[] | select(.domain=="rachio") | .options' \
+  hub/ha-config/.storage/core.config_entries
+# -> {"manual_run_mins": 5}
+#    It was {} — meaning nothing had ever been set and the code default applied.
+```
+
+The default it replaced, read out of the running image rather than remembered:
+
+```python
+# homeassistant/components/rachio/const.py — HA 2026.7
+CONF_MANUAL_RUN_MINS = "manual_run_mins"
+DEFAULT_MANUAL_RUN_MINS = 10
+```
+
+`switch.py` reads it as `.get(CONF_MANUAL_RUN_MINS, DEFAULT_MANUAL_RUN_MINS)` at
+exactly two call sites, and both are a `turn_on`. So **a tap on a zone switch now
+runs that zone for 5 minutes, where yesterday it ran for 10.** The cost of an
+accident is halved, and it is a number instead of the word "short".
+
+Why 5 rather than 2 or 15: this value only ever governs an *accident* or a quick
+hand check, never a real watering run. A real run comes from the schedule or from
+the script in §4.3.9, and both of those carry their own per-zone times — so a
+long value here would make mis-taps expensive without making any deliberate run
+better. Shorter than that gets its own problem: two minutes is not long enough to
+walk out to a sprinkler head and watch whether water is actually coming out,
+which is the one legitimate use for a manual tap and is exactly what A5 (§4.3.5)
+is about to do.
+
+**What this option cannot do is change the Rachio app's schedule.** That was the
+owner's question and it deserves a straight answer, so it has its own section:
+§4.3.7.
 
 ### 4.3.3 Path B — local HomeKit bridge — STILL PENDING
 
@@ -914,9 +959,49 @@ space-separated, not `zone_number`. An earlier draft of this chapter used
 
 Five rows, zone numbers 1–5, matching the zone names in the Rachio app. Then
 turn one zone switch on and confirm at the sprinkler head that water actually
-runs, and that it stops after the configured duration. **Not yet done** — do it
-once, deliberately, at a time when a running zone is not a problem, and set the
-run-duration option (§4.3.2) first.
+runs, and that it stops after the configured duration — **5 minutes** now that
+E4 is done (§4.3.2). **Not yet done** — this is owner item A5, and it wants
+someone outside, at a time when a running zone is not a problem.
+
+#### The panic button, before you tap anything
+
+**`switch.turn_off` on ANY Rachio zone stops the WHOLE controller.** Not that
+zone — the controller. Every zone switch *and* the schedule switch route
+`turn_off` to the same call:
+
+```python
+# homeassistant/components/rachio/switch.py — RachioZone and RachioSchedule both
+def turn_off(self, **kwargs: Any) -> None:
+    """Stop watering all zones."""
+    self._controller.stop_watering()     # -> rachio.device.stop_water(controller)
+```
+
+In most integrations that would be a bug report. Here it is the property you
+want while standing outside: if the zone you started turns out to be aimed at an
+open window, turning off *whichever* zone switch is already under your thumb
+stops the water. You do not have to find the right one, and there is no wrong one.
+
+Three ways to say the same thing, in the order you will actually reach for them:
+
+| Reach for | Why |
+|---|---|
+| `switch.turn_off` on any zone | Nearest to hand. The Panel tap, once there is a pin (§4.3.6) |
+| `script.rachio_stop_all_watering` | §4.3.9. Identical call, but findable by name in a hurry |
+| `rachio.stop_watering` with no `devices:` | Defaults to every controller on the account — here, the one |
+
+Two more findings from the same reading, both of which matter with water on the
+ground:
+
+- **Turning a zone ON stops everything first.** `RachioZone.turn_on` calls
+  `self.turn_off()` before starting its own zone. Tapping zone 3 during a
+  schedule run does not *add* zone 3 — it cancels the run and waters zone 3
+  alone for `manual_run_mins`. Convenient for a hand check, destructive if you
+  thought you were adding to a cycle.
+- **`switch.rachio_dk_standby` is inverted, and is not a stop button.** Standby's
+  `turn_on` puts the controller into standby (`rachio.device.turn_off(...)`) and
+  its `turn_off` *resumes* it. So "turn off the standby switch" is the opposite of
+  stopping — and standby governs future schedules, not water already running.
+  Reach for a zone, never for standby.
 
 ### 4.3.6 There is no Panel Key for this yet
 
@@ -929,8 +1014,306 @@ authored in the drawing — a Sweet Home 3D session on the Mac, then
 `house.yaml` and `bindings.yaml` must match exactly in both directions, fatal at
 boot.
 
-So Rachio commissioning ends at the Hub for now. The entities exist and are
-correct; the Panel gains pins for them in a later drawing session.
+So Rachio *pinning* ends at the Hub for now. The entities exist and are correct;
+the Panel gains pins for them in a later drawing session. The three sections
+below are about operating what already exists.
+
+### 4.3.7 Three ways to run water — and only one uses `manual_run_mins`
+
+§4.3.4 lists the entities without saying what they *do*, and the paths differ
+enough that picking the wrong one is a watering decision, not a trivia question.
+Read out of `switch.py` and `device.py` in the running image, 2026-08-04.
+
+| # | What you do | What Rachio is asked to do | Per-zone times come from | Rain skip / seasonal shift | Uses `manual_run_mins`? |
+|---|---|---|---|---|---|
+| 1 | Turn ON `switch.rachio_dk_normal_schedule_schedule` | `schedulerule.start(<rule id>)` — Rachio runs it **server-side** | **The app's own schedule**, held in Rachio's cloud | **Yes.** Weather intelligence, rain skip and seasonal shift all apply | **No** |
+| 2 | `rachio.start_multiple_zone_schedule` on a list of zone switches | `zone.start_multiple([...])` — zones in sequence | **The literal minutes you passed** in `duration:` | **No.** It waters exactly what you asked for | **No** |
+| 3 | Turn ON **one** zone switch | `zone.start(zone_id, secs)` | **`manual_run_mins`** — 5 (§4.3.2) | **No** | **Yes — this and only this** |
+
+There is no fourth path. `rachio.start_watering` looks like one and is not: it is
+registered as an *entity* service bound to `turn_on` with an optional `duration:`,
+so on a zone switch it is row 3 with a one-off override, and on the schedule
+switch it is row 1 with the `duration:` **silently ignored**. Stopping any of the
+three is the same call, and it is the panic button in §4.3.5.
+
+#### E4 cannot alter the schedule in the Rachio app
+
+This is the thing to be unmistakable about. Rows 1 and 2 never read the option:
+
+```python
+# RachioSchedule.turn_on — one argument, the rule id. No duration crosses the wire.
+self._controller.rachio.schedulerule.start(self._schedule_id)
+
+# the start_multiple service handler — minutes come from the CALL, nowhere else
+time = int(next(duration, default_time)) * 60
+zones_list.append({ATTR_ID: ..., ATTR_DURATION: time, ATTR_SORT_ORDER: count})
+
+# RachioZone.turn_on — the ONLY place manual_run_mins reaches water
+manual_run_time = timedelta(minutes=self._person.config_entry.options.get(
+    CONF_MANUAL_RUN_MINS, DEFAULT_MANUAL_RUN_MINS))
+self._controller.rachio.zone.start(self.zone_id, manual_run_time.seconds)
+```
+
+`grep -n MANUAL_RUN_MINS switch.py` returns four lines: two imports, and two
+`.get(CONF_MANUAL_RUN_MINS, DEFAULT_MANUAL_RUN_MINS)` reads. Both reads sit
+inside a `turn_on` — `RachioZone` and `RachioValve` (hose timers, none on this
+account). The schedule never sees it. **Setting `manual_run_mins` to 5 did not shorten the evening
+watering, did not overwrite the app's per-zone times, and cannot.** The schedule
+lives in Rachio's cloud (§4.3.8); Home Assistant only ever asks it to start.
+
+The inverse is worth stating too: **row 2 cannot be made to track the app.** The
+integration exposes no per-zone schedule durations to a template — the schedule
+switch carries a rounded *total* and nothing else (§4.3.8), and the zone
+attributes carry `Zone number`, `Shade`, `Type`, `Slope` and no duration at all.
+That is the whole reason §4.3.9's script is a hand-maintained copy.
+
+#### The positional-duration trap
+
+`duration:` maps **positionally** onto `entity_id:`, and a short list does not
+error. `default_time = service.data[ATTR_DURATION][0]`, then
+`next(duration, default_time)` — so once the list runs out every remaining zone
+gets the **first** value, not the last:
+
+- `duration: [19, 8, 7, 16, 5]` on five zones — one each, as intended.
+- `duration: 19` on five zones — all five for 19 minutes. This is the documented
+  "one time for all zones" convenience (`cv.ensure_list_csv` makes the scalar a
+  list), and it is fine.
+- `duration: [19, 8]` on five zones — 19, 8, **19, 19, 19**. Silently. On this
+  house that is 84 minutes of water instead of 27, and nothing warns you.
+
+Reorder one list without the other and you water the wrong zone for the wrong
+time. There is no zone id in the mapping to protect you, which is why §4.3.9's
+script carries a `# zone N` comment on every single line.
+
+#### What is actually registered on this Hub
+
+Measured live, `GET /api/services`, 2026-08-04 — five services, not six:
+
+```text
+rachio.start_watering                 entity service -> turn_on, optional duration
+rachio.start_multiple_zone_schedule   entity_id list + positional duration list
+rachio.stop_watering                  optional `devices:`; omitted = all controllers
+rachio.pause_watering                 optional `devices:`, duration 1–60 min
+rachio.resume_watering                optional `devices:`
+```
+
+**`rachio.set_zone_moisture_percent` does not exist here**, and a doc that lists
+it is wrong about this house. `switch.py` registers it only `if has_flex_sched`,
+and the controller reports `flexScheduleRules: 0` — the one rule is a fixed
+schedule. Correspondingly, `pause_watering` and `resume_watering` *do* exist only
+because the controller is not a Generation 1 (`can_pause` is set by
+`model.split("_")[0] != MODEL_GENERATION_1`, and this one is `GENERATION3_16ZONE`).
+Both facts are properties of *this* hardware and this account. Re-read the list
+after any controller change rather than trusting this block.
+
+#### Which one the Panel should eventually tap
+
+Not decided here — the Panel has no irrigation Key yet (§4.3.6) — but the
+reading points one way. Row 3 on a single zone is what a tap on an `outlet`-like
+pin would do, and ADR-0006's single-tap togglability is exactly what makes that
+risky for irrigation. Row 1 is the safe default for a wall control: it is the
+button that means "water the garden the way the app says", weather logic
+included. That belongs in the F2 discussion, with this section as its input.
+
+### 4.3.8 The schedule itself, as Rachio's cloud holds it
+
+**Measured 2026-08-04** by reading the vendor API directly. This is recorded so
+the next reader can tell whether §4.3.9's hand-copied durations have drifted —
+and re-read it themselves rather than trusting this table.
+
+Controller `Rachio-DK`, model **`GENERATION3_16ZONE`**, status `ONLINE`. Note the
+model: **16 terminals, 5 of them enabled.** "5 zones" throughout this chapter
+means five *enabled* zones on a sixteen-zone controller, not a five-zone unit —
+which matters the day someone wires a sixth. The API returns all 16; HA creates
+switches only for the enabled ones, which is why §4.3.4 counts five.
+
+One schedule rule, enabled, summary *"Every day at sunset"*, and it lives in
+`scheduleRules` rather than `flexScheduleRules`, which is what makes HA report
+its `Type` as `FIXED`.
+
+**The rule's name is `"Normal Schedule "` — the character before the closing
+quote is a space.** That is not a typo in this document. It propagates: HA names
+the schedule switch `"<rule name> Schedule"`, so the friendly name comes out as
+`Rachio-DK Normal Schedule  Schedule` with a **doubled space**, and the slug
+collapses to the doubled-word `switch.rachio_dk_normal_schedule_schedule` of
+§4.3.4. So the odd-looking entity id has two separate causes stacked on it — the
+integration appending the word "Schedule", and a stray space in the rule name.
+Renaming the rule in the app to tidy it would change the friendly name and every
+label derived from it; the entity id would *not* follow, because the unique id is
+`{controller}-schedule-{rule id}` and the id is already registered. Cosmetic fix,
+real churn — leave it. The same class of thing is already visible in zone 3's
+name, `Front yard Grass  / Main`, which also carries a double space (§4.3.5).
+
+| Run order | Zone | Name as the app holds it | Seconds | Minutes |
+|---|---|---|---|---|
+| 1 | 1 | Backyard Garden | 1153 | 19.22 |
+| 2 | 2 | Front yard Grass / Side | 480 | 8.00 |
+| 3 | 3 | Front yard Grass  / Main | 420 | 7.00 |
+| 4 | 4 | Backyard Perimeter | 1008 | 16.80 |
+| 5 | 5 | Front yard Camelias | 300 | 5.00 |
+| | | **total** | **3361** | **56.02** |
+
+#### 55 or 56 — both, and here is why
+
+Neither number is wrong, so this document states both rather than picking one:
+
+- **55 minutes** — truncate each zone to whole minutes and add: 19+8+7+16+5.
+- **56 minutes** — add the raw seconds and divide: 3361 / 60 = 56.02.
+
+They disagree because two zones are not whole minutes: zone 1 is 19 min 13 s and
+zone 4 is **16 min 48 s**, which is where the tempting "16" comes from — it is a
+truncation, not a rounding, and the honest round is 17. Home Assistant shows the
+second number, because the integration rounds the total. Measured attributes of
+`switch.rachio_dk_normal_schedule_schedule`:
+
+```json
+{"Summary": "Every day at sunset", "Enabled": true,
+ "Duration": "56 minutes", "Type": "FIXED",
+ "friendly_name": "Rachio-DK Normal Schedule  Schedule"}
+```
+
+That attribute is `f"{round(self._duration / 60)} minutes"` and it is the **only**
+schedule timing HA exposes — a total, never the per-zone split. Hence §4.3.9.
+
+The practical consequence: §4.3.9's script asks for the truncated 55 minutes, so
+it runs **61 seconds short** of the app's schedule, spread across zones 1 and 4.
+Irrelevant for irrigation, worth writing down so the next reader does not go
+hunting a discrepancy that is arithmetic rather than drift.
+
+#### Re-reading it — read-only, and without pasting a key
+
+Every call below is a `GET`. The same API has `POST` endpoints that start water;
+do not improvise near them, and see the constraint in §4.3.9 about not running
+anything that waters the garden.
+
+```bash
+# The key comes from the config entry. Never paste an API key into a shell —
+# it lands in shell history, and there is already a copy on this disk.
+KEY=$(jq -r '.data.entries[] | select(.domain=="rachio") | .data.api_key' \
+        hub/ha-config/.storage/core.config_entries)
+
+PERSON=$(curl -s -H "Authorization: Bearer $KEY" \
+        https://api.rach.io/1/public/person/info | jq -r .id)
+
+curl -s -H "Authorization: Bearer $KEY" \
+     "https://api.rach.io/1/public/person/$PERSON" > /tmp/rachio.json
+
+# the controller
+jq -r '.devices[] | "\(.name) \(.model) \(.status) — \(.zones|length) terminals"' \
+   /tmp/rachio.json
+
+# enabled zones only — a 16-zone controller reports all 16
+jq -r '.devices[].zones[] | select(.enabled) | "\(.zoneNumber)\t\(.name)"' \
+   /tmp/rachio.json | sort -n
+
+# the schedule, per zone, in run order
+jq -r '(.devices[].zones | map({key: .id, value: {n: .zoneNumber, nm: .name}})
+        | from_entries) as $z
+       | .devices[].scheduleRules[]
+       | "\(.name) enabled=\(.enabled) total=\(.totalDuration)s",
+         (.zones[] | "  \(.sortOrder)  zone \($z[.zoneId].n)  \($z[.zoneId].nm)  \(.duration)s")' \
+   /tmp/rachio.json
+```
+
+Two cautions, both about the file that lands in `/tmp`:
+
+- **`shred -u /tmp/rachio.json` when you are done.** That payload is the whole
+  account tree — `email`, `fullName`, and per device `serialNumber`, `macAddress`,
+  `latitude` and `longitude`. It is not a config dump, it is the house's address.
+- **`.storage/core.config_entries` holds the API key in plaintext and is mode
+  `644`,** so any local account can read it. That is HA's own layout and not
+  something this chapter changes, but it belongs on the list the hardening pass
+  looks at, alongside the other credential-at-rest items.
+
+### 4.3.9 Two Home Assistant scripts — new 2026-08-04
+
+Created this session, and **neither has ever been executed** —
+`last_triggered: null` on both, verified. That is deliberate: running either one
+waters the garden, and A5 (§4.3.5) is the first deliberate water event.
+
+| Entity | What it does |
+|---|---|
+| `script.rachio_run_normal_schedule_now` | Row 2 of §4.3.7 — all five zones in sequence, `[19, 8, 7, 16, 5]` minutes, no rain skip |
+| `script.rachio_stop_all_watering` | The panic button of §4.3.5, given a findable name |
+
+#### Where they live, and why that is tracked
+
+`hub/ha-config/scripts.yaml`, **exempted from the ignore rules so git can see
+it**, via a new negation in `hub/.gitignore` sitting directly alongside the one
+that already exempts `automations.yaml`:
+
+```gitignore
+ha-config/*
+!ha-config/configuration.yaml
+!ha-config/automations.yaml
+!ha-config/scripts.yaml
+```
+
+Verify with `git check-ignore -v hub/ha-config/scripts.yaml` — it should report
+the **negation** line as the matching rule, which is git's way of saying "not
+ignored". As of 2026-08-04 the file is un-ignored and still shows as `??` in
+`git status`; it has not been committed yet.
+
+Same reasoning as `automations.yaml`: this is configuration, not runtime state,
+and it holds no secrets. The alternative — leaving it inside the blanket
+`ha-config/*` ignore with everything else — was rejected because the HA UI writes
+*back* to this file when somebody edits a script from the wall, and `git diff` is
+then the only record that they did. An untracked scripts.yaml is a file that
+changes silently.
+
+#### Restart once, reload thereafter
+
+`hub/ha-config/configuration.yaml` gained one line:
+
+```yaml
+script: !include scripts.yaml
+```
+
+**Adding that line required a full Home Assistant restart** — it sets up an
+integration that was not previously loaded, and no reload service can conjure
+one. Every *subsequent* edit to `scripts.yaml` needs only the `script.reload`
+action. Worth knowing which one you are about to need: a restart on this Hub
+drops the WebSocket the Panel is holding, a reload does not.
+
+Validate before restarting, not after, because a syntax error in an `!include`
+leaves HA refusing to start with the Panel already dark:
+
+```bash
+docker exec homeassistant \
+  python3 -m homeassistant --script check_config -c /config
+```
+
+#### The durations are a COPY, and they do not follow the app
+
+This is the one real cost of the script and the thing most likely to be wrong in
+a year. `[19, 8, 7, 16, 5]` was read off the Rachio API on 2026-08-04 (§4.3.8) and
+**transcribed**. Re-time the schedule in the Rachio app and this file does not
+notice; it will happily keep watering yesterday's times.
+
+Deriving it live was the obvious alternative and it is not available.
+`start_multiple_zone_schedule` takes literal minutes, and there is no template
+that can read a schedule rule back out of the integration — the only timing HA
+publishes is the schedule switch's rounded **total** (§4.3.8), which cannot be
+split back into five numbers. So the choice was a hand-maintained copy with its
+provenance written down in the file, or no such script at all.
+
+If you re-time the schedule: change it in the app, then re-run the §4.3.8 probe,
+then update both the `duration:` list **and** the comment block in
+`scripts.yaml` that records where the numbers came from. The comment is what
+tells the next reader these are transcribed rather than invented.
+
+Note also that the script's 55 minutes is the truncated sum, 61 seconds short of
+the app's 56.02 — §4.3.8 explains why, and it is arithmetic, not drift.
+
+#### Why the script exists at all, given the schedule switch
+
+Because it is a different behaviour, not a shortcut to the same one. The schedule
+switch (row 1) asks Rachio to run the rule and lets Rachio apply rain skip and
+seasonal shift — right for the everyday case, and the right thing to leave bound
+to that switch. The script (row 2) asks for the zones, in order, for exactly those
+minutes, with no skip logic: the "water it now, I have looked outside myself"
+button — after a repair, before guests, or when Rachio skipped a cycle you wanted.
+Keep both. Collapsing them into one would lose whichever behaviour was not chosen.
 
 ---
 

@@ -469,9 +469,22 @@ Two things it does not do:
 - It does not touch the HWE meta-package's apt mark. On a release-upgraded host
   `linux-generic-hwe-26.04` can be marked *auto* with only the removable
   transitional shim as its parent — one `apt autoremove` from deleting the
-  running kernel stack. The `kiosk` role now claims it with `apt-mark manual`;
-  until a converge runs, do not accept Ubuntu's "safely removed" advice about
-  `linux-generic-hwe-24.04`.
+  running kernel stack. The `kiosk` role claims it with `apt-mark manual`.
+
+  **Owner item G1 — DONE 2026-08-04, and re-verified while writing this.**
+  `apt-mark showmanual` lists **both** `linux-generic-hwe-26.04` and
+  `linux-generic-hwe-24.04`; `apt-mark showauto | grep linux-generic-hwe`
+  matches nothing. The mark was set by hand rather than by a converge, so the
+  role's task is now a no-op here — which is the intended shape: it checks
+  `showauto` first and only claims what is actually auto-marked. Verify with
+
+  ```bash
+  apt-mark showauto | grep -E '^linux-generic-hwe' || echo 'none auto — G1 holds'
+  ```
+
+  On any host where that *does* print something, do not accept Ubuntu's
+  "safely removed" advice about `linux-generic-hwe-24.04` until a converge (or
+  the same `apt-mark manual` by hand) has run.
 
 ### Scope fence — do not "finish the job"
 
@@ -532,9 +545,9 @@ commissioning-relevant slice.
 | GNOME auto-suspend | **Manual**, per-user, laptop only. |
 | Docker Engine + `docker.sources` | **Manual.** There is no `hub` role yet — the README says so explicitly. |
 | Repo checkout | **Manual.** |
-| HWE kernel meta + `apt-mark manual` | **kiosk role**, gated `kiosk_hwe_kernel` (true on real hardware, false in the test container). |
+| HWE kernel meta + `apt-mark manual` | **kiosk role**, gated `kiosk_hwe_kernel` (true on real hardware, false in the test container). Already satisfied by hand on this host — **G1 done**, §1.5. |
 | cage / `wlr-randr` / `swayidle` / `grim` / `ddcutil` / `evtest` / `libinput-tools` / `wev` / `drm-info` | **kiosk role.** |
-| Flutter Linux toolchain (`clang`, `cmake`, `ninja-build`, `pkg-config`, `libgtk-3-dev`, `libstdc++-12-dev`) + bootstrap (`curl`, `git`, `unzip`, `zip`, `xz-utils`) | **kiosk role.** Known gap: `liblzma-dev` is on Flutter's own dependency list and is **missing** from `flutter_toolchain_packages`. |
+| Flutter Linux toolchain (`clang`, `cmake`, `ninja-build`, `pkg-config`, `libgtk-3-dev`, `liblzma-dev`, `libstdc++-12-dev`) + bootstrap (`curl`, `git`, `unzip`, `zip`, `xz-utils`) | **kiosk role** — but read §1.7a before trusting that word. The host is complete and **builds**; the role, until 2026-08-04, could not have produced it. |
 | `cage` user, PAM, templated `cage@.service`, Panel env + token file | **kiosk role**, all enable/hardening behind gates that default `false`. |
 
 A plain converge is safe on a daily-driver laptop — every kiosk gate defaults
@@ -549,6 +562,125 @@ ansible-playbook site.yml -l laptop --ask-become-pass
 passwordless sudo. Nothing in this chapter's end state depends on that converge
 having run — it is the boundary between "ready to run the Hub" and spike-day
 work ([`../README.md`](../README.md)).
+
+### 1.7a The Flutter Linux toolchain — two facts, and they disagree
+
+That row used to end "Known gap: `liblzma-dev` is on Flutter's own dependency
+list and is **missing** from `flutter_toolchain_packages`." Half of that went
+stale on 2026-08-04 and half did not, and collapsing the two is how a doc
+starts lying. Keep them apart:
+
+- **The host is complete, and it builds.** Owner item **G4 — DONE 2026-08-04.**
+- **The role would not have reproduced it.** The owner installed the missing
+  piece by hand, so a fresh converge built a box that was *not* this one.
+
+#### What was measured on the host
+
+Re-measured while writing this section, not copied forward:
+
+| | Version | Where from |
+|---|---|---|
+| `clang` / `clang++` | 21.1.8 (`1:21.1.6-71` meta) | `/usr/bin/clang`, `/usr/bin/clang++` |
+| `cmake` | 4.2.3-2ubuntu2 | `/usr/bin/cmake` |
+| `ninja` | 1.13.2-1 | `/usr/bin/ninja` |
+| `pkg-config` | 2.5.1-4 | `/usr/bin/pkg-config` |
+| `gtk+-3.0` | **3.24.52** | `libgtk-3-dev` 3.24.52-0ubuntu1 |
+| `liblzma` | **5.8.3** | `liblzma-dev` 5.8.3-1, `resolute/main` |
+| `xkbcommon` | **1.13.1** | `libxkbcommon-dev` 1.13.1-1 |
+| Flutter / Dart | 3.44.8 stable / 3.12.2 | `/home/dmorozov/Java/Flutter/flutter` |
+
+`flutter doctor -v` reports `[✓] Linux toolchain - develop for Linux desktop`.
+
+**`flutter build linux --release` succeeds**, and this is the only claim that
+actually counts — the version table above is what a passing build happened to
+be standing on, not a proof on its own. The artefact:
+
+```
+panel/build/linux/x64/release/bundle/panel        (23832 B, 2026-08-04 18:16)
+panel/build/linux/x64/release/bundle/lib/libapp.so
+panel/build/linux/x64/release/bundle/lib/libflutter_linux_gtk.so
+```
+
+That binary was then **run**, and it rendered live video — the appliance's
+first light. It does not belong in this chapter: see
+[Ch. 6](06-panel-and-bindings.md), the first-light record, for the procedure,
+the verbatim log, and — the part that matters more than the picture — the four
+things it does **not** prove (it ran under Xvfb and not `cage`, with no touch
+input, against go2rtc's synthetic pattern and not a camera, on a ding injected
+over HA's REST API and not a real Ring entity; and the `stream: selftest`
+binding it needed was reverted afterwards, so a Panel built from this repo
+today opens that Popup empty). This chapter's business is only that the
+toolchain exists and produces a bundle.
+
+#### `liblzma-dev` — fixed in the role 2026-08-04
+
+[`../ansible/group_vars/all.yml`](../ansible/group_vars/all.yml) now lists it.
+The variable is corrected; **the correction has not been converged anywhere**,
+including here — this host already has the package, so a converge would report
+`ok` and prove nothing about a fresh box. First real proof will come from
+`../test/run.sh reset` plus a container converge.
+
+Worth being exact about *why* it is in the list, because the obvious evidence
+argues the other way: nothing in the artefact links it. `ldd` across
+`bundle/panel` and both `bundle/lib/*.so` — ~70 shared objects each for the
+binary and the engine `.so`, while `libapp.so` reports "statically linked" and
+has none —
+finds `liblzma` **zero** times. The rejected alternative was therefore to drop
+it as cargo-cult. Rejected because nobody has run the build *without* it:
+removing it needs sudo and would break the one machine known to build. "Absent
+from `ldd`" is a weaker statement than "the build does not need it", and this
+role's job is to reproduce a host that was measured, not to re-derive it.
+
+#### `libstdc++-12-dev` — stale, kept, and now on the record
+
+Checked because §1.7 had been asserting it for a release nobody had verified it
+against. It is **wrong on 26.04**, and it is deliberately still in the list —
+flagging it here beats silently swapping a package in a role that would then
+have two unconverged changes in it instead of one.
+
+```bash
+apt-cache policy libstdc++-12-dev
+#   Installed: (none)
+#   Candidate: 12.5.0-9ubuntu1
+#   500 http://us.archive.ubuntu.com/ubuntu resolute/universe amd64 Packages
+apt-cache policy libstdc++-15-dev
+#   Installed: 15.2.0-16ubuntu1
+#   500 http://us.archive.ubuntu.com/ubuntu resolute/main amd64 Packages
+clang++ -v -x c++ -c /dev/null -o /dev/null 2>&1 | grep 'Selected GCC'
+#   Selected GCC installation: /usr/lib/gcc/x86_64-linux-gnu/15
+```
+
+So the release build above succeeded with **no gcc-12 headers on the box at
+all**. `clang++` 21 picks GCC 15 and takes its C++ headers from
+`libstdc++-15-dev`. The entry is a copy of Flutter's setup page — which still
+names `libstdc++-12-dev` — rather than anything measured here.
+
+**And the list did not need the entry in the first place**, which is the part
+worth knowing before anyone "fixes" it to `-15-dev`:
+
+```bash
+apt-cache depends clang-21 | grep stdc
+#   Depends: libstdc++6
+#   Depends: libstdc++-15-dev      <-- clang declares its own
+apt-cache rdepends --installed libstdc++-15-dev
+#   g++-15-x86-64-linux-gnu
+#   clang-21
+```
+
+`clang` → `clang-21` → `libstdc++-15-dev`. The role's own `clang` entry already
+drags in the correct, release-matched C++ headers; naming a libstdc++ version
+by hand can only ever disagree with the compiler that is actually installed.
+The likely right fix is therefore to **delete** the line rather than bump it —
+but that is a claim about apt's dependency graph on two releases, and it has
+been converged on neither.
+
+It is a drift, not a breakage: on this host the candidate resolves, so a
+converge installs a universe package the build never touches and carries on.
+Three things are **UNVERIFIED** and are why it stays put: whether 24.04 (the
+mini PC) offers `libstdc++-12-dev` at all and from which component, whether
+24.04's `clang` declares its libstdc++ dev the same way 26.04's does, and
+whether dropping the line leaves the test container still able to build.
+Closing it is a converge on both releases, which is agent work.
 
 ---
 
@@ -592,10 +724,27 @@ grep -E '^(Suites|Enabled):' /etc/apt/sources.list.d/docker.sources
 # 8. Repo present and level with the remote
 git -C ~/Work/SmartHome remote -v
 git -C ~/Work/SmartHome status -sb | head -1
+
+# 9. HWE meta is manually marked (G1) — nothing auto means nothing to autoremove
+apt-mark showauto | grep -E '^linux-generic-hwe' || echo 'none auto — G1 holds'
+
+# 10. Flutter Linux toolchain (G4). The cheap check first:
+flutter doctor -v | sed -n '/Linux toolchain/,/^\[/p'
+#    -> [✓] Linux toolchain, and clang / cmake / ninja / pkg-config versions
+pkg-config --modversion gtk+-3.0 liblzma xkbcommon
+#    -> 3.24.52 / 5.8.3 / 1.13.1 as measured 2026-08-04
+
+# 11. …and the only check that actually proves the toolchain (minutes, not
+#     seconds — skip it on a box you are not about to build on)
+cd ~/Work/SmartHome/panel && flutter build linux --release
+ls -l build/linux/x64/release/bundle/panel
 ```
 
 Done when 1–8 pass and the operator has consciously accepted, or closed, the
-battery-suspend gap in step 5. Next: the Hub stack —
+battery-suspend gap in step 5. Steps 9–11 are **owner items G1 and G4, both
+done here** — they are in the list so a *second* Appliance gets held to the
+same bar, and because 11 is the step that catches a role which installed the
+packages but not a working build (§1.7a). Next: the Hub stack —
 [`../../docs/plans/device-integrations/phase-1-hub-stack.md`](../../docs/plans/device-integrations/phase-1-hub-stack.md)
 for the as-built detail, and the sibling chapter in this directory for the
 runnable version.

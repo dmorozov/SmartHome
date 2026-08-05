@@ -516,7 +516,140 @@ for e in json.load(sys.stdin)[0]["result"]:
 Either way, `setup_retry` on `bluetooth` is expected output on this Hub today
 and is not a symptom of anything else being wrong.
 
-## 3.8 Operational notes
+## 3.8 Scripts — a tracked include, and what a change to one costs
+
+Sequencing lives on the Hub, not on the Panel (ADR-0002: the Panel is a pure
+view/command layer). So anything that has to do *this, then that* — with
+durations, ordering, or a stop button — is an HA script, and scripts are
+configured exactly the way automations are.
+
+One line in
+[`../../hub/ha-config/configuration.yaml`](../../hub/ha-config/configuration.yaml)
+turns the component on:
+
+```yaml
+script: !include scripts.yaml
+```
+
+`scripts.yaml` is then a bare mapping of script keys — no `script:` header
+inside it, because the include *is* that key.
+
+### Why the file is tracked, when the rest of `ha-config` is not
+
+`hub/.gitignore` excludes the directory and then names its exceptions:
+
+```gitignore
+ha-config/*
+!ha-config/configuration.yaml
+!ha-config/automations.yaml
+!ha-config/scripts.yaml
+```
+
+`scripts.yaml` earns the third line for the same reason `automations.yaml` has
+the second: **it is configuration, not state, and it holds no secrets.** Every
+credential HA is handed lands in `.storage`, which stays ignored (§3.9); the
+rest of the directory is a recorder database, logs and backups, none of which
+belong in a diff.
+
+What makes the line worth having, rather than merely safe: **the HA UI writes
+back to this file.** Somebody editing a script from a browser produces a
+`git diff` here — the only mechanism in the stack that shows what changed on a
+Hub nobody was watching, and lets you put it back. (That write-back is the
+documented behaviour of a plain `!include` target and is why the target is a
+single file; it is **UNVERIFIED here** — no script has yet been edited from the
+UI on this Hub. Both scripts were written into the file directly.)
+
+The `ha-config/*`-plus-negation form is not interchangeable with `ha-config/`.
+Git does not descend into an excluded *directory*, so the directory form would
+make all three negations unreachable. The same note sits against the mosquitto
+rules in `hub/.gitignore`, which is where it was learned the hard way.
+
+**The negation makes the file committable. It does not commit it.** At the time
+of writing, `git status` still reports `?? hub/ha-config/scripts.yaml` —
+un-ignored, unstaged. Check both halves, because only the first is proved by
+the gitignore:
+
+```sh
+cd <repo>
+git check-ignore -v hub/ha-config/scripts.yaml   # -> hub/.gitignore:8:!ha-config/scripts.yaml
+git status --short hub/ha-config/                # `??` means still only on this disk
+git add hub/ha-config/scripts.yaml
+```
+
+Rejected: `script: !include_dir_merge_named scripts/`, a file per script. It
+reads better in a repo, and it costs the UI editor — HA writes UI-authored
+scripts into a single `!include` target and has nowhere to put them under a
+directory merge, which would quietly make the wall and the repo two different
+sources of truth. Also rejected: scripts written inline in
+`configuration.yaml`, which the UI cannot edit at all and which turns a script
+typo into a failed **start** instead of a failed reload.
+
+### Adding the include needed a restart. Editing the file does not.
+
+This is the whole operational difference, and it is worth getting right,
+because restarting HA on this appliance drops every integration and the Panel's
+socket with it:
+
+| Change | What it needs |
+|---|---|
+| Adding or removing the `script: !include …` line in `configuration.yaml` | **A full HA restart.** `configuration.yaml` is read once at start, and a new top-level key is a new component to set up |
+| Any later edit to `scripts.yaml` — a new script, changed values, a deleted one | **`script.reload` only** — Developer Tools → Actions, or `POST /api/services/script/reload` |
+
+Measured here: the include went in and the two entities appeared only after the
+restart; nothing since has needed one. The restart is
+`cd hub && docker compose restart homeassistant` — no sudo involved, which is
+exactly why it is worth being deliberate about. It is cheap to type and it
+takes the whole house's integrations down with it, so validate first (below)
+and do it at a moment nobody is holding a Popup open.
+
+### Validate before you restart
+
+`check_config` parses the whole configuration in a throwaway process **inside**
+the running container. It does not touch the running instance, so it is safe at
+any time — and it is how you learn that an include is malformed *before* the
+restart that would otherwise leave you with a Hub that does not come back:
+
+```sh
+docker exec homeassistant python3 -m homeassistant --script check_config -c /config
+#  -> Testing configuration at /config
+#  exit 0
+```
+
+That one line and a zero exit is the clean result; a problem prints the file,
+the key and the reason. The HA UI has an equivalent button under its server
+controls (exact wording **UNVERIFIED** for 2026.7 — the command above is the
+one that was actually run here). Run it after a `scripts.yaml` edit too, not
+just after a `configuration.yaml` one. **What `script.reload` does with a broken file is
+UNVERIFIED here** — do not find that out on a Hub the house is depending on.
+
+### The naming rule these entities demonstrate
+
+A YAML script's `entity_id` is built from its **top-level key**, not from its
+`alias:`. Measured on this Hub:
+
+```
+key    rachio_run_normal_schedule_now
+alias  Rachio — run Normal Schedule now
+->     script.rachio_run_normal_schedule_now
+```
+
+So the key is the string a binding, an automation or a dashboard will name, and
+the alias is only what a human reads. Choose the key for what the script
+*does*, never for what today's hardware happens to be called. (Whether renaming
+the key renames the entity, or leaves an orphan behind, is **UNVERIFIED** — no
+script has been renamed here. The device-registry rule that `entity_id` is
+frozen at first registration is a different mechanism and does not transfer;
+see [7 §7.4](07-device-lifecycle.md).)
+
+### What is in the file today
+
+Two scripts, both Rachio, both **live and never executed** — `last_triggered`
+is `None` on each, read from `/api/states`, and that is deliberate: one of them
+waters the garden. Their content, and the three genuinely different ways this
+house can run water, belong to
+[4 §4.3](04-devices-local.md). Chapter 3 owns only the mechanism above.
+
+## 3.9 Operational notes
 
 - **`hub/ha-config` runtime state is root-owned.** `.storage`, the recorder DB
   and the logs are written by the container as root; this host has no

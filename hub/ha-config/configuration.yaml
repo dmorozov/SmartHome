@@ -20,3 +20,9 @@ default_config:
 # view/command layer — see ADR-0002). This include keeps them editable from
 # the HA automation UI.
 automation: !include automations.yaml
+
+# Scripts — the same story as automations: kept in a tracked include so the HA
+# UI can edit them and `git diff` shows what changed. Adding this line needed
+# an HA restart; edits to scripts.yaml afterwards only need the `script.reload`
+# service (Developer Tools -> Actions).
+script: !include scripts.yaml

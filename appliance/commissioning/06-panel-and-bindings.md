@@ -400,6 +400,10 @@ is planned to take. Anything you find that says "playback is web-only by
 decision" or that `-d linux` shows a placeholder predates 2026-08-04 and is
 wrong.
 
+The `-d linux` half is no longer only a development-machine claim either: the
+**release bundle** has done it, headless, against this Hub and this go2rtc —
+§6.9a, which is also the list of what that run still does not prove.
+
 They reach go2rtc by different roads, and the difference shows up in your
 timings, so it is worth knowing which one you are watching:
 
@@ -707,8 +711,120 @@ Measured, so nothing here is rediscovered as a surprise.
 | `_integrated` is `{}` | first real binding turns the suite red until it is updated |
 | `kiosk_app` is the spike bundle | the `Environment=` delivery path is wired but inert |
 | No binding carries a `stream:`, and `panel_go2rtc_url` is empty | `house.loaded` reports `streams=0` and every camera Popup shows the unconfigured placeholder. Not a fault — no go2rtc stream exists for any `cam-*` yet (**B3**), and `selftest` is the only stream on the box |
-| Both builds have a real player; go2rtc's `origin: "*"` is set | point `panel_go2rtc_url` at the box and bind `stream: selftest`, and the pieces a tapped camera needs are in place. What is verified is the **session**, not the tap: both players were driven against `selftest` directly — the MJPEG one on the Dart VM, the MSE one in real Chrome — and **nobody has tapped a camera on this appliance**, because `flutter build linux` has never run here (next row, **G4**). Never against a real camera either, because there is not one yet (**B2**/**B3**) |
-| `flutter build linux` has never run on this host | no clang/cmake/ninja/GTK (**G4**), so the appliance's MJPEG player is proven on the Dart VM and against the live server but has **never rendered a frame inside the cage kiosk**. Treat first light on the wall as unverified |
+| Both builds have a real player; go2rtc's `origin: "*"` is set | and on **2026-08-04 the Linux release build opened a Popup by itself and rendered live MJPEG inside it** — first light, §6.9a. Read that section before quoting this row anywhere: what it verifies is narrow, and it is easy to over-read in both directions |
+| `flutter build linux --release` **succeeds on this host** (**G4** done) | clang/clang++ 21.1.8, cmake 4.2.3, ninja 1.13.2, pkg-config 2.5.1, gtk+-3.0 3.24.52, liblzma 5.8.3, xkbcommon 1.13.1; the bundle is at `panel/build/linux/x64/release/bundle/panel` with `libapp.so` and `libflutter_linux_gtk.so` beside it. **A converge did not put it there and would not reproduce it unaided** — the toolchain was installed by hand, and `flutter_toolchain_packages` does not yet describe the host that builds. That reconciliation is [1 §1.7a](01-host-and-network.md)'s, not this chapter's |
+| Nothing has run under `cage`, and no touchscreen is attached to this host | first light was **Xvfb**. The kiosk half is untouched: `cage` is not installed (**G6**) and **A7** is the hands-on-glass session. §6.9a's table is the full list of what is still open |
+
+### 6.9a First light — and exactly how far it goes
+
+**On 2026-08-04 the `flutter build linux --release` bundle — the same binary the
+appliance will run — opened a doorbell Popup unprompted and played live video
+in it.** Every document in this repo previously said the appliance's player had
+never drawn a frame. That sentence is wrong wherever it survives.
+
+It is also the single easiest result in this repo to over-read, so the procedure
+and the disclaimers are given together, and neither is optional.
+
+**The procedure, reproducible.**
+
+```sh
+Xvfb :99 -screen 0 1280x800x24 +extension GLX +render &
+
+cd panel
+DISPLAY=:99 GDK_BACKEND=x11 WAYLAND_DISPLAY= \
+LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe \
+HUB=ha HA_URL=http://127.0.0.1:8123 HA_TOKEN="$(cat ../hub/token)" \
+GO2RTC_URL=http://127.0.0.1:1984 LOG=debug \
+  build/linux/x64/release/bundle/panel
+```
+
+**`GDK_BACKEND=x11` is the line that will otherwise cost you an hour.** Without
+it GTK finds the host's own Wayland session and prefers it: the window opens on
+the operator's real desktop, Xvfb's root window is left with **zero children**,
+and a screenshot of `:99` is black. Nothing errors, nothing warns. It looks
+exactly like a Flutter build that cannot render — which is the wrong conclusion,
+and an expensive one to chase. `WAYLAND_DISPLAY=` emptied is the same
+instruction said a second way, deliberately.
+
+The two GL variables are because this box has no usable GPU under Xvfb, so
+llvmpipe soft-renders the whole app. Under `cage` on the wall neither should be
+needed; that is an expectation, not a measurement.
+
+**The ding was injected, not rung.** There is no Ring entity on this Hub
+(**B2**), so the doorbell's bound `sensor.ring_doorbell` was written directly:
+
+```sh
+cd <repo>
+# off, then on — two POSTs, and the reason is in the log below
+curl -s -X POST -H "Authorization: Bearer $(cat hub/token)" \
+  -H 'Content-Type: application/json' -d '{"state":"off"}' \
+  http://127.0.0.1:8123/api/states/sensor.ring_doorbell
+```
+
+**And `stream: selftest` was added to the `doorbell` binding before the build,
+then reverted.** See the last row of the table below — this is the part that
+decides what a Panel built from the repo *today* does.
+
+**The log, verbatim:**
+
+```
+[panel] I panel.start hub=ha mode=release platform=linux log=debug
+[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33 streams=1
+[panel] I hub.connected url=ws://127.0.0.1:8123 devices=33
+[panel] I hub.snapshot entities=55 bound=4 missing=29
+[panel] D ui.ding_suppressed device=doorbell reason=first_sight
+[panel] D ui.ding_suppressed device=doorbell reason=unchanged
+[panel] I ui.ding device=doorbell entity_state=on
+[panel] I popup.doorbell device=doorbell reason=ding
+[panel] I popup.stream_open name=selftest
+... 30 s later ...
+[panel] I popup.stream_closed name=selftest reason=popup_closed
+[panel] I popup.doorbell_dismissed device=doorbell
+```
+
+Read it as the chain it is — three parts of it get misread:
+
+- `streams=1` is the temporary `stream:` line, and is why the row above says
+  `streams=0` for the repo as it stands.
+- `missing=29` is **not a fault of this run.** It is the dev stand-ins that do
+  not exist on the real Hub — the first row of §6.9 — and it is what binding
+  work will remove. `bound=4` is what the client actually watches.
+- the two `ding_suppressed` lines are why the injection needs **two** POSTs:
+  `first_sight` silences whatever state the Panel finds on connect, `unchanged`
+  silences a repeat of it, and only a genuine off→on transition rings (§6.6).
+
+Then `popup.doorbell` — the Panel put a Popup on screen that nobody asked for,
+off a state change, which is the behaviour that has no other way of being
+tested.
+
+**go2rtc is the independent witness.** While the Popup was up, its consumer on
+`selftest` read:
+
+```
+format_name: mjpeg, protocol: http, user_agent: "Dart/3.12 (dart:io)",
+bytes_send: 931189
+```
+
+`Dart/3.12 (dart:io)` is the Flutter binary's own HTTP client — not a browser,
+not `curl` — and 931 kB is a picture that actually moved. `consumers: []` after
+the Popup closed, which is the teardown check §6.5b describes, on the run that
+matters. (Re-measured while writing this: still `consumers: []`, both producers
+idle.) A screenshot shows the dollhouse with the Popup over it and the test
+pattern rendering inside.
+
+**What this does NOT prove.** Five things, and every one of them is still open:
+
+| Not proven | Because | Tracked as |
+|---|---|---|
+| The **kiosk** works | It ran under **Xvfb, with the X11 GDK backend and software GL** — not under `cage` on a Wayland seat. `cage` is not installed on this box at all | **G6**, then **A7** |
+| **Touch** works | Nothing was tapped. No touchscreen is attached to this host; every input in the run was a state push over HA's REST API | **A7** |
+| A **camera** plays | The stream was go2rtc's synthetic `ffmpeg:selftest#video=mjpeg` test pattern. A real RTSP camera adds its own start-up on top of the 2–4 s transcode wait in §6.5a | **B3** |
+| A **doorbell** rings | The ding was a fabricated `sensor.ring_doorbell` state POSTed to HA. Ring is not authenticated and that entity does not otherwise exist here | **B2** |
+| **A Panel built from this repo does any of it** | The binary was built from a working tree carrying `stream: selftest` on the `doorbell` binding. **That edit was reverted** — the tracked `panel/assets/house/bindings.yaml` has no `stream:` line and is clean against `HEAD` (verified) — so a Panel built today opens that same Popup with **no video in it** | an uncommitted config change, still open |
+
+The one-line summary for anyone quoting this elsewhere: **the appliance's video
+path is proven end to end against synthetic inputs, and nothing about the wall,
+the glass, or the house's own hardware is.** Say all of that or none of it.
 
 Further reading: [`../../panel/HOUSE-PLAN.md`](../../panel/HOUSE-PLAN.md) is
 the full drawing manual, written for whoever draws the house;

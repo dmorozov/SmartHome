@@ -35,6 +35,41 @@ reference documentation for what the role automates.
 Per-host settings (e.g. the mandatory `wlr_drm_devices` GPU pin on the
 laptop) live in `host_vars/`.
 
+## `flutter_toolchain_packages` — changed 2026-08-04, not yet converged
+
+`liblzma-dev` was **added** to `flutter_toolchain_packages` in
+`group_vars/all.yml`. It is on Flutter's documented Linux-desktop list and it
+is on the Hub host, where `flutter build linux --release` succeeds — but it was
+never in this variable, so until now a converge of a fresh box produced a
+toolchain that was *not* the one measured to work. The owner had installed it
+by hand; the role was quietly one package behind the machine it describes.
+
+**Nothing has converged this yet.** The Hub host already has the package, so a
+converge there reports `ok` and proves nothing. The real check is the container:
+
+```sh
+../test/run.sh reset
+ansible-playbook site.yml -l test-appliance
+ansible-playbook site.yml -l test-appliance   # expect changed=0
+```
+
+`libstdc++-12-dev` stayed in the list and is **known stale on 26.04** —
+deliberately left rather than swapped, so this file carries one unconverged
+change and not two. Measured on the host that builds: `libstdc++-12-dev` is not
+installed at all (candidate 12.5.0, out of `resolute/universe`), the box has
+`libstdc++-15-dev` from `main`, and `clang++ -v` selects
+`/usr/lib/gcc/x86_64-linux-gnu/15`. So the entry is a copy of Flutter's setup
+page rather than a measurement.
+
+The fix is probably to **delete** the line rather than bump it:
+`apt-cache depends clang-21` reads `Depends: libstdc++-15-dev`, so `clang` —
+already in the list — pulls the release-matched headers by itself, and a
+hand-written version can only disagree with the compiler apt installed. Left
+alone because that is a claim about apt's graph on **both** targets and has
+been converged on neither. Today it costs a converge one unused universe
+package; it does not fail. See
+[Ch. 1 §1.7a](../commissioning/01-host-and-network.md) for the numbers.
+
 ## Panel runtime settings and the HA token
 
 The Panel resolves `HUB`, `HA_URL`, `HA_TOKEN` and `GO2RTC_URL` from the

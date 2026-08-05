@@ -1,0 +1,107 @@
+# Home Assistant scripts for the Hub.
+#
+# Tracked in git (see hub/.gitignore's `!ha-config/scripts.yaml`), for the same
+# reason automations.yaml is: these are configuration, not state, and they hold
+# no secrets. Editable from the HA UI — the UI writes back to this file, so
+# `git diff` is how you see what somebody changed from the wall.
+
+# Run the Rachio "Normal Schedule" now, with the per-zone durations that are
+# configured in the Rachio mobile app.
+#
+# WHY THIS EXISTS, given `switch.rachio_dk_normal_schedule_schedule` already
+# starts the same schedule:
+#
+#   The schedule switch asks Rachio to run the *schedule rule*, and Rachio
+#   applies its own judgement on the way — weather intelligence, rain skip,
+#   seasonal shift. That is usually what you want, and it is the right thing
+#   to leave bound to the schedule switch.
+#
+#   This script asks for the *zones*, in order, for exactly these minutes. No
+#   skip logic, no seasonal adjustment. It is the "water it now, I have looked
+#   outside myself" button — after a repair, before guests, or when Rachio has
+#   skipped a cycle you wanted.
+#
+# The durations below are a COPY of the app's schedule, read from the Rachio
+# API on 2026-08-04. The API stores SECONDS; this service takes whole MINUTES,
+# so the copy can never be exact — the numbers here are the raw seconds
+# ROUNDED, not truncated:
+#
+#     zone 1  Backyard Garden          1153 s   19.22  ->  19 min
+#     zone 2  Front yard Grass / Side   480 s    8.00  ->   8 min
+#     zone 3  Front yard Grass / Main   420 s    7.00  ->   7 min
+#     zone 4  Backyard Perimeter       1008 s   16.80  ->  17 min
+#     zone 5  Front yard Camelias       300 s    5.00  ->   5 min
+#     total                            3361 s  56.02  ->  56 min  (3360 s)
+#
+# One second short of the schedule. Truncating instead — which is what the
+# first draft of this file did, reading zone 4 as "16" — loses 61 seconds, and
+# 48 of those come from that one zone. Rounding is the better lie.
+#
+# This is also why you will see two different totals quoted for this schedule:
+# 55 if you sum the truncated minutes, 56 if you sum the seconds. Home
+# Assistant itself reports the second one — the schedule switch carries
+# `"Duration": "56 minutes"`, which is `round(duration / 60)`.
+#
+# Being a copy is the one real cost of this script: change the schedule in the
+# app and this file does NOT follow. `rachio.start_multiple_zone_schedule`
+# takes literal minutes and there is no template that can read a schedule rule
+# back out of the integration, so the alternative — deriving it live — is not
+# available. If you re-time the schedule in the app, re-time it here, and the
+# comment above is what tells the next reader that these numbers came from
+# somewhere real.
+#
+# `duration:` maps POSITIONALLY onto `entity_id:`. Reorder one list and you
+# must reorder the other; there is no zone id in the mapping to protect you.
+#
+# And it fails in a genuinely surprising direction if the lists are different
+# lengths. The service does `default_time = duration[0]` and then
+# `next(duration_iter, default_time)` per zone — so a SHORT list silently
+# reuses the **first** value for every zone past its end, not the last and not
+# zero. `duration: [19, 8]` across these five entities waters
+# 19, 8, 19, 19, 19 — 84 minutes for the 27 you typed, with no warning.
+# Count both lists after any edit.
+rachio_run_normal_schedule_now:
+  alias: Rachio — run Normal Schedule now
+  icon: mdi:sprinkler-variant
+  description: >-
+    Runs all five zones in sequence using the durations configured in the
+    Rachio app (55 min total). Unlike the schedule switch, this ignores rain
+    skip and seasonal adjustment — it waters exactly these times.
+  mode: single
+  sequence:
+    - action: rachio.start_multiple_zone_schedule
+      target:
+        entity_id:
+          - switch.rachio_dk_backyard_garden # zone 1
+          - switch.rachio_dk_front_yard_grass_side # zone 2
+          - switch.rachio_dk_front_yard_grass_main # zone 3
+          - switch.rachio_dk_backyard_perimeter # zone 4
+          - switch.rachio_dk_front_yard_camelias # zone 5
+      data:
+        duration: [19, 8, 7, 17, 5]
+
+# The companion nobody wants to look for at the moment they need it: stop
+# everything. `switch.turn_off` on any Rachio **zone** calls the controller's
+# `stop_watering()`, which halts the whole device, not just that zone. Same for
+# the schedule switch.
+#
+# DO NOT reach for `switch.rachio_dk_standby` in a hurry — it is inverted.
+# `RachioStandbySwitch.turn_on` calls `device.turn_off()` (put the controller
+# into standby) and its `turn_off` **resumes** it. So the switch whose name
+# sounds like the emergency stop is the one where "off" starts things working
+# again. That is why this script targets a zone.
+#
+# Also worth knowing, because it surprises people mid-schedule: turning a zone
+# ON calls `self.turn_off()` first. Tapping a zone while the schedule runs
+# cancels the schedule rather than queueing behind it.
+rachio_stop_all_watering:
+  alias: Rachio — stop all watering
+  icon: mdi:water-off
+  description: >-
+    Stops watering on the controller immediately, whatever started it —
+    this script, the schedule, or the app.
+  mode: single
+  sequence:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.rachio_dk_backyard_garden
