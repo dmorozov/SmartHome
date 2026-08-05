@@ -5,6 +5,7 @@ import '../../domain/house.dart';
 import '../device_popup.dart';
 import '../device_presentation.dart';
 import '../hub_controller.dart';
+import '../video/live_video.dart';
 import 'floor_arrangement.dart';
 import 'floor_view.dart';
 
@@ -16,9 +17,19 @@ import 'floor_view.dart';
 /// is animating between the arrangements two selections produce, and how
 /// present each Floor looks while it happens.
 class DollhouseView extends StatefulWidget {
-  const DollhouseView({super.key, required this.controller});
+  const DollhouseView({
+    super.key,
+    required this.controller,
+    required this.video,
+  });
 
   final HubController controller;
+
+  /// Where go2rtc is, on its way to the Popup a camera pin opens. Carried
+  /// rather than read here: this view neither plays nor decides anything
+  /// about video, and [FloorView] is not on the path at all — it forwards
+  /// [_onDeviceTap] and never learns what a tap turns into.
+  final VideoConfig video;
 
   @override
   State<DollhouseView> createState() => _DollhouseViewState();
@@ -99,6 +110,10 @@ class _DollhouseViewState extends State<DollhouseView> {
   }
 
   void _selectFloor(Floor floor) {
+    // Ids raw, here and on `ui.device` below — the accepted residual argued in
+    // `hub_controller.dart`'s `ui.room_lights`: an id that reaches the UI
+    // survived the load, so a mis-paste cannot be here, and the id is the
+    // whole content of the line.
     Log.debug('ui', 'floor', {'id': floor.id, 'level': floor.level});
     setState(() => _expandedFloorId = floor.id);
   }
@@ -117,7 +132,9 @@ class _DollhouseViewState extends State<DollhouseView> {
     if (toggles) {
       widget.controller.toggle(device.id);
     } else {
-      showDevicePopup(context, presentation: presentation);
+      // No `dismissAfter`: a person tapped this, so a person closes it.
+      showDevicePopup(context,
+          presentation: presentation, video: widget.video);
     }
   }
 }

@@ -12,6 +12,45 @@
 #   with the real entity id as the hardware is integrated. Omit the line
 #   entirely while the Hub knows nothing about it; the pin still renders,
 #   with unknown state.
+# stream: the go2rtc stream this camera or doorbell plays in its Popup —
+#   the NAME of an entry under `streams:` in hub/go2rtc/go2rtc.yaml, never
+#   a URL:
+#
+#     cam-garage:
+#       entity: sensor.garage_cam
+#       stream: garage_cam       # matches hub/go2rtc/go2rtc.yaml
+#       connectivity: cloud
+#
+#   Pasting an `rtsp://…` here does not fail — go2rtc would CREATE a stream
+#   by that name and dial it, and the camera password in the URL would land
+#   in the Panel's log. So the value must be one or more of letters, digits,
+#   dot, dash and underscore and nothing else, which rules out the `:`, `/`
+#   and `@` a URL needs; anything else is refused at boot.
+#
+#   The refusal deliberately does NOT print what you typed — that complaint
+#   is itself logged, so echoing a mis-pasted URL back would be what
+#   published the password. It names this file, the field, and the binding:
+#   by its key when the key is plainly a name (opens with a letter or digit,
+#   then letters, digits, spaces, dots, dashes and underscores, 40 characters
+#   at most), and as `the 3rd binding`, counted from the top of this file,
+#   when it is not. That second case is a paste that landed one
+#   column to the left, with no indent, which makes the whole URL the key —
+#   and the message used to print it while promising not to.
+#
+#   Two things this does NOT protect, both worth knowing before you type:
+#     - A syntax error is caught by the YAML reader before any rule here
+#       runs, and it reports the file, the line and the column — but not
+#       the line itself. Go and read the line; that is the only place the
+#       value is.
+#     - A stream name that LOOKS like a name is logged every time its Popup
+#       opens. Paste an API token where a name goes and it parses, and it is
+#       published. `stream:` takes a name from go2rtc.yaml, nothing else.
+#   Omit the line until the feed exists; the pin still renders and the
+#   Popup says the view is unavailable, which is the honest answer. Legal
+#   only on camera and doorbell Devices — anywhere else it is a line
+#   nothing would ever read, and the Panel refuses to start rather than
+#   leave you believing a feed is wired up. Two Devices MAY name the same
+#   stream: nothing here writes to a camera, so they cannot fight.
 # connectivity: local | cloud — not derivable from the Hub, and there is
 #   no honest default (planned cloud hardware is cloud before it binds),
 #   so it is declared here and the Popup shows it (CONTEXT.md).

@@ -160,6 +160,26 @@ shows which Hub the Panel talks to and whether it is currently reachable;
 `[panel] I hub.config … env=available|unavailable` names where each setting
 came from, and whether the environment was consulted at all.
 
+`GO2RTC_URL` rides along the same way — same file, same environment-first
+order — and points the camera and doorbell Popups at go2rtc:
+
+```sh
+flutter run -d chrome … --dart-define=GO2RTC_URL=http://localhost:1984
+```
+
+Leaving it off is a supported state and the boot log says so
+(`GO2RTC_URL=absent`, then `popup.go2rtc url=absent`): there is no built-in
+default, on purpose, because a camera is a camera under every Hub and a
+default address would open a socket to nothing on every dev run. A Device
+also needs a `stream:` name in `panel/assets/house/bindings.yaml`, and none of
+the generated stand-ins has one — the dev fleet has no video. Setting both
+against a go2rtc that has the named stream now gets you an actual picture, on
+either target: `-d chrome` plays it over a WebSocket, `-d linux` over HTTP
+MJPEG. `selftest` is the stream to point at while there is no camera. See
+`panel/README.md`, "Live video in the Popup" — and note that a camera added to
+`go2rtc.yaml` needs **two producers**, or the `-d linux` build gets an empty
+stream and says nothing about why.
+
 The end-to-end check — real handshake, real snapshot, real command
 round-trip — is a test:
 

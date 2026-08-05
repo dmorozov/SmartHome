@@ -154,9 +154,17 @@ void main() {
       }
     });
 
-    test('only cameras and the doorbell take the video Popup body', () {
+    test('camera and doorbell are the whole video set, and the House says '
+        'so, not the UI', () {
       expect(
         DeviceKind.values.where((k) => present(k, null).isVideo).toSet(),
+        {DeviceKind.camera, DeviceKind.doorbell},
+      );
+      // The same two kinds, read the way the House Plan loader reads them:
+      // one table answers both, so a third camera-ish kind cannot arrive
+      // playable in the Popup but forbidden a `stream:` at boot.
+      expect(
+        DeviceKind.values.where((k) => specOf(k).video).toSet(),
         {DeviceKind.camera, DeviceKind.doorbell},
       );
     });

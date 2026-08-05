@@ -31,6 +31,21 @@ panel_hub_kind: ""
 # they split, or for a Hub whose lease drifted.
 panel_ha_url: ""
 
+# Where go2rtc is, for the camera and doorbell Popups —
+# e.g. "http://127.0.0.1:1984". Empty on purpose, and for a stronger reason
+# than the two above: the Panel has NO built-in default for this one
+# (panel/lib/config/hub_config.dart says why — HA_URL's default is gated by
+# HUB=fake, and video has no such gate), so writing the obvious value here
+# would be inventing the setting rather than delivering it. Empty emits no
+# Environment= line, the Panel boots with GO2RTC_URL=absent, every pin still
+# renders, and one camera Popup says the view is unavailable — which is the
+# honest answer for a box where nobody has stood up a stream yet.
+#
+# NOT a secret, unlike the token below: go2rtc here is unauthenticated and the
+# camera credentials live in hub/go2rtc/go2rtc.yaml, not in this base address.
+# So it rides an Environment= line and needs no EnvironmentFile= work.
+panel_go2rtc_url: ""
+
 # LOG resolves environment-first too (panel/lib/diagnostics/log.dart), and the
 # appliance is precisely the case that change was made for: turning the logs up
 # on a Panel already on the wall must not mean rebuilding it. Empty = emit no

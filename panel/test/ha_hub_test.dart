@@ -240,6 +240,123 @@ void main() {
     });
   });
 
+  group('what the log is allowed to say about the Hub address', () {
+    // Its own hub, because these cases are about a URL with a credential in
+    // it, and the shared one is a bare `ws://test/api/websocket`.
+    const password = 'hunter2';
+    late List<LogRecord> records;
+
+    /// A client dialling [url], with the handshake left to the caller.
+    HaHubClient dial(String url, {FakeChannel? socket}) {
+      final client = HaHubClient(
+        house: loadTestHouse(),
+        url: HaHubClient.webSocketUrl(url),
+        token: 'test-token',
+        connect: (_) => socket ?? FakeChannel(),
+        retryFloor: const Duration(milliseconds: 1),
+        retryCeiling: const Duration(milliseconds: 2),
+      );
+      addTearDown(client.dispose);
+      return client;
+    }
+
+    String lineFor(String event) =>
+        records.singleWhere((r) => r.event == event).toString();
+
+    setUp(() {
+      records = <LogRecord>[];
+      Log.sink = records.add;
+      Log.level = LogLevel.debug;
+      addTearDown(() {
+        Log.sink = Log.printRecord;
+        Log.level = LogLevel.warn;
+      });
+    });
+
+    test('the address is dialled with its credential and logged without one, '
+        'on connect and again on every reconnect', () async {
+      // Measured, on a healthy boot and then forever:
+      //
+      //   I hub.connecting url=ws://admin:hunter2@ha.local:8123/api/websocket
+      //   I hub.connected  url=ws://admin:hunter2@ha.local:8123/api/websocket
+      //
+      // `hub.connected` is re-emitted on every reconnect, so a flapping Hub
+      // multiplied it. The credential still has to reach the socket — a Hub
+      // behind a reverse proxy with basic auth needs it — so what changes is
+      // the log and not `webSocketUrl`.
+      final socket = FakeChannel();
+      final client =
+          dial('http://admin:$password@ha.local:8123', socket: socket);
+
+      socket.serverSays({'type': 'auth_required'});
+      await pumpEventQueue();
+      socket.serverSays({'type': 'auth_ok'});
+      await pumpEventQueue();
+
+      expect(client.status.value, HubStatus.up);
+      // The address survives whole: telling a stale address from a dead Hub
+      // is what these lines are for, and neither is legible without it.
+      expect(lineFor('connecting'), '[panel] I hub.connecting '
+          'url=ws://ha.local:8123');
+      expect(lineFor('connected'), '[panel] I hub.connected '
+          'url=ws://ha.local:8123 devices=33');
+    });
+
+    test('no path=set on a path the Panel appended itself, or the word would '
+        'be on every Hub forever', () {
+      // `webSocketUrl` replaces the path with `/api/websocket`, so reporting a
+      // path here would report the Panel's own constant. `hub.configured` in
+      // boot.dart is the line that sees the operator's value and
+      // characterises it — one fact, reported once.
+      dial('http://ha.local:8123');
+
+      expect(lineFor('connecting'), '[panel] I hub.connecting '
+          'url=ws://ha.local:8123');
+    });
+
+    test('a query credential does not survive the http->ws transform into the '
+        'log, though it does survive it into the socket', () async {
+      // `base.replace(scheme:, path:)` carries the query through — deliberate,
+      // because `?api_password=` is a real Home Assistant credential and the
+      // handshake needs it — and that is exactly why the line printing this
+      // Uri had to stop printing it whole.
+      final socket = FakeChannel();
+      final client =
+          dial('http://ha.local:8123/?api_password=$password', socket: socket);
+
+      expect(client.status.value, HubStatus.retrying);
+      expect(records.map((r) => r.toString()).join('\n'),
+          isNot(contains(password)));
+      expect(lineFor('connecting'), '[panel] I hub.connecting '
+          'url=ws://ha.local:8123');
+    });
+
+    test('a socket failure reproduces the library\'s message and not the URL '
+        'that library appended to it', () async {
+      // The failure path's copy of the same leak, and the shape
+      // `redactCredentials` was written for one layer up: `dart:io`'s
+      // `HttpException` appends `uri = <the whole URL>` to its own message,
+      // measured against a real ServerSocket as
+      //
+      //   W hub.socket_error error="WebSocketChannelException: HttpException:
+      //   …, uri = http://admin:hunter2@127.0.0.1:43159/api/websocket"
+      final socket = FakeChannel();
+      dial('http://admin:$password@ha.local:8123', socket: socket);
+
+      socket.serverFails('WebSocketChannelException: HttpException: '
+          'Connection closed before full header was received, uri = '
+          'http://admin:$password@127.0.0.1:43159/api/websocket');
+      await pumpEventQueue();
+
+      // Which host refused, and why, both survive; the credential and the
+      // path do not.
+      expect(lineFor('socket_error'), '[panel] W hub.socket_error '
+          'error="WebSocketChannelException: HttpException: Connection closed '
+          'before full header was received, uri = http://127.0.0.1:43159 '
+          '<redacted>"');
+    });
+  });
+
   // Reconnection lives in ha_hub_recovery_test.dart, where a fake clock and
   // a fresh socket per attempt let it assert what actually happens. The
   // wall-clock test that used to sit here counted connect attempts against

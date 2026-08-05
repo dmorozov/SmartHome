@@ -156,6 +156,7 @@ Copying a marker copies its tag too, so two devices end up claiming the same one
 | Move a device (including to another room) | drag the marker, save, re-run the converter |
 | Change what the panel calls it | change the marker's *Name* |
 | Change which Hub switch it uses | edit `bindings.yaml`, nothing else |
+| Change which camera feed it shows | edit its `stream:` in `bindings.yaml`, nothing else |
 | Delete it | delete the marker, re-run the converter, delete its `bindings.yaml` entry |
 
 If you delete a marker but forget its binding, the panel refuses to start and tells you exactly which leftover to remove. That's deliberate — a silent leftover would be a device that quietly never works.
@@ -203,6 +204,7 @@ bindings:
 ```
 
 - **`entity`** — what Home Assistant calls this device. **Leave the line out entirely** if the hardware doesn't exist yet; the device still appears on the panel, showing unknown state, which is exactly right for something still in a box.
+- **`stream`** — cameras and doorbells only: the **name** of a stream in `hub/go2rtc/go2rtc.yaml`, like `stream: front_door`. It is a name, never a web address — pasting an `rtsp://…` link here would tell go2rtc to go and dial it, and the camera password inside that link would end up in the panel's log. So a stream name may only be letters, digits, dots, dashes and underscores, which is exactly what a `go2rtc.yaml` key looks like and leaves no room for the `:`, `/` and `@` a web address needs; anything else stops the panel at boot. The complaint you get **won't repeat back what you typed** — it is written to the log itself, so printing a mis-pasted address there is precisely how the password would escape. It names this file and the device instead, and you look at the line yourself. Leave the line out until the camera is set up; the pin still appears and its popup says the view isn't available, which is the truth. Two devices may name the same stream — two rooms watching one camera is fine. One more thing to check on the go2rtc side, because it fails without saying anything: that camera's entry there needs **two producers**, the camera's own H.264 line plus an `ffmpeg:<name>#video=mjpeg` line. Without the second, the wall panel — which plays JPEG, not H.264 — gets an empty stream and shows "Live view unavailable" with no error anywhere. [Ch. 6 §6.5b](../appliance/commissioning/06-panel-and-bindings.md) has the one-line check.
 - **`connectivity`** — `local` if it works without the manufacturer's cloud, `cloud` if it doesn't. This is required and has no default, because guessing would mislabel every planned device.
 
 Blank lines and `#` comments are fine — group entries by room if it helps you find them.
@@ -229,7 +231,9 @@ If the geometry looks wrong, fix the *drawing* and convert again. Never edit `ho
 
 # Part 7 — When something goes wrong
 
-Every message names the thing you need to fix, using the name you gave it.
+Every message names the thing you need to fix, using the name you gave it —
+with one deliberate exception, for names and values that could be hiding a
+camera password. See *Which messages repeat your value back* below.
 
 ### The drawing is refused
 
@@ -250,11 +254,71 @@ Every message names the thing you need to fix, using the name you gave it.
 
 | Message | What to do |
 |---|---|
+| `bindings.yaml is not valid YAML at line 4, column 5` | the file's *shape* is wrong before anything in it is read — a duplicated line, a tab instead of spaces, a missing quote. Go to that line and column |
 | `no entry for Device "…"` | you drew a device but haven't added its `bindings.yaml` entry |
-| `bindings.yaml binds …, which no longer exist` | you deleted a marker; delete its binding too |
+| `bindings.yaml still has …, and house.yaml no longer does` | you deleted a marker; delete its binding too |
 | `both bind to entity "…"` | two devices point at the same Hub entity; one of them is wrong |
-| `has connectivity "…"` | must be exactly `local` or `cloud` |
+| `is neither of the two words this field takes` | `connectivity:` must be exactly `local` or `cloud` |
+| `has no connectivity:` | that device has no `connectivity:` line at all; add one |
+| `is not a block of settings` | there is a bare value under the device's key instead of indented `entity:`/`stream:`/`connectivity:` lines |
 | `is not a Home Assistant entity id` | entity ids look like `light.kitchen`, all lowercase with one dot |
+| `is not a go2rtc stream name` | you put a web address in `stream:`; put the stream's **name** from `go2rtc.yaml` there instead |
+| `only a camera or a doorbell plays video` | you put `stream:` on something that isn't a camera or doorbell; delete the line, or fix the marker's kind in the drawing (it does not tell you which stream name you typed — see below) |
+| `which YAML read as a … rather than text` | a value like `007` was read as a number; put quotes around it. **This is the one message that repeats your value back** — see below |
+| `is a block of its own rather than one line of text` | you indented something underneath `entity:` or `stream:` (a `url:` line, or a `- ` list). These fields take one value on the same line as the name |
+
+**Which messages repeat your value back, and which do not.** It is worth
+knowing before you paste a camera URL into the wrong line, because these
+messages get written to the panel's log, which is the file an operator copies
+into an issue. The whole list is here, because the gaps in earlier versions of
+this list were found by someone driving the code, not by reading it.
+
+- **Your `entity:`, `stream:` and `connectivity:` values are not repeated.**
+  That covers `is not a Home Assistant entity id`, `is not a go2rtc stream
+  name`, `is neither of the two words this field takes`, `is a block of its own
+  …` and `is not a block of settings`. They name the file, the device and the
+  field only. Open `bindings.yaml` at the device they name and look.
+- **Your device's *key* is repeated only when it is plainly a name** — starts
+  with a letter or a digit, then letters, digits, spaces, dots, dashes and
+  underscores, 40 characters at most. That is every key you would actually
+  type, so in practice these messages read the way they always did.
+  A key that is *not* that shape gets called `the 3rd binding` instead, counted
+  down the file from the top. The reason: if your paste lands one column to the
+  left, with no indent, YAML reads the whole camera URL as the key — and then a
+  message promising not to echo your value was printing it in the same
+  sentence. This applies to every message in the list, including
+  `bindings.yaml still has …`.
+- **`which YAML read as a … rather than text` does repeat the value.** It has
+  to: `quote it: stream: "007"` *is* the fix and cannot be written without the
+  value. It is safe to print because of what YAML has already told us — a
+  *scalar* that came back as something other than text is a number, a bool or a
+  date, and none of those can be `rtsp://user:pass@host`; a URL is text to YAML
+  and never reaches this message. A `url:` nested underneath, or a `- ` list, is
+  not a scalar and goes to the non-echoing message above instead — that shape
+  used to come through here and print the password back twice per line.
+- **`both bind to entity "…"` repeats the entity id**, and only it. The id got
+  that far by looking like `light.kitchen`, so there is nowhere in it for a
+  password to be; which entity is duplicated *is* the complaint.
+- **`only a camera or a doorbell plays video` does not repeat the stream
+  name**, and it is the only stream message that withholds it. On a light the
+  `stream:` is refused, so this message is the one and only place that name
+  could ever be published — whereas a name on a real camera appears in
+  `popup.stream_open` every time the popup opens, and has to.
+- **`… is not valid YAML at line 4, column 5` gives you a position and nothing
+  else.** This one is the reason the list above got rewritten. It comes from
+  the YAML reader itself, before any rule in this document has looked at
+  anything, and the reader's own message quotes the line it choked on, with a
+  caret under it. So the *worse* typo — a duplicated `stream:` line, a tab, an
+  undefined `*alias`, a pasted URL containing `": "` — published the password
+  the whole time, while the *cleaner* one was carefully refused without it.
+  Now you get the file, the line and the column, and you read the line
+  yourself. It applies to `house.yaml` too.
+
+One thing is published on purpose, so you know before you type it: a stream
+name that looks like a name is written to the log every time its popup opens.
+If you paste an **API token** where a stream name goes, it will parse — a token
+has the shape of a name and nothing can tell them apart — and it will be
+logged. `stream:` takes a name from `go2rtc.yaml`, nothing else.
 
 ### Warnings — read them, then decide
 

@@ -49,7 +49,24 @@ Environment=WLR_LIBINPUT_NO_DEVICES=1
 Environment=HUB={{ panel_hub_kind }}
 {% endif %}
 {% if panel_ha_url %}
+# The same species of setting as GO2RTC_URL below, and it took four rounds to
+# be treated like one: Home Assistant behind a reverse proxy with basic auth,
+# or an ?api_password=, makes this value a secret on a 0644 line. The
+# NON-SECRETS rule above is the whole guard here — the Panel's own log stopped
+# printing it whole on 2026-08-04 (see appliance/ansible/README.md), but
+# `systemctl show -p Environment` is unaffected by anything the Panel does.
 Environment=HA_URL={{ panel_ha_url }}
+{% endif %}
+{% if panel_go2rtc_url %}
+# Where go2rtc is, for the camera and doorbell Popups. Guarded separately from
+# HUB above because it is independent of it: a Panel on the fake Hub can still
+# be pointed at a real go2rtc, and a Panel on the real Hub need not be.
+#
+# A base address, not a credential — go2rtc is unauthenticated on this box and
+# the camera passwords live in hub/go2rtc/go2rtc.yaml — so the NON-SECRETS
+# rule above permits this line, and none of the EnvironmentFile= machinery
+# below applies to it.
+Environment=GO2RTC_URL={{ panel_go2rtc_url }}
 {% endif %}
 {% if panel_log_level %}
 # Same environment-first rule (panel/lib/diagnostics/log.dart), and the reason

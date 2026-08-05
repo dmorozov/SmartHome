@@ -216,7 +216,11 @@ HUB=ha HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)" \
 
 Either way, confirm which origin won in the console — `env=unavailable` is
 how a web run tells you an `HA_URL=…` prefix was discarded:
-`[panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build env=unavailable`.
+`[panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build GO2RTC_URL=absent env=unavailable`.
+
+`GO2RTC_URL` joined that line in phase 4's Panel work and resolves the same
+way. It stays `absent` here: this phase brings go2rtc *up*, it does not put a
+stream in it, and pointing the Panel at an empty go2rtc would buy nothing.
 
 ## Done when
 
@@ -246,7 +250,7 @@ how a web run tells you an `HA_URL=…` prefix was discarded:
   (`resolute/universe`, 2.0.22 — older than the 2.1.x broker, which is
   irrelevant on the wire) or `brew install mosquitto` on the Mac is
   convenience for later debugging, **not a prerequisite for this phase**.
-- The Panel console shows `hub.connected url=ws://<hub-ip>...` and a
+- The Panel console shows `hub.connected url=ws://<hub-ip>:8123` and a
   `hub.snapshot` line. `hub.missing_entities` will list ~everything —
   correct: the laptop Hub has no stand-in fleet and no real devices yet.
   Phases 2–5 drain that list; this phase only proves the wiring.

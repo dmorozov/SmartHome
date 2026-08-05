@@ -119,8 +119,23 @@ never rubber-stamp.
   laptop (ADR-0008), integrations done, spike remains the final step.
 - `hub/README.md`: bring-up notes gain ring-mqtt + wyze-bridge sections
   (promote the relevant text from `hub/dev/README.md`).
-- `panel/README.md`: Popup video (MSE/go2rtc) section; `GO2RTC_URL`
-  documented next to `HA_URL`, environment-first via `resolveHubConfig`.
+- ~~`panel/README.md`: Popup video (MSE/go2rtc) section; `GO2RTC_URL`
+  documented next to `HA_URL`, environment-first via `resolveHubConfig`.~~
+  **Done 2026-08-04** — "Live video in the Popup", covering `GO2RTC_URL`,
+  `stream:` in `bindings.yaml`, the five Popup bodies, the doorbell rule, the
+  two transports and the go2rtc config shape they need. The appliance half
+  landed with it: `panel_go2rtc_url` → `Environment=GO2RTC_URL=`, documented in
+  `appliance/ansible/README.md` and Ch. 6 §6.5a/§6.5b. The "two things still
+  missing" this bullet used to name — the MSE shim and go2rtc's cross-origin
+  refusal — are both **done**, and rewriting the prose that described them was
+  its own pass. **Re-read it at closure time anyway**: what is written in the
+  present tense there now is "proven against `selftest`, never against a
+  camera", and that sentence becomes a lie the day a camera lands.
+- `panel/assets/house/bindings.yaml`: the sweep is also where `stream:`
+  values stop being commented examples. Each `cam-*` and the `doorbell` need
+  the **name** of a stream that exists in `hub/go2rtc/go2rtc.yaml`, and
+  `house.loaded streams=` is the count to check it against — two Devices
+  naming one stream is legal, so nothing else will notice a copy-paste.
 - This plan directory: each phase file's "Done when" boxes checked with
   dates; A1 camera inventory and §2's Key-mapping table filled in.
 - Calendar items (root README) re-checked: the oven decision (Oct 2026)

@@ -141,15 +141,40 @@ the appliance it is a restart loop behind a black screen (`Restart=always`,
 
 | Rule | Enforced in | The message you get |
 |---|---|---|
-| `entity` must match `^[a-z_]+\.[a-z0-9_]+$` | `bindings_parser.dart` | `"<key>" has entity "<id>", which is not a Home Assistant entity id (domain.object_id)` |
+| `entity` must match `^[a-z_]+\.[a-z0-9_]+$` | `bindings_parser.dart` | `the entity: under "<key>" is not a Home Assistant entity id (domain.object_id, lower case …)` |
+| `stream` must match `^[A-Za-z0-9._-]+$` | `bindings_parser.dart` | `the stream: under "<key>" is not a go2rtc stream name (one or more of letters, digits, dot, dash and underscore, and nothing else) …` |
 | One entity backs at most one Device | `bindings_parser.dart` | `"<a>" and "<b>" both bind to entity "<id>" — one entity, one Device.` |
-| `connectivity` is present and is `local`\|`cloud` | `bindings_parser.dart` | `"<key>" has connectivity "<c>" (local \| cloud)` |
+| `connectivity` is present and is `local`\|`cloud` | `bindings_parser.dart` | `the connectivity: under "<key>" is neither of the two words this field takes (local \| cloud)` — **and no longer names the value**, which it used to. The old message argued that `connectivity:` "is not a field anyone pastes an address into"; it sits one line below `stream:` in the same block, and a paste landing one line off is the identical accident with the identical password in it. Missing entirely gets its own plain line: `"<key>" has no connectivity:` |
+| A binding is a block, not a bare value | `bindings_parser.dart` | `"<key>" is not a block of settings …` — checked before any field is read, because `cam-den: something` used to reach `String.operator[]` and escape as a raw `type 'String' is not a subtype of type 'int'` naming neither file nor key |
 | Every Placement has a binding | `house_loader.dart` | `no entry for Device "<key>" — add one; connectivity alone is enough until the hardware exists` |
 | Every binding has a Placement | `house_loader.dart` | `bindings.yaml binds <keys>, which no longer exist in house.yaml` |
 | No duplicate Key in `house.yaml` | `house_loader.dart` | `duplicate Device key "<key>" — … regenerate rather than editing house.yaml` |
 
 Note the domain half of the entity regex allows no digits; the object id does.
-`switch.tp_link_smart_plug_722c_kasa_smart_plug_722c_0` passes.
+`switch.tp_link_smart_plug_722c_kasa_smart_plug_722c_0` passes. The stream
+regex has no first-character rule: `_ring_doorbell` is a legal key in
+`go2rtc.yaml`, and the characters that matter (`:`, `/`, `@`) are excluded in
+every position anyway.
+
+**Four of these messages withhold the value they rejected**, and it is on
+purpose: this message is written to the journal, and a camera URL carries
+`user:password@host` with it. `entity:` and `stream:` are the two fields a URL
+gets pasted into; `connectivity:` is one line below `stream:` in the same
+block, which makes a paste landing one line off the identical accident; and a
+binding that is a bare value could be that same paste with the field name left
+off. They name the file, the key and the field so you can open `bindings.yaml`
+and look.
+
+The messages that *do* quote the value quote something no credential can hide
+in — an entity id that already passed the pattern, or a Key. There is one more
+in `bindings_parser.dart` that is not in this table because it is a YAML-shape
+complaint rather than a rule: `stream: 007` reads as a **number**, and the
+message says `quote it: stream: "007"`, which cannot be written without the
+value. It is safe because YAML has already told us the value is not text, and
+a URL is always text to YAML. Indent a `url:` line or a `- ` list under
+`stream:` instead and it is a *collection*, not a scalar — that shape used to
+come through the same message and print the password back twice per line, and
+now goes to the withholding one.
 
 The Key sets must match **both ways**. `bindings.yaml` is parsed in full
 first, so a malformed entity id or a missing `connectivity` surfaces before
@@ -221,10 +246,14 @@ development task, not a commissioning one.
 
 ## 6.5 Running the Panel against the real Hub
 
-`HUB`, `HA_URL`, `HA_TOKEN` and `LOG` all resolve **process environment
-first**, then the build's `--dart-define`, then the built-in default
-(`panel/lib/config/hub_config.dart`; `LOG` via `Log.applyLevel`). An
+`HUB`, `HA_URL`, `HA_TOKEN`, `GO2RTC_URL` and `LOG` all resolve **process
+environment first**, then the build's `--dart-define`, then the built-in
+default (`panel/lib/config/hub_config.dart`; `LOG` via `Log.applyLevel`). An
 environment variable that is present but empty counts as absent.
+
+`GO2RTC_URL` is the newest of them and has **no built-in default** — see §6.5a.
+(`HA_TOKEN` has none either, but a default secret is not a thing that could
+exist; `GO2RTC_URL` is the only *address* the Panel refuses to guess.)
 
 The order is the point: on the appliance the Hub's address is an operational
 setting, so a Hub that moves — or a DHCP lease that drifts — costs a restart,
@@ -269,6 +298,194 @@ rather than leaving you to discover it:
 
 ---
 
+## 6.5a `GO2RTC_URL` and the camera Popups
+
+Cameras and the doorbell open a Popup that plays live video from go2rtc.
+Two independent things have to be true for a picture, and they are set in two
+different files on purpose:
+
+| What | Where | Shape |
+|---|---|---|
+| Where go2rtc is | `GO2RTC_URL`, resolved exactly like `HA_URL` | `http://127.0.0.1:1984` |
+| Which stream this Device plays | `stream:` beside `entity:` in `bindings.yaml` | `ring_doorbell` — a **name**, never a URL |
+
+```sh
+cd panel
+flutter run -d chrome \
+  --dart-define=HUB=ha \
+  --dart-define=HA_URL=http://192.168.68.81:8123 \
+  --dart-define=HA_TOKEN="$(cat ../hub/token)" \
+  --dart-define=GO2RTC_URL=http://192.168.68.81:1984
+```
+
+**Unset is a supported state, not a broken one.** Unlike `HA_URL` there is no
+built-in default — `HA_URL`'s is earned because `HUB=fake` gates it, and a
+camera is a camera under every Hub, so a `localhost:1984` default would open a
+socket to nothing on every run and a *wrong* go2rtc address would be invisible
+until somebody tapped a camera. With nothing set, the Panel boots normally,
+every pin renders, and one line each says which state it is in:
+
+```
+[panel] I hub.config … GO2RTC_URL=absent env=available
+[panel] I popup.go2rtc url=absent
+[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33 streams=0
+```
+
+`popup.go2rtc` carries the **address** in the clear — scheme, host and port —
+and that is deliberate rather than a slip of the "never log a secret" rule:
+those parts are what answer "is this Panel pointed at the right go2rtc", and
+the camera credentials live in `hub/go2rtc/go2rtc.yaml`, not in the base
+address. Those three parts are **built up** into the line; nothing else in the
+value survives. A path is reported as `path=set` and never printed — it was
+printed until a verifier put a token in one, and a reverse-proxy mount point's
+presence is worth a word where its text is not. go2rtc 1.9 has `api.username`/`api.password`, so
+`GO2RTC_URL=http://user:pass@host:1984` is a legitimate value, and it logs as
+`url=http://host:1984 auth=set` — the address you need, plus the fact that the
+Panel did receive the credential, in the same `token=set` vocabulary the token
+uses. A value with **no host** in it reads `url=unusable` and is not echoed at
+all: if the parts cannot be seen, nothing can promise there is no password
+among them, and `admin:hunter2@host:1984` (no scheme) is exactly such a value —
+it parses, but as a scheme with the rest as a path, so a rule that only dropped
+the userinfo printed the whole thing. That same emptiness is what stops the
+Panel dialling, so `url=unusable` also means "and you would get no picture".
+`streams=` on `house.loaded` is how many Devices carry a `stream:` at all —
+today, zero.
+
+The `stream:` value is a **name from `go2rtc.yaml`**: one or more of letters,
+digits, dot, dash and underscore, and nothing else — which excludes the `:`,
+`/` and `@` a URL needs. The reason is worth knowing before you type one:
+go2rtc's `?src=` is not a lookup. Hand it something that looks like a source
+spec and it **creates** that stream and dials it — so a pasted
+`rtsp://user:pass@camera/live` would both work by accident and put the camera
+password into the Panel's log. Which is why the refusal itself is careful: the
+`FormatException` reaches journald as `E house.invalid`, so it names the file,
+the binding and the field and **does not echo the value**. Echoing it back is
+what would publish the password, in the one line an operator copies into an
+issue. Open `bindings.yaml` at the binding it names to see what is there.
+
+Two neighbours of that rule are worth knowing at commissioning time, because
+both were found by driving the code rather than reading it:
+
+- **the binding's key is withheld too**, when the key is not plainly a name —
+  a letter or digit, then letters, digits, spaces, dots, dashes and
+  underscores, 40 characters at most. A paste that lands one column to the
+  left makes the whole camera URL the key, and the message then printed it
+  while promising not to. Ordinary keys are still quoted; anything else reads
+  `the 3rd binding`, counted from the top of the file.
+- **a YAML *syntax* error is a different message with a different guarantee.**
+  It is raised by the YAML reader before any rule above has looked at
+  anything, and the reader's own text quotes the offending source line with a
+  caret under it — so a duplicated `stream:` line, a stray tab or a pasted URL
+  containing `": "` published the password while the cleaner typo did not. It
+  now reads `bindings.yaml is not valid YAML at line 4, column 5`, with the
+  line left in the file for you to open. `house.yaml` goes through the same
+  door.
+
+A `stream:` on a kind that cannot play video is a fatal boot error, same as any
+other line nothing would ever read — and that one message withholds the stream
+*name* as well, because on a non-camera the stream is refused, so the message
+is the only place the name could ever be published.
+
+Tapping a camera with all of this set gives, on **either** build:
+
+```
+[panel] I popup.stream_open name=selftest
+[panel] I popup.stream_closed name=selftest reason=popup_closed
+```
+
+**Both builds play video, and the kiosk is the one that matters most.** The
+Flutter/cage appliance is the primary target — it is the wall — and the web
+build is both ADR-0001's fallback and the shape a second in-house touchscreen
+is planned to take. Anything you find that says "playback is web-only by
+decision" or that `-d linux` shows a placeholder predates 2026-08-04 and is
+wrong.
+
+They reach go2rtc by different roads, and the difference shows up in your
+timings, so it is worth knowing which one you are watching:
+
+| Build | What it asks go2rtc for | What to expect |
+|---|---|---|
+| `-d linux` (the kiosk) | `GET /api/stream.mjpeg?src=…` — multipart JPEG | **"Connecting to the camera…" for 2–4 s**, then the picture; ~186 kB/s |
+| `-d chrome` (web) | `/api/ws?src=…` — fMP4 to MediaSource | picture in ~0.1 s; ~26 kB/s |
+
+**The kiosk's two-second pause is not a fault and not your network.** go2rtc
+starts the ffmpeg JPEG transcode when the first viewer asks for it; measured
+2.10 s warm, 4.10 s cold. It stops again when the last viewer leaves, which is
+why the *second* tap after a while is slow again. Do not go looking for a
+cause — the Panel says `connecting` honestly rather than flashing
+"unavailable" at you, and that phase existing is the whole reason.
+
+**Every camera needs two producers in `go2rtc.yaml`, or the kiosk shows
+nothing** — see §6.5b. This is the one configuration mistake in this feature
+that produces no error message anywhere.
+
+`popup.stream_unsupported` still exists and means something narrower than it
+used to:
+
+```
+[panel] I popup.stream_unsupported name=selftest
+```
+
+…with **no** `stream_open`/`stream_closed` pair, because nothing was dialled.
+It used to be the whole non-web platform saying "I have no player". Now it is
+a *browser* with no `MediaSource` in it — so on the appliance you should never
+see this line, and if you do, the build is not the one you think it is. The
+distinction is the point: on the appliance the journal is the only channel
+there is, and "this build cannot play video" has to be tellable from "go2rtc is
+healthy and said no", which a `stream_open` for a socket that never existed
+made impossible. `panel.start platform=…` cannot stand in for it — it scrolled
+past hours ago.
+
+## 6.5b Every camera is one stream with two producers
+
+The two builds want two codecs off the same camera, and they ask for the same
+stream **name**. So one entry in `hub/go2rtc/go2rtc.yaml` carries two
+producers:
+
+```yaml
+streams:
+  cam_porch:
+    - rtsp://user:pass@CAMERA-IP/live      # H.264 -> web MSE
+    - ffmpeg:cam_porch#video=mjpeg         # -> appliance MJPEG
+```
+
+`bindings.yaml` writes `stream: cam_porch` once, and both builds play it.
+Rejected: naming the MJPEG one `cam_porch_mjpeg`, which would put a transport
+detail into the house's own configuration and make every camera two entries
+that can drift apart.
+
+**Leave the second producer out and the kiosk gets nothing, with no error
+anywhere.** go2rtc does not transcode on demand for a format no producer
+offers. Measured against this box's 1.9.10, a stream with only the H.264 line:
+
+```
+$ curl -m 8 -o /dev/null -w 'code=%{http_code} bytes=%{size_download}\n' \
+    'http://127.0.0.1:1984/api/stream.mjpeg?src=<name>'
+code=200 bytes=0
+```
+
+`200 OK` and nothing in it. Not a 404, not an error frame — a successful empty
+stream, which go2rtc then holds open. The Panel's watchdog gives up after
+fifteen seconds and says "Live view unavailable"; nothing in the journal, the
+go2rtc UI or the camera points at the missing line. **So run that `curl` when
+you add a camera.** Anything other than `bytes=0` means the appliance can play
+it.
+
+Declaring it on every camera costs nothing while nobody is watching: with no
+consumer, `/api/streams` shows both producers as bare `url` stubs with
+`consumers: []`, and no ffmpeg is running. That is also how you verify teardown
+after closing a Popup, and it is a stricter check than watching the consumer
+count.
+
+**Give it ten seconds before you call teardown broken.** Close a Popup that was
+*playing* and `consumers` is `[]` within a second. Close one **during** the 2 s
+"Connecting to the camera…" and the count *goes up* after the Panel has already
+gone, taking 2–10 s to reach `[]` — the JPEG transcode counts as a consumer of
+its own source and finishes starting regardless of who left. Measured; expected;
+not a leak, and not something the Panel can cancel.
+
+---
+
 ## 6.6 The diagnostics that matter
 
 Same lines everywhere: `flutter run`, the browser console (filter on
@@ -276,23 +493,31 @@ Same lines everywhere: `flutter run`, the browser console (filter on
 
 ```
 [panel] I panel.start hub=ha mode=release platform=linux log=info log_from=environment
-[panel] I hub.config HUB=environment HA_URL=environment HA_TOKEN=environment env=available
-[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33
+[panel] I hub.config HUB=environment HA_URL=environment HA_TOKEN=environment GO2RTC_URL=absent env=available
+[panel] I popup.go2rtc url=absent
+[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33 streams=0
 [panel] I hub.configured url=http://127.0.0.1:8123 token=set
-[panel] I hub.connected url=ws://127.0.0.1:8123/api/websocket devices=33
+[panel] I hub.connected url=ws://127.0.0.1:8123 devices=33
 [panel] I hub.snapshot entities=<n> bound=<m> missing=0
 ```
 
 | Line | Read it for |
 |---|---|
 | `hub.config` | which origin won, per setting. `env=unavailable` means you are on web and any environment you exported was discarded |
-| `house.loaded` | `devices=` is Placements, `bound=` is how many have an `entity:`. The gap is your unbound Devices |
-| `hub.connected` | the socket authenticated. `devices=` here is the count of **bound** entities the client is watching |
+| `popup.go2rtc` | where the camera Popups will look, or `absent`. Scheme, host and port are in the clear; a path is reported only as `path=set`, a credential in the value only as `auth=set`, and a value with no host reads `url=unusable` and is not echoed — §6.5a. `absent` is a supported state |
+| `house.loaded` | `devices=` is Placements, `bound=` is how many have an `entity:`. The gap is your unbound Devices. `streams=` is how many carry a `stream:` |
+| `hub.configured` | what `HA_URL` actually resolved to, cut to scheme/host/port by the same rule as `popup.go2rtc` — Home Assistant behind a reverse proxy with basic auth makes this value a secret, so a mount point reads `path=set`, a credential `auth=set`, an `?api_password=` `query=set`, and a value with no host `url=unusable` |
+| `hub.connected` | the socket authenticated. `devices=` here is the count of **bound** entities the client is watching. The address only — its path is `/api/websocket`, which the Panel appended itself; `hub.configured` above is where the operator's own value is characterised |
 | `hub.snapshot` | `missing=` is the headline number. Zero means every `entity:` you wrote exists on the Hub |
 | `hub.missing_entities` | the ids the Hub has never heard of. Capped at 8 ids with `more=<n>`; `hub.snapshot` carries the true count |
 | `hub.state_unusable` | the entity exists but reports `unavailable`/`unknown`, or a reading would not parse. One line per entry into that state, not per message |
 | `hub.toggle_refused` | a tap hit a non-togglable kind (§6.4) |
 | `hub.auth_invalid` | the token is wrong. Terminal — the Panel does not retry past this (ADR-0007) |
+| `popup.stream_*` | one Popup's live view: `_open`, `_closed`, `_failed` (go2rtc's own words, verbatim), `_skipped` at debug with the reason nothing was dialled, and `_unsupported` on any non-web build. `_open`/`_closed` come as a pair and only for a socket that really was opened — an `_unsupported` Popup logs neither, because a pair for a connection that never existed is the log inventing one. Always the stream **name**, never the URL |
+| `popup.doorbell*` | the unprompted Popup: `_extended` (a second ding restarted the 30 s deadline), `_held` (a person already had that doorbell up), `_deferred` (the previous one was still closing its stream; it is re-offered once it is gone), `_dismissed` (it went away, and this line deliberately does not guess why) |
+| `popup.deadline_ceiling` | a doorbell Popup hit `open_s=120` — something kept extending it for two solid minutes. The one dismissal that names its own reason |
+| `popup.dismiss_blocked` | a Popup's deadline fired while another route sat on top of it. It re-arms at `retry_s=` rather than losing the deadline and holding its stream open |
+| `ui.ding*` | the doorbell rule's verdict per report. `ui.ding` rang; `ui.ding_suppressed` did not and says which rule silenced it (`unchanged`, `stale` with `age_s`, or `first_sight`); `ui.ding_stale` means a press time *changed* and still read too old — the clocks disagree and the feature is silently dead; `ui.ding_unreadable` names a state string neither shape could read |
 
 **What `missing_entities` does not catch.** It compares the entity ids in
 `bindings.yaml` against the Hub's `get_states` snapshot. That is the whole of
@@ -322,6 +547,7 @@ file.
 |---|---|---|
 | `HUB` | `Environment=HUB={{ panel_hub_kind }}` | not a secret |
 | `HA_URL` | `Environment=HA_URL={{ panel_ha_url }}` | not a secret |
+| `GO2RTC_URL` | `Environment=GO2RTC_URL={{ panel_go2rtc_url }}` | not a secret — go2rtc is unauthenticated here and the camera credentials live in `go2rtc.yaml`, not in this base address |
 | `LOG` | `Environment=LOG={{ panel_log_level }}` | not a secret; raising the level on a Panel already on a wall must not mean rebuilding it |
 | `HA_TOKEN` | `EnvironmentFile=-/etc/smarthome/panel.env`, 0600, owned by the kiosk user | `systemctl show -p Environment` hands every `Environment=` value to any local user without authentication, and the unit file is 0644. `EnvironmentFile=` exposes only the path |
 
@@ -334,14 +560,19 @@ turn "no Hub yet" into a restart-looping black screen.
 
 ### The empty-by-default rule
 
-`panel_hub_kind`, `panel_ha_url` and `panel_log_level` all default to `""` in
-`appliance/ansible/group_vars/all.yml`, and **must stay that way**. Resolution
-is environment-first, so any value set there beats a `--dart-define` compiled
-into the bundle. Writing the apparently harmless defaults (`fake`,
-`http://localhost:8123`) would silently force a Panel built with
-`--dart-define=HUB=ha` back onto the fake Hub. Empty emits no `Environment=`
-line at all, which is what makes "a converge changes nothing until someone
-asks it to" actually true.
+`panel_hub_kind`, `panel_ha_url`, `panel_go2rtc_url` and `panel_log_level` all
+default to `""` in `appliance/ansible/group_vars/all.yml`, and **must stay
+that way**. Resolution is environment-first, so any value set there beats a
+`--dart-define` compiled into the bundle. Writing the apparently harmless
+defaults (`fake`, `http://localhost:8123`) would silently force a Panel built
+with `--dart-define=HUB=ha` back onto the fake Hub. Empty emits no
+`Environment=` line at all, which is what makes "a converge changes nothing
+until someone asks it to" actually true.
+
+`panel_go2rtc_url` has an extra reason on top of that one: the Panel has **no
+built-in default** for it at all, so a value here would not be re-stating a
+default, it would be inventing the setting. Left empty the Panel says
+`GO2RTC_URL=absent`, which is the truth — nobody has told it where go2rtc is.
 
 ### Delivering the token
 
@@ -381,8 +612,9 @@ Reading the journal: the unit is `cage@tty1.service` (`kiosk_tty: tty1`), so
 journalctl -u cage@tty1.service -f | grep '\[panel\]'
 ```
 
-`panel/README.md` says `journalctl -u panel`; there is no such unit. The
-README is stale on that one line.
+`panel/README.md` used to say `journalctl -u panel`; there is no such unit,
+and that line was corrected 2026-08-04. If it comes back, this is why it is
+wrong: the Panel has no unit of its own — it is whatever `cage@<tty>` launches.
 
 The host has **no passwordless sudo** — the operator runs any privileged step
 themselves.
@@ -474,6 +706,9 @@ Measured, so nothing here is rediscovered as a surprise.
 | Exactly three `outlet` Keys (`outlet-outdoor-a`, `outlet-outdoor-b`, `outlet-master`), four live switchable sockets | one socket has no Key, and two of the four are a fridge and an aquarium (§6.4) |
 | `_integrated` is `{}` | first real binding turns the suite red until it is updated |
 | `kiosk_app` is the spike bundle | the `Environment=` delivery path is wired but inert |
+| No binding carries a `stream:`, and `panel_go2rtc_url` is empty | `house.loaded` reports `streams=0` and every camera Popup shows the unconfigured placeholder. Not a fault — no go2rtc stream exists for any `cam-*` yet (**B3**), and `selftest` is the only stream on the box |
+| Both builds have a real player; go2rtc's `origin: "*"` is set | point `panel_go2rtc_url` at the box and bind `stream: selftest`, and the pieces a tapped camera needs are in place. What is verified is the **session**, not the tap: both players were driven against `selftest` directly — the MJPEG one on the Dart VM, the MSE one in real Chrome — and **nobody has tapped a camera on this appliance**, because `flutter build linux` has never run here (next row, **G4**). Never against a real camera either, because there is not one yet (**B2**/**B3**) |
+| `flutter build linux` has never run on this host | no clang/cmake/ninja/GTK (**G4**), so the appliance's MJPEG player is proven on the Dart VM and against the live server but has **never rendered a frame inside the cage kiosk**. Treat first light on the wall as unverified |
 
 Further reading: [`../../panel/HOUSE-PLAN.md`](../../panel/HOUSE-PLAN.md) is
 the full drawing manual, written for whoever draws the house;

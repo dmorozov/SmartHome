@@ -37,12 +37,16 @@ void main() {
       expect(config.kind, defaultHubKind);
       expect(config.url, defaultHaUrl);
       expect(config.token, '');
+      expect(config.go2rtcUrl, '');
       expect(config.sources, {
         'HUB': ConfigSource.fallback,
         'HA_URL': ConfigSource.fallback,
         // Not `fallback`: there is no default token, so saying one applied
         // would be a lie the operator has to disprove.
         'HA_TOKEN': ConfigSource.absent,
+        // Nor here, and for a second reason: a default go2rtc address would
+        // be a socket opened to nothing on every hermetic run.
+        'GO2RTC_URL': ConfigSource.absent,
       });
     });
 
@@ -60,7 +64,60 @@ void main() {
         'HUB': ConfigSource.build,
         'HA_URL': ConfigSource.environment,
         'HA_TOKEN': ConfigSource.absent,
+        'GO2RTC_URL': ConfigSource.absent,
       });
+    });
+  });
+
+  /// go2rtc's address resolves through the same function as the Hub's,
+  /// rather than through a reader of its own like `LOG`, because it is the
+  /// same species of fact: an address of a daemon on the Hub box, whose
+  /// staleness is indistinguishable from its being down. That is exactly
+  /// what the `hub.config` line exists to tell apart — and unlike the Hub,
+  /// go2rtc has no badge, so this line is the *only* place a Panel pointed
+  /// at the wrong one says so before somebody taps a camera.
+  group('go2rtc resolves the same way', () {
+    test('GO2RTC_URL from the environment beats the build\'s define', () {
+      final config = resolveHubConfig(
+        environment: {'GO2RTC_URL': 'http://192.168.68.81:1984'},
+        buildGo2rtcUrl: 'http://compiled-in:1984',
+      );
+
+      expect(config.go2rtcUrl, 'http://192.168.68.81:1984');
+      expect(config.sources['GO2RTC_URL'], ConfigSource.environment);
+      expect(config.overridden, ['GO2RTC_URL']);
+    });
+
+    test('the define stands when the environment is silent', () {
+      final config = resolveHubConfig(
+        environment: const {},
+        buildGo2rtcUrl: 'http://compiled-in:1984',
+      );
+
+      expect(config.go2rtcUrl, 'http://compiled-in:1984');
+      expect(config.sources['GO2RTC_URL'], ConfigSource.build);
+    });
+
+    test('nobody named it, so it is absent — not a localhost the Panel '
+        'invented', () {
+      // `fallback` would mean "a default applied". There is no default: a
+      // camera is a camera under every Hub, so an invented address would
+      // dial nothing on every hermetic run, and it would be invisible
+      // until somebody tapped a camera pin.
+      final config = resolveHubConfig(environment: const {});
+
+      expect(config.go2rtcUrl, '');
+      expect(config.sources['GO2RTC_URL'], ConfigSource.absent);
+    });
+
+    test('an empty GO2RTC_URL in the shell does not defeat a define', () {
+      final config = resolveHubConfig(
+        environment: {'GO2RTC_URL': ''},
+        buildGo2rtcUrl: 'http://compiled-in:1984',
+      );
+
+      expect(config.go2rtcUrl, 'http://compiled-in:1984');
+      expect(config.sources['GO2RTC_URL'], ConfigSource.build);
     });
   });
 
@@ -132,6 +189,7 @@ void main() {
         'HUB': 'fallback',
         'HA_URL': 'environment',
         'HA_TOKEN': 'environment',
+        'GO2RTC_URL': 'absent',
       });
       // The whole rendered map, as a sink or journald would see it.
       expect(config.logFields.toString(), isNot(contains(secret)));
@@ -146,11 +204,15 @@ void main() {
         buildKind: 'ha',
       );
 
+      // The order is `resolveHubConfig`'s argument order, not this file's
+      // wish: `sources` is filled in `pick()` call order. Reordering those
+      // arguments reorders this line, which is why the whole string is
+      // pinned rather than the fields.
       expect(
         LogRecord(LogLevel.info, 'hub', 'config', fields: config.logFields)
             .toString(),
         '[panel] I hub.config HUB=build HA_URL=environment '
-            'HA_TOKEN=environment',
+            'HA_TOKEN=environment GO2RTC_URL=absent',
       );
     });
   });

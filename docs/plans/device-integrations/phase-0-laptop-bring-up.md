@@ -116,8 +116,18 @@ its "reads no files and no environment" contract — the resolver is pure and
 only, never the token:
 
 ```
-[panel] I hub.config HUB=build HA_URL=environment HA_TOKEN=environment env=available
+[panel] I hub.config HUB=build HA_URL=environment HA_TOKEN=environment GO2RTC_URL=absent env=available
 ```
+
+**A fourth setting joined them 2026-08-04**: `GO2RTC_URL`, the address of the
+go2rtc daemon the camera Popups play from. It resolves through the same
+`resolveHubConfig` rather than through a reader of its own — unlike `LOG`
+(item 8), whose separate path is earned by *not* being an address. `GO2RTC_URL`
+is the same species of fact as `HA_URL`: a daemon on the Hub box whose
+staleness is indistinguishable from its being down, which is exactly what the
+`hub.config` line exists to disambiguate. It has **no built-in default**,
+because `defaultHaUrl` is earned by `HUB=fake` gating it and video has no such
+gate. See `panel/README.md`, "Live video in the Popup".
 
 **Caveat — web is the exception.** `-d chrome` has no process environment, so
 there `--dart-define` remains the only route; `env=unavailable` in the line
@@ -269,6 +279,17 @@ link-local IPv6 only (`fe80::…`) and `resolvectl mdns` is off on every link.
    dead screen; the genuinely broken combination — `HUB=ha` with no token
    anywhere — fails the *converge* instead, via an assert that runs before
    the unit is ever written. See `appliance/ansible/README.md`.
+
+   **Extended 2026-08-04** by `panel_go2rtc_url` → `Environment=GO2RTC_URL=`,
+   under the same empty-by-default rule and for one reason more: the Panel has
+   no built-in default for that setting at all, so a value in `group_vars`
+   would not be re-stating a default, it would be inventing the setting. It is
+   not a secret — go2rtc is unauthenticated here and the camera credentials
+   live in `hub/go2rtc/go2rtc.yaml`, not in the base address — so it rides an
+   `Environment=` line and needs none of the `EnvironmentFile=` machinery. The
+   role's asserts needed nothing: there is no `GO2RTC_URL`-shaped equivalent
+   of "`HUB=ha` requires a token", because an absent go2rtc costs one Popup
+   body, not the wall.
 
    Still open by design, and deliberately decoupled: `kiosk_app` points at
    the spike bundle, which ignores all of this. The wiring goes live
@@ -469,6 +490,13 @@ link-local IPv6 only (`fe80::…`) and `resolvectl mdns` is off on every link.
     list and is **missing from `flutter_toolchain_packages`** in
     `group_vars/all.yml` — pre-existing, surfaced by this audit. The cheap
     proof is to install the set and run one `flutter build linux`.
+    **This item is now on phase 4's video path, which it was not before**
+    (owner decision, 2026-08-04: the appliance is the primary target and must
+    play video). Its MJPEG player is exercised by the suite on the Dart VM and
+    has been driven against the live go2rtc from this host, but with no
+    toolchain it has never been compiled for Linux, so no frame of it has ever
+    been rendered inside cage. "The wall plays video" stays an argument until
+    this is done. See phase-4 §B.
 
 15. **`appliance/test/run.sh` bind-mounts the Hub's own Docker socket into a
     `--privileged` container.** Harmless when the dev box was a Mac and that

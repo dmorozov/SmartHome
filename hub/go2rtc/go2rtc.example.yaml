@@ -12,10 +12,110 @@
 # without rework (it embeds this same go2rtc).
 
 # API/UI on :1984, RTSP on :8554, WebRTC on :8555 (host networking).
+api:
+  # WHY "*", and why that is a real cost rather than a shrug.
+  #
+  # go2rtc refuses a WebSocket upgrade carrying a cross-origin `Origin`
+  # header, so the Panel — served from a dev server, or from anywhere that
+  # is not :1984 — cannot open a stream at all without this. Measured
+  # against 1.9.10 on 2026-08-04:
+  #
+  #   Origin absent                       -> 101   (non-browser clients)
+  #   Origin: http://127.0.0.1:1984       -> 101   (same origin)
+  #   Origin: http://localhost:8080       -> 403
+  #   api.origin: "http://localhost:8080" -> 403   <-- STILL refuses that
+  #                                                    very origin
+  #   api.origin: "*"                     -> 101
+  #
+  # So the tight alternative — name the Panel's exact origin and nothing
+  # else — is not a tradeoff we declined. It does not exist in this
+  # version: `origin` is binary, and naming a value allowlists nothing.
+  # Do not "tighten" this to a hostname later without re-measuring; it
+  # will look correct and silently break every camera.
+  #
+  # What it costs: go2rtc here is UNAUTHENTICATED, so with this set, any
+  # page loaded in any browser on this LAN can reach every stream below.
+  # Today that is one synthetic test pattern; after phase 4 it is every
+  # camera in the house. The mitigation is network placement (ADR-0008 —
+  # one box, LAN only, no port-forward), not this setting.
+  #
+  # Why the exposure was accepted rather than merely noted: access to this
+  # system is LAN-only or over the VPN, so the NETWORK BOUNDARY is the
+  # control. The origin check was never what kept strangers off an
+  # unauthenticated service, and refusing "*" would have bought no protection
+  # while costing the Panel its picture.
+  #
+  # Owner decision, taken 2026-08-04 with the exposure stated. Revisit when
+  # real camera streams land — that is when the cost becomes real.
+  origin: "*"
+
 streams:
+  # ONE STREAM, TWO PRODUCERS — this is the shape every camera here must take.
+  #
+  # The Panel has two builds and they want two codecs off the same camera:
+  # the web build plays H.264 through MediaSource over a WebSocket, and the
+  # Flutter/cage appliance — the wall, and the primary target — plays
+  # multipart JPEG over HTTP. Both ask go2rtc for the SAME stream name, so
+  # bindings.yaml names each camera once:
+  #
+  #   cam_porch:
+  #     - rtsp://user:pass@CAMERA-IP/live      # H.264 -> web MSE
+  #     - ffmpeg:cam_porch#video=mjpeg         # -> appliance MJPEG
+  #
+  # Rejected: a `_mjpeg` suffix convention (cam_porch + cam_porch_mjpeg).
+  # That puts a transport detail into the house's own configuration and makes
+  # every camera two entries that can drift apart.
+  #
+  # LEAVE THE SECOND LINE OUT AND THE APPLIANCE GETS NOTHING, SILENTLY.
+  # go2rtc does not transcode on demand for a format no producer offers.
+  # Measured against 1.9.10 on 2026-08-04, a stream with only the H.264
+  # producer:
+  #
+  #   GET /api/stream.mjpeg?src=<name>  ->  200 OK, 0 bytes, in 94 ms,
+  #                                         connection then held open
+  #
+  # Not a 404 and not an error frame — a successful empty stream. The Panel's
+  # watchdog eventually calls that `failed`, and whoever reads the journal
+  # will suspect the camera, the network and the kiosk build long before they
+  # suspect a missing line in this file.
+  #
+  # The transcode only runs WHILE SOMEBODY IS WATCHING, which is why it is
+  # cheap to declare on every camera rather than only the ones expected to be
+  # viewed: with no consumer, /api/streams shows both producers as bare `url`
+  # stubs with `consumers: []` and no ffmpeg process exists. Measured cost
+  # while somebody IS watching: first JPEG at 2.10 s warm / 4.10 s cold (that
+  # is the transcode starting), then ~186 kB/s at 25 fps. The H.264 producer
+  # for the same picture is ~26 kB/s.
+  #
+  # DO NOT expect the H.264 side to start faster over HTTP. An earlier note
+  # here said it "starts in milliseconds", on a 26 ms reading of
+  # /api/stream.mp4 that four later runs could not reproduce: they measured
+  # 2.095-2.106 s, one of them taken while an MSE session on the same stream
+  # was already playing. What IS fast is the WebSocket the web build actually
+  # uses — /api/ws reaches a decoded picture in ~101 ms in real Chrome. Both
+  # HTTP pull endpoints pay the ~2.1 s; why /api/ws does not has not been
+  # measured, so do not size anything on an explanation.
+  #
+  # Teardown is not symmetric either. Stop watching a stream that was PLAYING
+  # and `consumers` is back to [] in under a second. Stop during the ~2 s
+  # start and `consumers` RISES after the viewer is gone, taking 2-10 s to
+  # reach [] — the ffmpeg producer counts as a consumer of its own source and
+  # finishes starting regardless, then idles out. Expected; not a leak.
+
   # Wyze v3 / Pan v3 after the official RTSP firmware flash (research §3.2).
-  # wyze_living_room: rtsp://user:pass@CAMERA-IP/live
+  # wyze_living_room:
+  #   - rtsp://user:pass@CAMERA-IP/live
+  #   - ffmpeg:wyze_living_room#video=mjpeg
 
   # Ring doorbell arrives via ring-mqtt's RTSP output when that container is
   # added (research §3.1).
-  # ring_doorbell: rtsp://127.0.0.1:8554/RING-CAMERA-ID_live
+  # ring_doorbell:
+  #   - rtsp://127.0.0.1:8554/RING-CAMERA-ID_live
+  #   - ffmpeg:ring_doorbell#video=mjpeg
+
+  # The synthetic pattern every check in the docs is runnable against, with
+  # no Ring and no Wyze credentials — and written in the two-producer shape
+  # so that it exercises the same path a real camera will.
+  selftest:
+    - ffmpeg:virtual?video&size=640x480#video=h264
+    - ffmpeg:selftest#video=mjpeg

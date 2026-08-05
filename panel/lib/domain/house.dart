@@ -166,6 +166,7 @@ class Device {
     required this.connectivity,
     required this.position,
     this.entityId,
+    this.streamName,
   });
 
   final String id;
@@ -177,6 +178,17 @@ class Device {
   /// `light.hall_ceiling`. Null while a Device has no Hub counterpart yet —
   /// it still renders, with unknown state.
   final String? entityId;
+
+  /// The go2rtc stream the Popup plays for this Device, e.g.
+  /// `ring_doorbell`. Null on every Device that is not a camera or a
+  /// doorbell, and null on those too until somebody wires the feed up — a
+  /// camera with no feed still draws its pin and its Popup says the view is
+  /// unavailable, which is the honest answer rather than a black rectangle.
+  ///
+  /// It sits on the Device, not on DevicePresentation: the presentation's
+  /// contract is pure *answers* about how a Device looks and behaves, and a
+  /// stream name is neither — it is a fact the House Plan states.
+  final String? streamName;
 
   /// Plan-space position on the Floor (same space as Room.footprint), meters.
   final Offset position;

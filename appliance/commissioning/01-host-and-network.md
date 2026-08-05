@@ -113,6 +113,7 @@ cited is real:
 | ring-mqtt state | No host-IP content — compose DNS plus an account-bound OAuth refresh token. |
 | HomeKit pairings | Keys live in `.storage`; `homekit_controller` re-resolves over mDNS. Same-subnet IP change does not invalidate a pairing. |
 | Camera configs | Those carry the *cameras'* addresses. go2rtc has no `webrtc: candidates:` block. |
+| The Panel's camera Popups | `GO2RTC_URL` resolves environment-first alongside `HA_URL` (same file), so a drifted go2rtc address costs the same restart. Worth naming because it is the one setting with **no** built-in default: unset, the Popup says the view is unavailable rather than dialling a `localhost` the Panel invented. |
 
 Net: a drifted lease costs an environment change and a Panel restart. Nothing
 rebuilds, nothing re-pairs. See

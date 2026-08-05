@@ -77,6 +77,9 @@ void main() {
     expect(light.position, const Offset(2, 1.5)); // from the drawing
     expect(light.entityId, 'input_boolean.light_den'); // from bindings.yaml
     expect(light.connectivity, Connectivity.local); // from bindings.yaml
+    // A light has no live view, so no stream — and putting one here would
+    // be refused rather than ignored; see below.
+    expect(light.streamName, isNull); // from bindings.yaml
   });
 
   group('the Placement × binding join', () {
@@ -97,8 +100,61 @@ void main() {
 $_bindings  ghost-lamp:
     connectivity: local
 '''),
-        _rejects('bindings.yaml binds ghost-lamp'),
+        _rejects('bindings.yaml still has "ghost-lamp"'),
       );
+    });
+
+    test('a key that could be hiding a password is placed by position instead '
+        'of named, so the stale-binding line stops publishing a paste', () {
+      // Measured on shipped code, driving the real `loadHouse` over the real
+      // shipped assets with one extra key:
+      //
+      //   E house.invalid error="FormatException: bindings.yaml binds
+      //   rtsp://admin:hunter2@192.168.68.44/live, which no longer exist…"
+      //
+      // A key is as hand-typed as a value, and a paste that lands one column
+      // to the left makes the whole camera URL the key — which then matches no
+      // Placement, which is exactly this complaint.
+      const pasted = 'rtsp://admin:hunter2@192.168.68.44/live';
+      try {
+        loadHouse(houseYaml: _plan(), bindingsYaml: '''
+$_bindings  $pasted:
+    connectivity: local
+''');
+        fail('expected a FormatException');
+      } on FormatException catch (e) {
+        final logged = e.toString();
+        for (final part in [pasted, 'hunter2', 'admin', '192.168.68.44']) {
+          expect(logged, isNot(contains(part)), reason: 'leaked "$part"');
+        }
+        // And the reader can still walk to the line: bindings.yaml keeps the
+        // order it was typed in, so a position is a place in the file.
+        expect(logged, contains('2nd binding'));
+        expect(logged, contains('house.yaml'));
+      }
+    });
+
+    test('a stream name on a Device that cannot play video is not echoed: '
+        'this message is the only place it could ever be published', () {
+      // A value reaching here has passed `^[A-Za-z0-9._-]+$`, so it cannot be
+      // a URL — but a bare API token pasted where a stream name goes has the
+      // shape of a legal name. On a camera that name is logged on every Popup
+      // and has to be; on a light the stream is refused, so nothing else in
+      // the Panel ever sees it and this line was the whole exposure.
+      const token = 'hunter2_api_token';
+      try {
+        loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    stream: $token
+    connectivity: local
+''');
+        fail('expected a FormatException');
+      } on FormatException catch (e) {
+        expect(e.toString(), isNot(contains(token)));
+        expect(e.toString(), contains('"light-den"'));
+        expect(e.toString(), contains('only a camera or a doorbell'));
+      }
     });
 
     test('accepts a binding with no entity — the Device just has no state',
@@ -136,6 +192,39 @@ $_bindings  other-lamp:
       );
     });
 
+    test('a camera carries its go2rtc stream through the join', () {
+      final camera = loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: cam-den
+    name: "Den Camera"
+    kind: camera
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  cam-den:
+    stream: den_cam
+    connectivity: cloud
+''').floors.single.rooms.single.devices.single;
+      expect(camera.streamName, 'den_cam');
+    });
+
+    test('a stream on a light is refused: nothing would ever play it', () {
+      // The same failure as a binding whose marker was deleted — a line
+      // someone typed that nothing will ever read. Ignoring it would leave
+      // the author sure a camera feed is wired up.
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    entity: input_boolean.light_den
+    stream: den_cam
+    connectivity: local
+'''),
+        _rejects('only a camera or a doorbell plays video'),
+      );
+    });
+
     test('rejects an entity id that is not domain.object_id', () {
       expect(
         () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
@@ -144,7 +233,10 @@ bindings:
     entity: LightDen
     connectivity: local
 '''),
-        _rejects('entity "LightDen"'),
+        // Not `entity "LightDen"`: the parser no longer echoes a rejected
+        // value, because this complaint is fatal and gets logged, and the
+        // same paste can be a camera URL with its password in it.
+        _rejects('not a Home Assistant entity id'),
       );
     });
 
@@ -184,7 +276,7 @@ bindings:
   gizmo:
     connectivity: local
 '''),
-        _rejects('flux-capacitor'),
+        _rejects('the value is "flux-capacitor"'),
       );
     });
 
@@ -203,7 +295,7 @@ devices:
     room: den
     position: [1, 1]
 '''), bindingsYaml: _bindings),
-        _rejects('duplicate Device key "light-den"'),
+        _rejects('Device "light-den" repeats a Device key already used'),
       );
     });
 
@@ -239,7 +331,7 @@ bindings:
         name: "Second Den"
         footprint: [[4, 0], [8, 0], [8, 3], [4, 3]]'''),
             bindingsYaml: _bindings),
-        _rejects('duplicate room id "den"'),
+        _rejects('room "den" repeats a room id already used'),
       );
     });
 
@@ -255,7 +347,7 @@ bindings:
         footprint: [[0, 0], [4, 0], [4, 3], [0, 3]]
 '''),
             bindingsYaml: _bindings),
-        _rejects('duplicate floor id "ground-floor"'),
+        _rejects('floor "ground-floor" repeats a floor id already used'),
       );
     });
 
@@ -316,7 +408,7 @@ devices:
     room: den
     position: [3, 4]
 '''), bindingsYaml: _bindings),
-        _rejects('position [3, 4] is outside its room "den"'),
+        _rejects('position [3, 4] is not inside room "den"'),
       );
     });
 

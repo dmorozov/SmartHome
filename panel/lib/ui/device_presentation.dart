@@ -52,8 +52,12 @@ class DevicePresentation {
 
   /// Cameras and the doorbell get the live-view Popup body (the go2rtc
   /// stream lands there in phase 1); everything else gets [statusText].
-  bool get isVideo =>
-      device.kind == DeviceKind.camera || device.kind == DeviceKind.doorbell;
+  ///
+  /// The list moved into the Device vocabulary because the House Plan
+  /// loader now needs the same answer — a `stream:` on a light is refused
+  /// at boot — and a kind fact spelled out in the UI *and* in the loader is
+  /// a kind fact that drifts, which is the whole reason that table exists.
+  bool get isVideo => specOf(device.kind).video;
 
   /// Full status wording for the Popup body.
   String get statusText => switch (state) {

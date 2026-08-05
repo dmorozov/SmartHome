@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 
+import 'url_redaction.dart';
+
 /// Structured diagnostics: one event, one greppable line.
 ///
-///     [panel] I hub.connected url=ws://localhost:8123/api/websocket devices=33
+///     [panel] I hub.connected url=ws://localhost:8123 devices=33
 ///     [panel] W hub.missing_entities ids=sensor.oven,climate.ecobee
 ///     [panel] E hub.auth_invalid reason="Invalid access token"
 ///
@@ -46,7 +48,7 @@ class LogRecord {
     this.stack,
   });
 
-  /// Subsystem: `panel`, `house`, `hub`, `ui`, `flutter`, `dart`.
+  /// Subsystem: `panel`, `house`, `hub`, `ui`, `popup`, `flutter`, `dart`.
   final String area;
 
   /// What happened, snake_case, stable enough to grep for over months.
@@ -64,7 +66,30 @@ class LogRecord {
   String toString() {
     final out = StringBuffer('[panel] ${level.mark} $area.$event');
     fields?.forEach((key, value) => out.write(' $key=${_render(value)}'));
-    if (error != null) out.write(' error=${_render(error)}');
+    // The `error=` field is the one this class cannot reason about: `fields`
+    // are chosen by a call site that knows what it is saying, while an
+    // exception's text is composed by whatever threw it — Dart, a package, a
+    // remote process — and two of the sites that reach here
+    // (`flutter.error`, `dart.uncaught`) have no call site to guard at all.
+    //
+    // The measured case, and the reason this is here rather than at each
+    // thrower: `HaHubClient.webSocketUrl` used `Uri.parse`, whose
+    // FormatException reproduces the whole source string with a caret under
+    // the offending character. A password containing `@` — the commonest
+    // special character there is, and one RFC 3986 says to percent-encode and
+    // nobody does — made `HA_URL` land in journald verbatim, at E level, on
+    // every boot of a Panel that then restarts forever under systemd. Six
+    // rounds of fixing this per-channel each missed a channel; the class is
+    // "free-form text the Panel did not compose", and this is where all of it
+    // converges.
+    //
+    // Defence in depth, NOT a replacement for the call-site rules: this runs
+    // over a rendered string and cannot see structure, so a site that knows
+    // its value is a URL should still say so through `urlForLog`. Rejected:
+    // redacting `stack` too — a stack trace's `file:///…` frames are not
+    // credentials, and cutting them to their host would destroy the one
+    // artefact a crash leaves worth reading.
+    if (error != null) out.write(' error=${_render(redactCredentials('$error'))}');
     return out.toString();
   }
 }

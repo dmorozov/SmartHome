@@ -37,18 +37,94 @@ laptop) live in `host_vars/`.
 
 ## Panel runtime settings and the HA token
 
-The Panel resolves `HUB`, `HA_URL` and `HA_TOKEN` from the process
-environment first (`panel/lib/config/hub_config.dart`), so the appliance
-delivers them through `cage@.service` — a moved Hub costs a converge and a
-restart, never a Flutter rebuild.
+The Panel resolves `HUB`, `HA_URL`, `HA_TOKEN` and `GO2RTC_URL` from the
+process environment first (`panel/lib/config/hub_config.dart`), so the
+appliance delivers them through `cage@.service` — a moved Hub costs a converge
+and a restart, never a Flutter rebuild.
 
-| Var | Default | Delivered as |
+| Var | Panel's own default | Delivered as |
 |---|---|---|
 | `panel_hub_kind` | `fake` | `Environment=HUB=` in the unit |
 | `panel_ha_url` | `http://localhost:8123` | `Environment=HA_URL=` in the unit |
+| `panel_go2rtc_url` | *(none — the Panel has no default)* | `Environment=GO2RTC_URL=` in the unit |
 | `panel_log_level` | *(empty — no line emitted)* | `Environment=LOG=` in the unit |
 | `panel_env_file` | `/etc/smarthome/panel.env` | `EnvironmentFile=-` in the unit |
 | `panel_ha_token` | `$PANEL_HA_TOKEN` on the controller | the 0600 file above |
+
+`panel_go2rtc_url` is where the camera and doorbell Popups fetch live video
+from, e.g. `http://127.0.0.1:1984`. It is the only **address** in that table
+the Panel has **no built-in default for** — `HA_URL`'s default is earned
+because `HUB=fake` gates it, and video has no equivalent gate. (`panel_ha_token`
+has no default either, but a default secret is not a thing that could exist.)
+So leaving this empty is not "accept the default", it is "the Panel does not
+know where go2rtc is", which it says out loud at boot as `GO2RTC_URL=absent`
+and again as `popup.go2rtc url=absent`. Nothing breaks: every pin renders and a
+camera Popup says the view is unavailable.
+
+It is **not** a secret on this box and belongs on an `Environment=` line:
+go2rtc runs unauthenticated here and the camera credentials live in
+`hub/go2rtc/go2rtc.yaml`, not in this base address. That is a fact about this
+deployment rather than about the setting — go2rtc 1.9 does have
+`api.username`/`api.password`, and a URL carrying them would be a secret on an
+`Environment=` line, which `systemctl show` hands to any local user with no
+authentication. If this box ever gains go2rtc auth, that decision has to be
+revisited here.
+
+### What the journal sees of these two addresses
+
+`GO2RTC_URL` and `HA_URL` sit on the same `# NON-SECRETS ONLY` lines in
+`cage@.service`, and until 2026-08-04 only the first of them was treated that
+way by the Panel. Both now go through one function
+(`panel/lib/diagnostics/url_redaction.dart`), which is the point of it being
+one function: the previous split is exactly how `GO2RTC_URL` came to be built
+up from named parts while `HA_URL` was printed whole on every healthy boot.
+
+What that function does, to both: it writes the line out of a **named list of
+parts** — scheme, host and port, and nothing else — rather than taking anything
+out of the value, and reports every part it dropped by presence only
+(`path=set`, `query=set`, `fragment=set`, `auth=set`). A value with no host it
+calls `url=unusable` and does not echo at all. The path was on the published
+list until a verifier put a token in one (`http://10.0.0.5:1984/hunter2/`);
+`path=set` now says "this is behind a reverse proxy" without saying where.
+
+Read that as a claim about the **address lines** and nothing wider, because
+that is all it is:
+
+- `popup.go2rtc`, `hub.configured`, `hub.connecting` and `hub.connected` carry
+  no part of either value beyond scheme, host and port. That is the whole
+  claim, and it is pinned by `panel/test/url_redaction_test.dart`,
+  `boot_test.dart` and `ha_hub_test.dart`.
+- `hub.socket_error`, `hub.connect_failed` and `popup.stream_failed` reproduce
+  a sentence some **other** process composed — `dart:io` appends `uri = <the
+  whole URL>` to an `HttpException`, go2rtc quotes the producer it could not
+  dial, and ffmpeg prints the input file it could not open. Those go through
+  the same file's best-effort redaction, which finds URLs by their `scheme://`
+  start and cuts each to its address. It is best-effort and says in its own
+  docstring where it stops (a password with a space in it, a schemeless
+  `user:pass@host`, one character of trailing punctuation). Do not read it as
+  a guarantee.
+- Neither claim covers the **camera** credentials in
+  `hub/go2rtc/go2rtc.yaml`, which is a 0600 file and stays one.
+
+So: a credential in `GO2RTC_URL` or `HA_URL` does not reach the journal through
+the lines the Panel writes about those settings. A credential anywhere can
+still reach it through a sentence a library or a daemon wrote, and the
+redaction is a net rather than a wall.
+
+**Setting this now is enough to get a picture, which it was not before.** Two
+things that used to stand in the way are done: `api: origin: "*"` landed in
+`hub/go2rtc/go2rtc.yaml` on 2026-08-04 (`E8` in the root README's TODO,
+**decided** — the reasoning is that access to this system is LAN-only or over
+the VPN, so the network boundary is the control), and the Panel has a real
+player on **both** targets — MJPEG over HTTP on this appliance, MSE over a
+WebSocket on web.
+
+What is still needed is a stream to point at. Each camera must be **one
+`streams:` entry with two producers** in `hub/go2rtc/go2rtc.yaml` — the H.264
+source plus an `ffmpeg:<name>#video=mjpeg` line — or this appliance gets a
+`200 OK` with zero bytes and no error anywhere. See
+[Ch. 6 §6.5b](../commissioning/06-panel-and-bindings.md), which has the `curl`
+that catches it.
 
 **The token never goes in an `Environment=` line, and never into this repo.**
 `systemctl show <unit> -p Environment` hands those values to *any* local

@@ -11,6 +11,12 @@ dependencies:
     sdk: flutter
   web_socket_channel: ^3.0.3
   yaml: ^3.1.2
+  # The live-video seam on web: package:web + dart:js_interop, since
+  # dart:html is deprecated. Already resolved transitively; declared because
+  # `lib/ui/video/live_video_mse.dart` imports it directly, and a direct
+  # import of an undeclared dependency is a lint away from being an error and
+  # a `pub upgrade` away from disappearing.
+  web: ^1.1.1
 
 dev_dependencies:
   flutter_test:

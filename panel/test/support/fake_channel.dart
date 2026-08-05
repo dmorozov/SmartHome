@@ -20,6 +20,14 @@ class FakeChannel implements WebSocketChannel {
 
   void serverDrops() => _fromServer.close();
 
+  /// The socket failing rather than closing — what `WebSocketChannel` puts on
+  /// the stream when the connection breaks. Separate from [serverDrops]
+  /// because the client treats them differently: a drop is silent and a
+  /// failure is logged, and it is the logged one that has to be checked for
+  /// what it prints (`dart:io`'s `HttpException` appends `uri = …` to its own
+  /// message, and that Uri is HA_URL).
+  void serverFails(Object error) => _fromServer.addError(error);
+
   @override
   Stream<dynamic> get stream => _fromServer.stream;
 

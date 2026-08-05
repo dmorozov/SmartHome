@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../diagnostics/log.dart';
+import '../diagnostics/url_redaction.dart';
 import '../domain/device_state.dart';
 import '../domain/device_traits.dart';
 import '../domain/house.dart';
@@ -48,8 +49,36 @@ class HaHubClient implements HubClient {
 
   /// Builds the WebSocket URL from a Hub base URL: `http://host:8123` ->
   /// `ws://host:8123/api/websocket`.
+  ///
+  /// `replace` carries `userInfo` and the query through on purpose — a Hub
+  /// behind a reverse proxy with basic auth, or an `?api_password=`, has to
+  /// reach the socket or the handshake fails. What must not carry through is
+  /// the *log*: everything below prints this Uri through [addressForLog], and
+  /// the whole value used to go to journald twice per connect and again on
+  /// every reconnect.
+  ///
+  /// `tryParse`, not `parse`, and the difference is a credential. `Uri.parse`
+  /// throws a FormatException that reproduces the WHOLE source string with a
+  /// caret under the offending character — and the shape that reaches it is
+  /// the ordinary one: a password containing `@`, `!`, `|` or a space, none
+  /// of which anyone percent-encodes when typing `Environment=HA_URL=`. That
+  /// exception escaped `bootPanel` as an uncaught async error and printed
+  /// `HA_URL` verbatim, one line after `hub.configured` had carefully
+  /// answered `url=unusable` about the very same value. Naming the setting
+  /// instead of echoing it is what makes those two lines agree.
+  ///
+  /// `log.dart` now also redacts `error=` as a backstop, so this is belt and
+  /// braces — deliberately, because the backstop works on rendered text and
+  /// this knows it is holding a URL.
   static Uri webSocketUrl(String baseUrl) {
-    final base = Uri.parse(baseUrl);
+    final base = Uri.tryParse(baseUrl);
+    if (base == null || base.host.isEmpty) {
+      throw ArgumentError('HA_URL is not a URL the Panel can dial: it needs a '
+          'scheme and a host, like http://192.168.68.81:8123. Its value is not '
+          'repeated here — it is read from the environment, a --dart-define or '
+          'the appliance unit file, and a password pasted into it would end up '
+          'in the log this message goes to.');
+    }
     return base.replace(
       scheme: base.scheme == 'https' ? 'wss' : 'ws',
       path: '/api/websocket',
@@ -141,21 +170,39 @@ class HaHubClient implements HubClient {
 
   void _open() {
     if (_disposed) return;
-    Log.info('hub', 'connecting', {'url': _url});
+    // The address alone, and no `path=`/`auth=` beside it: this Uri's path is
+    // `/api/websocket`, which the Panel appended itself, so `path=set` here
+    // would appear on every Hub and mean nothing. `hub.configured` is the one
+    // line that sees the operator's own value and characterises it; this one
+    // answers "which Hub is being dialled", which is what tells a stale
+    // address from a dead Hub and is `hub.config`'s stated job.
+    Log.info('hub', 'connecting', {'url': addressForLog('$_url')});
     try {
       final channel = _connect(_url);
       _channel = channel;
       _subscription = channel.stream.listen(
         _onFrame,
         onError: (Object error) {
-          Log.warn('hub', 'socket_error', {'error': error});
+          // Through the redaction, because this is the exact shape it was
+          // written for one layer up: `dart:io`'s `HttpException` appends
+          // `uri = <the whole URL>` to its own message, so
+          // `WebSocketChannelException: HttpException: …, uri =
+          // http://admin:hunter2@ha.local:8123/api/websocket` was the failure
+          // path's copy of the leak the two lines above just lost. Best-effort
+          // over a string another library composed — url_redaction.dart says
+          // where it stops.
+          Log.warn('hub', 'socket_error',
+              {'error': redactCredentials('$error')});
           _reconnect();
         },
         onDone: _reconnect,
         cancelOnError: true,
       );
     } on Object catch (error) {
-      Log.warn('hub', 'connect_failed', {'error': error});
+      // Same channel, same treatment: `WebSocketChannel.connect` throws with
+      // the Uri in the message too.
+      Log.warn('hub', 'connect_failed',
+          {'error': redactCredentials('$error')});
       _reconnect();
     }
   }
@@ -198,7 +245,11 @@ class HaHubClient implements HubClient {
       case 'auth_ok':
         _retryIn = Duration.zero;
         status.value = HubStatus.up;
-        Log.info('hub', 'connected', {'url': _url, 'devices': _byEntity.length});
+        // Address only, for the reason `hub.connecting` states — and this one
+        // is re-emitted on every reconnect, so a flapping Hub multiplied
+        // whatever it printed.
+        Log.info('hub', 'connected',
+            {'url': addressForLog('$_url'), 'devices': _byEntity.length});
         // What unit does this Hub speak, snapshot, then the delta
         // subscription. All three ids are ours; HA echoes them back on the
         // results.
@@ -220,6 +271,19 @@ class HaHubClient implements HubClient {
         // different problem from a Hub reboot, and only a human with a new
         // token ends it. Setting _disposed halts the loop — the sink close
         // below fires onDone, and _reconnect returns immediately on it.
+        //
+        // `reason` is the Hub's own sentence and is **not** redacted, which is
+        // a stated residual rather than an omission: a Hub that echoes the
+        // rejected token back (`Invalid access token: <the token we sent>`)
+        // publishes it here. Nothing this file can do reaches that — the value
+        // is not a URL, so `redactCredentials` has no structure to find, and
+        // guessing which words in a server's prose were the token is the
+        // parameter-name guess that url_redaction.dart just stopped making.
+        // It is also the token *we already had*, from a Hub that is refusing
+        // it, on a terminal error rather than a healthy boot. `command_failed`
+        // below is the same class. Rejected: dropping the field, which leaves
+        // a Panel stuck on NEEDS NEW TOKEN with no way to tell a revoked token
+        // from a clock skew.
         Log.error('hub', 'auth_invalid', fields: {'reason': message['message']});
         _disposed = true;
         status.value = HubStatus.gaveUp;

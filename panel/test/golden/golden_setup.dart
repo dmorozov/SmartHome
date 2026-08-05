@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
+import 'package:panel/ui/video/live_video.dart';
 
 /// The size the goldens render at: a real 16:10 panel resolution, and big
 /// enough that every pin and room label is legible. Costs ~100-200 KB per
@@ -42,11 +43,19 @@ void goldenTest(String description, Future<void> Function(WidgetTester) body) {
 /// Pumps the whole app at [kPanelSize] and settles the entry animations.
 /// [hubLabel] defaults to the fake hub's, which is what a dev build shows;
 /// a scene about the production Panel passes `'HUB'`.
+///
+/// [video] defaults to unconfigured, and every committed golden depends on
+/// it staying that way: an unconfigured Popup draws the same box, icon and
+/// sentence it drew before go2rtc existed, so `goldens/device_popup.png`
+/// stays the picture it already is. Pointing a golden at a live view would
+/// mean baking a new one on this host, which phase-0 open item 13 says
+/// nobody can do yet.
 Future<void> pumpPanel(
   WidgetTester tester,
   HubController controller, {
   Size size = kPanelSize,
   String hubLabel = 'FAKE HUB',
+  VideoConfig video = const VideoConfig(),
 }) async {
   tester.view
     ..physicalSize = size
@@ -55,7 +64,7 @@ Future<void> pumpPanel(
     ..devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
-      PanelApp(controller: controller, hubLabel: hubLabel));
+      PanelApp(controller: controller, hubLabel: hubLabel, video: video));
   await tester.pumpAndSettle();
 }
 

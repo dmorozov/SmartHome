@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
+import 'package:panel/ui/video/live_video.dart';
 
 import 'dollhouse_geometry.dart';
 import 'fixtures.dart';
+import 'support/fake_go2rtc.dart';
+import 'test_house.dart';
 
 /// The Dollhouse as the wall shows it. Every scene the Hub has a hand in is
 /// staged through FakeHub's driving surface — the same adapter dev builds
@@ -58,6 +61,25 @@ void main() {
     expect(find.text('Ring Doorbell'), findsOneWidget);
     expect(
         find.text('Live view placeholder — go2rtc stream'), findsOneWidget);
+  });
+
+  testWidgets('a tapped camera pin plays the stream the House Plan named, '
+      'from the go2rtc the Panel was configured with', (tester) async {
+    // The wiring nothing else can see: DollhouseView carries the Panel's
+    // VideoConfig to the Popup it pushes. Replace `widget.video` with a
+    // fresh `VideoConfig()` there and every other test in this file still
+    // passes — the Popup would simply, silently, never play anything.
+    final (controller, _) = fakeHubRig(
+        house: houseWithStream(loadTestHouse(), 'doorbell', 'ring_doorbell'));
+    final go2rtc = FakeGo2rtc();
+    await tester.pumpWidget(panelApp(controller,
+        video:
+            VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open)));
+
+    await tester.tap(find.byKey(const ValueKey('pin-doorbell')));
+    await tester.pumpAndSettle();
+
+    expect(go2rtc.only.url.toString(), 'ws://hub:1984/api/ws?src=ring_doorbell');
   });
 
   testWidgets('tapping a light pin with unknown state attempts a toggle, '

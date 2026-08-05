@@ -69,6 +69,7 @@ class KindSpec {
     required this.slug,
     required this.family,
     required this.seed,
+    this.video = false,
   });
 
   /// How the kind is written in the House Plan, and in the converter's
@@ -85,6 +86,18 @@ class KindSpec {
   /// Its runtime type always matches [family] — pinned by a test, because
   /// nothing in the type system says so.
   final DeviceState Function(String deviceId) seed;
+
+  /// Whether this kind shows a live view instead of a status line: the
+  /// Popup renders video for it, and a `stream:` in bindings.yaml is only
+  /// legal on it.
+  ///
+  /// [family] cannot carry this — camera, doorbell, washer, dryer, oven,
+  /// litter-robot and feeder are all [StateFamily.status], and they are all
+  /// drawn the same way. It is a row here rather than a predicate spelled
+  /// out in the loader and again in the presentation, for the reason this
+  /// library's opening paragraph gives: two spellings of one kind fact are
+  /// two spellings that drift.
+  final bool video;
 }
 
 /// The table. Exhaustive: a new [DeviceKind] without a row here does not
@@ -146,10 +159,12 @@ KindSpec specOf(DeviceKind kind) => switch (kind) {
       DeviceKind.camera => KindSpec(
           slug: 'camera',
           family: StateFamily.status,
+          video: true,
           seed: (id) => StatusState(id, 'Live')),
       DeviceKind.doorbell => KindSpec(
           slug: 'doorbell',
           family: StateFamily.status,
+          video: true,
           seed: (id) => StatusState(id, 'Live')),
     };
 

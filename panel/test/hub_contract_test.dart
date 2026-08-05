@@ -122,6 +122,26 @@ void runHubContract(String adapter, Future<HubWorld> Function() build) {
       expect(changes, ['light-hall']);
     });
 
+    test('a snapshot re-delivering an unchanged value still emits a change',
+        () async {
+      await world.seed();
+      final changes = <String>[];
+      final sub = world.hub.stateChanges.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      // The same value the fixture already seeded.
+      await world.push(const SwitchState('light-hall', on: false));
+      await pumpEventQueue();
+
+      // Documented, not required: this is what makes "the doorbell changed"
+      // a useless question and `domain/doorbell.dart`'s rule 2 necessary, and
+      // it is the reason a reconnect — which replays the whole snapshot —
+      // would otherwise ring the house. Stated here so that deleting the
+      // emit as an "optimisation" fails a test instead of quietly breaking
+      // a feature two layers away.
+      expect(changes, ['light-hall']);
+    });
+
     test('a Device the world loses leaves states and emits its Device id',
         () async {
       await world.seed();

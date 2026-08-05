@@ -117,4 +117,45 @@ void main() {
       );
     });
   });
+
+  group('the error field', () {
+    // `fields` are chosen by a call site that knows what it is saying. An
+    // exception's text is composed by whatever threw it, and two of the sites
+    // that reach here — `flutter.error` and `dart.uncaught` — have no call
+    // site to guard at all. Six rounds of guarding this per-channel each
+    // missed a channel; these pin the class instead.
+
+    test('an exception that quotes a URL back at us loses its credential, '
+        'however far from a call site it was thrown', () {
+      // The measured shape: `Uri.parse` reproduces its whole input with a
+      // caret, and `@` in a password is the commonest way to reach it.
+      try {
+        Uri.parse('http://admin:p@ssw0rd@ha.local:8123');
+        fail('expected Uri.parse to reject that');
+      } catch (error) {
+        Log.error('dart', 'uncaught', error: error);
+      }
+
+      expect(records.single.toString(), isNot(contains('p@ssw0rd')));
+      expect(records.single.toString(), contains('<redacted>'));
+    });
+
+    test('a query credential in an exception goes too, wherever in the '
+        'sentence it sits', () {
+      Log.error('hub', 'socket_error',
+          error: const FormatException(
+              'Connection closed, uri = http://ha.local:8123/?api_password=hunter2'));
+
+      expect(records.single.toString(), isNot(contains('hunter2')));
+    });
+
+    test('an exception with nothing to hide is left readable — redaction that '
+        'eats diagnostics would just get switched off', () {
+      Log.error('hub', 'command_failed',
+          error: const FormatException('entity not found'));
+
+      expect(records.single.toString(),
+          '[panel] E hub.command_failed error="FormatException: entity not found"');
+    });
+  });
 }
