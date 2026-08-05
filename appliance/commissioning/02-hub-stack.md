@@ -529,18 +529,115 @@ not a backup: it produces one copy, and it is the same copy.
 Until someone designs that step, the honest mitigation is a manual one, and it
 is worth doing before the next chapter starts creating pairings:
 
+Payload as measured 2026-08-04: **212 KB**, 24 files under `.storage` plus two
+in `ring-mqtt-data/` and the broker `passwd`. Downtime: seconds. This is a
+two-minute job, and the write-up below is longer than the job because step 4 is
+the only thing standing between you and a backup that is quietly useless.
+
+**1 — stop the two writers.**
+
 ```sh
 cd hub
 docker compose stop homeassistant ring-mqtt
-tar czf ~/hub-state-$(date +%F).tgz -C "$PWD" \
+```
+
+Not optional, and not politeness. HA rewrites `.storage` continuously; a `tar`
+of a half-written JSON file restores into an HA that will not start.
+`mosquitto` and `go2rtc` never touch these paths and can keep running.
+
+**2 — take the archive, with `sudo`.**
+
+```sh
+sudo tar czf ~/hub-state-$(date +%F).tgz -C "$PWD" \
     ha-config/.storage ring-mqtt-data mosquitto/config/passwd
+```
+
+**3 — start again immediately**, before verifying. There is no reason to keep
+the house down while you inspect a file.
+
+```sh
 docker compose start homeassistant ring-mqtt
 ```
 
-That tarball contains cleartext credentials and the Ring refresh token. Treat
-it as a secret, and keep it out of the repo directory. Note it reads
-root-owned files under `.storage`, so it needs `sudo` on this host — which you
-run yourself.
+**4 — verify, and verify this specific thing.**
+
+```sh
+tar tzf ~/hub-state-$(date +%F).tgz \
+  | grep -E 'storage/(auth|onboarding|core\.config|core\.uuid|auth_provider\.homeassistant)$'
+```
+
+**Five lines, or the backup is a dud.** Those five files are `root:root 0600`;
+everything else under `.storage` is world-readable. Measured on this host —
+running the same `tar` **without** `sudo`:
+
+```
+tar exit code: 2
+files captured: 18        files on disk: 23
+none of the five root-only files are in the tarball
+```
+
+The archive is still created. It is still valid gzip. It still contains
+eighteen plausible-looking files. What it no longer contains is the auth store,
+so restoring it yields a Home Assistant with no users. `tar` does exit non-zero
+and complain on stderr, but nothing stops the file existing, and a file that
+exists is what people trust.
+
+> **Do not verify by counting files.** An earlier draft of this section told
+> the reader to expect an exact number. It was wrong twice: the arithmetic was
+> wrong, and the quantity itself drifts — HA wrote another `.storage` file in
+> the nine minutes between the measurement and the reader running it. The count
+> is not a check. The five names are.
+
+**5 — fix the mode, which `sudo` got wrong for you.**
+
+```sh
+sudo chmod 600 ~/hub-state-$(date +%F).tgz
+sudo chown "$USER:$USER" ~/hub-state-$(date +%F).tgz
+```
+
+`sudo tar` creates the file as `root:root` under root's umask — observed
+`-rw-r--r--`, i.e. **world-readable**, holding every integration's credentials
+in cleartext and the Ecobee's HomeKit pairing key. Both commands need `sudo`
+precisely because root owns the file; a bare `chmod` fails.
+
+If the archive will live anywhere you do not fully control, encrypt it instead
+of relying on modes:
+
+```sh
+gpg -c ~/hub-state-$(date +%F).tgz && shred -u ~/hub-state-$(date +%F).tgz
+```
+
+**6 — get it off this disk. This step *is* the task.**
+
+Steps 1–5 only produce a file. An archive on the same NVMe as the original
+defends against every failure mode except the one people actually have.
+
+```sh
+scp ~/hub-state-$(date +%F).tgz <you>@<mac>:~/Backups/
+```
+
+**7 — know how to restore it**, because an untested backup is a belief.
+
+```sh
+cd hub
+docker compose stop homeassistant ring-mqtt
+sudo tar xzf /path/to/hub-state-YYYY-MM-DD.tgz -C "$PWD"
+docker compose start homeassistant ring-mqtt
+```
+
+Extract **as root**. GNU tar preserves ownership only for the superuser, and
+files that land owned by you are files HA cannot read.
+
+**What is deliberately not in it:** `hub/token`, the Panel's long-lived access
+token. It is re-mintable from the HA UI in under a minute, and putting a
+ten-year credential in a second place trades a small convenience for a second
+thing to lose.
+
+**Do this again right after Ring authentication (owner item B2).** Today
+`ring-mqtt-data/` holds only `config.json`; `ring-state.json` — the refresh
+token, the one artefact here that costs an out-of-band 2FA round-trip to
+recreate — does not exist until that item is done. A backup taken before B2
+does not protect the thing B2 creates.
 
 ## 9. Known gaps and traps in this stack
 
