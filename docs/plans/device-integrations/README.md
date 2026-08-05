@@ -112,6 +112,7 @@ phases 3–5 are independent of each other and may interleave.
 | 4 | [phase-4-cameras.md](phase-4-cameras.md) | Wyze streams in go2rtc; **Panel popup live video** (the one real Panel feature in this plan) |
 | 5 | [phase-5-cloud-fleet.md](phase-5-cloud-fleet.md) | HACS + the cloud accounts: LG, Whisker, Petlibro, Emporia |
 | 6 | [phase-6-bindings-sweep.md](phase-6-bindings-sweep.md) | Every available device bound, `missing=0`, goldens, docs updated |
+| 7 | [phase-7-doorbell-events-and-cameras.md](phase-7-doorbell-events-and-cameras.md) | A real `event.front_door_ding` (MQTT event entity), the **Cameras** view (slide-out tile grid), recording-shaped seams — recording itself deferred by owner decision 2026-08-05 |
 
 ## Secrets discipline (applies to every phase)
 
