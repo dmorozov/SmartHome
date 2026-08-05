@@ -419,7 +419,7 @@ Nothing in the table below is in git, and every path is covered by a rule in
 |---|---|---|---|
 | `hub/mosquitto/config/passwd` | The three broker credentials, **hashed** | `passwd` | `1883:1883 0600` — see §3, this one is load-bearing |
 | `hub/mosquitto/config/passwd.backup.*` | Same hashes, left behind by `mosquitto_passwd` | `passwd.backup.*` | Delete them |
-| `hub/.broker-passwords.env` | The three broker passwords in **cleartext**: `MOSQUITTO_HA_PASSWORD`, `MOSQUITTO_RING_PASSWORD`, `MOSQUITTO_Z2M_PASSWORD` | `*.env` | `0600`. **Move these into your password store** — the file exists only to make one bring-up reproducible |
+| `hub/.broker-passwords.env` | The three broker passwords in **cleartext**: `MOSQUITTO_HA_PASSWORD`, `MOSQUITTO_RING_PASSWORD`, `MOSQUITTO_Z2M_PASSWORD` | `*.env` | `0600`. **Move these into your password store and delete it** — nothing reads it at runtime; steps in [§8a](#8a-retiring-broker-passwordsenv-owner-task-g3) |
 | `hub/ring-mqtt-data/config.json` | The `ring` password, in cleartext, inside `mqtt_url` | `ring-mqtt-data/*` | `0600` |
 | `hub/ring-mqtt-data/ring-state.json` | The Ring **refresh token** (does not exist until Ring auth) | `ring-mqtt-data/*` | written by the container |
 | `hub/ha-config/.storage/` | HA auth store, user credentials, and **every integration's saved credentials/tokens** | `ha-config/*` | `root:root`, written by the container |
@@ -431,6 +431,72 @@ The delivery side on the Appliance is separate and also not in git: the Panel's
 token reaches the kiosk as `EnvironmentFile=-/etc/smarthome/panel.env` (0600,
 kiosk user), written by a `no_log` Ansible task from `$PANEL_HA_TOKEN` on the
 controller. See [`../ansible/README.md`](../ansible/README.md).
+
+### 8a. Retiring `.broker-passwords.env` (owner task **G3**)
+
+This section used to state the requirement and stop, which left the one
+question that actually decides whether you can act on it — *does anything break
+if I delete it?* — unanswered. Measured 2026-08-04: **no.**
+
+- `hub/compose.yaml` has **no `env_file:`** anywhere, so nothing loads it at
+  container start.
+- No script, playbook, Python, Dart or Ansible file reads it. `grep -rl
+  broker-passwords --include='*.sh' --include='*.yml' --include='*.py'
+  --include='*.dart' .` returns nothing; every hit in this repo is prose.
+- What the broker actually authenticates against is
+  `hub/mosquitto/config/passwd` — **hashes**, `1883:1883 0600`, which your own
+  user cannot even read. Three clients were connected while this was verified.
+
+The file is therefore a note-to-self in cleartext, not a runtime dependency.
+
+**Where each password already lives**, which is what makes deleting it safe:
+
+| Variable | Broker user | Its other home |
+|---|---|---|
+| `MOSQUITTO_HA_PASSWORD` | `ha` | Saved inside HA's `.storage` when you added the MQTT integration (§3 of [3](03-home-assistant.md)) |
+| `MOSQUITTO_RING_PASSWORD` | `ring` | **Also cleartext** in `hub/ring-mqtt-data/config.json`, inside `mqtt_url` — see the caveat below |
+| `MOSQUITTO_Z2M_PASSWORD` | `z2m` | Nowhere. Z2M is parked until the SLZB-06 exists (owner item **D2**), so this one is unused today |
+
+**The steps.** Run them in your own shell — the values must not travel through
+a transcript, an agent session or a paste buffer:
+
+```bash
+# 1. Read them.
+cat ~/Work/SmartHome/hub/.broker-passwords.env
+
+# 2. Put all three in your password manager. Suggested entry names, so that
+#    future-you searching for "mosquitto" finds them:
+#      SmartHome / Mosquitto — ha
+#      SmartHome / Mosquitto — ring
+#      SmartHome / Mosquitto — z2m
+#    Note on each: broker at <hub-ip>:1883, host-networked;
+#    hashes in hub/mosquitto/config/passwd.
+
+# 3. Read one BACK out of the manager and compare it to the file.
+#    Do not skip this. It is the only step that catches a botched paste
+#    while the original still exists.
+
+# 4. Delete the file.
+shred -u ~/Work/SmartHome/hub/.broker-passwords.env
+
+# 5. Prove nothing broke. No restart is needed; existing sessions are unaffected
+#    because the broker never read this file. You want no new auth failures.
+cd ~/Work/SmartHome/hub && docker logs mosquitto --tail 20 && docker logs ring-mqtt --tail 10
+```
+
+**This does not de-cleartext the Hub, and saying so is the point.** The `ring`
+password stays in `hub/ring-mqtt-data/config.json` as
+`mqtt://ring:<password>@mosquitto:1883` — 0600 and gitignored, but readable by
+anyone who can read that file. ring-mqtt has no secrets-file option, so there
+is no cheap fix and it is not part of G3. Know about it rather than believe
+this task removed it.
+
+**Losing these is a reset, not a cliff.** A hash is one-way, so a forgotten
+password cannot be recovered — but it can be *replaced*: `mosquitto_passwd` the
+user, then update that user's one consumer. Minutes. Contrast the re-pairing
+cliff below, where losing `.storage` means walking to the thermostat. That
+asymmetry is why **E7** (back up `.storage`) outranks this item even though
+this one looks more like a security task.
 
 ### The re-pairing cliff
 

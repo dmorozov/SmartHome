@@ -268,10 +268,12 @@ rule, and battery-cam courtesy generally).
   MSE needs a browser, and there is none in a cage kiosk; WebRTC needs ICE and
   a `libwebrtc` dependency for a link that never leaves the LAN; and a
   `video_player`/GStreamer route trades this problem for a platform-channel
-  and codec-plugin problem on a target that has never been compiled here.
-  MJPEG needs `dart:io`, `dart:ui` and nothing else. **Measured against the
-  live server: first byte at 2.10 s warm / 4.10 s cold, then ~186 kB/s at 25
-  fps (~7.4 kB a frame).**
+  and codec-plugin problem. MJPEG needs `dart:io`, `dart:ui` and nothing else.
+  **Measured against the live server: first byte at 2.10 s warm / 4.10 s cold,
+  then ~186 kB/s at 25 fps (~7.4 kB a frame)** — and, since 2026-08-04, the
+  choice is vindicated on the target itself: the compiled Linux release binary
+  painted these frames in the Popup with no plugin, no browser and no codec
+  beyond `dart:ui` (phase-0 item 14).
 - **What that costs, plainly:** the appliance pays roughly **seven times the
   bandwidth and twenty times the time-to-picture** for the same camera. On a
   LAN 186 kB/s is 1.5 Mbit and nobody notices; the 2.1 s is the number that
@@ -374,12 +376,23 @@ rule, and battery-cam courtesy generally).
    `selftest` pattern. Ring is **B2**, the Wyze fleet **B3**, and the risk
    they carry is stated in §B: a real Ring stream takes 2–5 s to start,
    *on top of* the MJPEG transcode's 2.1 s.
-2. **The appliance build has never been compiled.** `flutter build linux`
-   needs clang, cmake, ninja and the GTK dev headers and this host has none
-   of them (phase-0 open item **G4**). The MJPEG player is exercised by the
-   suite on the Dart VM and has been driven end-to-end against the live
-   server from here — but the cage kiosk it ships to has never rendered a
-   frame of it.
+2. ~~**The appliance build has never been compiled.**~~ **Closed
+   2026-08-04 (README G4, phase-0 item 14).** `flutter build linux --release`
+   now succeeds on this host and the resulting **Linux release binary** has
+   rendered live MJPEG from go2rtc inside the doorbell Popup: run headless
+   under `Xvfb` against the real Hub and real go2rtc, a doorbell state change
+   opened the Popup unprompted, video appeared (screenshot captured; go2rtc
+   saw `user_agent: Dart/3.12 (dart:io)`, 931 kB), and Close tore the stream
+   down to `consumers: []`. What that run did **not** cover, and what
+   therefore stays open: it was **Xvfb, not cage** — `cage` is not installed
+   on this box (README **G6**) and the kiosk half of the spike (**A7**) is
+   untouched; there was **no touch input**, because no touchscreen is
+   attached; and the source was the synthetic `selftest` pattern with a
+   fabricated `sensor.ring_doorbell` state, not a camera and not a Ring —
+   which is item 1 above. Also note the bundle was built from a
+   `bindings.yaml` carrying `stream: selftest` on `doorbell`; the tracked
+   file has no `stream:` line there, so wiring a real doorbell stream is
+   still an uncommitted config change.
 3. **`MseLiveVideoSession.view` was never mounted.** The Chrome probes had no
    widget tree, so `HtmlElementView.fromTagName` and the reparenting of the
    `<video>` element into it are argued for and untested.
@@ -439,11 +452,14 @@ case — it is.
 
 ## Done when
 
-Status re-read 2026-08-04, after the origin decision and both players landed.
-**E8 is closed.** What is left is owner-blocked on hardware — **B3** for the
-Wyze inventory, **B2** for Ring — plus one agent item that cannot be done on
-this host at all (**G4**: no Linux toolchain, so the appliance build has never
-been compiled).
+Status re-read 2026-08-04, after the origin decision, both players landing,
+and the first end-to-end appliance run. **E8 is closed. G4 is closed** — the
+Linux release binary builds, runs, and has rendered live video from go2rtc in
+the doorbell Popup under Xvfb (phase-0 item 14 has the full evidence and the
+four things it does not prove). What is left is **entirely owner-blocked on
+hardware**: **B3** for the Wyze inventory, **B2** for Ring — i.e. a camera to
+point at. Separately, the *kiosk* claim is still unproven: that needs `cage`
+installed (**G6**) and the **A7** spike day, neither of which phase 4 gates on.
 
 - ⬜ **Open — owner-blocked (B3).** Every Wyze unit either serves RTSP locally
   (flashed) or restreams via wyze-bridge; all visible in the go2rtc UI; the A1
@@ -454,11 +470,14 @@ been compiled).
 - ⬜ **Open — owner-blocked (B3/B2), and one thing this host cannot do.** Popup
   plays live video for at least: one Wyze camera and the Ring doorbell; close =
   stream teardown (verify in go2rtc UI: consumer count drops to 0). Of the
-  three blockers this bullet used to list, two are gone: the **players** are
-  built and the **origin** is decided. What remains is the **streams** (owner —
-  B3 for Wyze, B2 for Ring) and **G4**, the missing Linux toolchain, which is
-  why no frame of the appliance player has ever been rendered by the cage
-  kiosk. Both halves are already provable against `selftest` and were: `playing`
+  three blockers this bullet used to list, **all three are now gone**: the
+  **players** are built, the **origin** is decided, and **G4** is closed — the
+  appliance player has been observed rendering real frames from the live
+  go2rtc (Xvfb, not cage; synthetic stream, not a camera). What remains is
+  only the **streams** (owner — B3 for Wyze, B2 for Ring). The separate
+  question of whether the *cage kiosk* renders them is **A7**, gated on **G6**
+  and on a touchscreen existing, and it is not a phase-4 gate.
+  Both halves are already provable against `selftest` and were: `playing`
   with real pixels on both transports, and on Close, `producers` back to bare
   `url` stubs with `consumers: []` — stricter than counting consumers, and note
   `consumers` is `[]` for a configured stream but `null` for a dynamically-

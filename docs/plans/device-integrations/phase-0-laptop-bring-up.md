@@ -476,27 +476,56 @@ link-local IPv6 only (`fe80::…`) and `resolvectl mdns` is off on every link.
     or make the golden rig pin its own font stack. Leaving it is the one option
     that costs something — a permanently red suite stops being a signal.
 
-14. **The Flutter Linux toolchain is not installed on the Hub host at all, and
-    Flutter does not document 26.04 as supported.** `clang`, `cmake`,
-    `ninja-build`, `libgtk-3-dev`, `libstdc++-12-dev` and `liblzma-dev` all
-    report not-installed, so `flutter build linux` has never run on this box —
-    on 26.04 or before it. Three things to settle before phase 4 needs a real
-    Panel bundle: (a) `docs/research/platform-os-feasibility.md:91` records
-    Flutter's supported-platforms page as **Ubuntu 20.04–24.04 LTS**, and this
-    host is outside that range; (b) 26.04 ships CMake 4.2.3 / gcc 15.2 while
-    `panel/linux/flutter/CMakeLists.txt` still declares
-    `cmake_minimum_required(VERSION 3.10)` — configures today, deprecated
-    territory tomorrow; (c) `liblzma-dev` is on Flutter's own Linux dependency
-    list and is **missing from `flutter_toolchain_packages`** in
-    `group_vars/all.yml` — pre-existing, surfaced by this audit. The cheap
-    proof is to install the set and run one `flutter build linux`.
-    **This item is now on phase 4's video path, which it was not before**
-    (owner decision, 2026-08-04: the appliance is the primary target and must
-    play video). Its MJPEG player is exercised by the suite on the Dart VM and
-    has been driven against the live go2rtc from this host, but with no
-    toolchain it has never been compiled for Linux, so no frame of it has ever
-    been rendered inside cage. "The wall plays video" stays an argument until
-    this is done. See phase-4 §B.
+14. ✅ **Done — 2026-08-04. The Flutter Linux toolchain is installed and
+    `flutter build linux --release` succeeds on this host.** `clang`, `clang++`,
+    `cmake` and `ninja` are present (`/usr/bin/clang`, `/usr/bin/cmake`,
+    `/usr/bin/ninja`), along with `gtk+-3.0` 3.24.52, `liblzma` 5.8.3 and
+    `xkbcommon` 1.13.1. The release bundle exists at
+    `panel/build/linux/x64/release/bundle/panel` (23832 B, built 2026-08-04
+    18:16) with `libapp.so` and `libflutter_linux_gtk.so` beside it. Ubuntu
+    26.04 is still outside Flutter's documented support range
+    (`docs/research/platform-os-feasibility.md:91` records **20.04–24.04 LTS**)
+    — it simply works anyway, and that is now a measurement rather than a
+    hope. Two sub-points survive as separate, smaller concerns: (b) 26.04
+    ships CMake 4.2.3 / gcc 15.2 while `panel/linux/flutter/CMakeLists.txt`
+    still declares `cmake_minimum_required(VERSION 3.10)` — configures today,
+    deprecated territory tomorrow; (c) `liblzma-dev` is on Flutter's own Linux
+    dependency list and is **missing from `flutter_toolchain_packages`** in
+    `group_vars/all.yml`, so the Ansible converge would not reproduce this
+    install on a fresh host even though the host it was measured on is fine.
+    Fix (c) before anyone believes the kiosk role is idempotent.
+
+    **What the build was then used to prove, and what it was not.** The
+    **Linux release binary** — not the Dart VM, not a browser — was run
+    headless under `Xvfb :99` (1280×800×24, `LIBGL_ALWAYS_SOFTWARE=1`,
+    llvmpipe) against the real Hub (`127.0.0.1:8123`) and the real go2rtc
+    (`127.0.0.1:1984`). A doorbell state change opened the Popup unprompted
+    and **live MJPEG video rendered inside it**, with clean teardown. Its own
+    log is the record: `hub.connected … devices=33` → `ui.ding device=doorbell
+    entity_state=on` → `popup.doorbell reason=ding` → `popup.stream_open
+    name=selftest` → `popup.stream_closed reason=popup_closed`. A screenshot
+    of the app window shows the "Ring Doorbell" Popup with the test pattern
+    inside it; go2rtc logged the consumer as `user_agent: Dart/3.12
+    (dart:io)`, 931 kB transferred, and reports `consumers: []` afterwards.
+
+    **Four things this does NOT prove — state them every time this result is
+    cited:** (1) **not cage** — this was Xvfb with the X11 GDK backend and
+    software GL; `cage` is not installed on this box at all (README **G6**),
+    so the kiosk half of the spike (**A7**) is untouched; (2) **no touch
+    input** — no touchscreen is attached (the kernel input list has a
+    touchpad and no absolute-position device), so every interaction was a
+    state push over HA's REST API, not a finger on glass; (3) **a synthetic
+    stream, not a camera** — the source was go2rtc's
+    `ffmpeg:selftest#video=mjpeg`, and a real Ring stream adds 2–5 s of
+    start-up on top of the 2.1 s transcode spin-up; (4) **a synthetic
+    doorbell** — the ding was a fabricated `sensor.ring_doorbell` state POSTed
+    to HA's REST API, and that entity does not exist in HA now.
+
+    One loose end for an agent: the bundle that rendered video was built from
+    a `bindings.yaml` carrying `stream: selftest` on the `doorbell` Device.
+    The **tracked** `panel/assets/house/bindings.yaml` has no `stream:` line
+    there and is clean against `HEAD`, so a Panel built from the repo today
+    opens that Popup with no video in it. See phase-4 §B.
 
 15. **`appliance/test/run.sh` bind-mounts the Hub's own Docker socket into a
     `--privileged` container.** Harmless when the dev box was a Mac and that

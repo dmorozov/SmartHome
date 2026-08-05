@@ -141,15 +141,125 @@ systemctl is-active ssh          # active
 
 From the controller (the Mac): `ssh <user>@192.168.68.81`.
 
-As built: OpenSSH 10.0p1, answering on `:22`. `ufw` is **inactive**, so no
-firewall rule was needed — check `sudo ufw status` on any host where it is not.
-`~/.ssh/authorized_keys` is **empty**; password auth works, key login needs the
-controller's public key pushed:
+As built and re-measured 2026-08-04: **OpenSSH 10.2p1**, `ssh.service` active,
+listening on `0.0.0.0:22` and `[::]:22`. `ufw` is **inactive**, so no firewall
+rule was needed — check `sudo ufw status` on any host where it is not. Host keys
+exist for ed25519, ecdsa and rsa. `~/.ssh/authorized_keys` on the Hub host is
+**0 bytes**: password auth works, key auth is not set up.
+
+### 1.3a Key auth from the Mac, end to end (owner task **G2**)
+
+Nothing is broken without this — password auth works. What it costs you is a
+prompt on **every** Ansible converge, and `--ask-become-pass` already asks for
+one password; two prompts per run is what makes people start skipping converges.
+
+Everything in steps 1–4 runs **on the Mac**. Nothing here needs sudo on either
+machine.
+
+**Step 1 — do you already have a key?**
 
 ```bash
-# on the controller, not the Hub host
-ssh-copy-id <user>@192.168.68.81
+ls -l ~/.ssh/id_ed25519.pub ~/.ssh/id_rsa.pub 2>/dev/null
 ```
+
+If `id_ed25519.pub` exists, skip to step 2 — reuse it. Do not generate a second
+key per host; the point of a keypair is that the private half never moves and
+you have one identity to revoke.
+
+If nothing exists, make one. Ed25519, not RSA: shorter, faster, and the default
+OpenSSH has recommended for years.
+
+```bash
+ssh-keygen -t ed25519 -C "mac -> smarthome hub" -f ~/.ssh/id_ed25519
+```
+
+- **Use a passphrase.** The private key is a file; a passphrase is what makes a
+  copied file useless. macOS makes this free — step 3 hands it to the Keychain
+  so you type it once, ever.
+- Accept the default path. `ssh-copy-id` and Ansible both find it without
+  configuration, and a custom path is one more thing to remember in a year.
+
+**Step 2 — check the fingerprint BEFORE you trust it.**
+
+The first `ssh` to a new host asks you to accept its key, and clicking through
+that prompt is what makes a man-in-the-middle possible. These are the Hub host's
+actual host keys, read from `/etc/ssh/` on the box itself:
+
+```
+256   SHA256:NAdmTCIwHNclI16B9/NBSy72TacF22Qu+1xRBg8yYE4   (ED25519)
+256   SHA256:x00p7zIbYLiyjGlLiQZISyIe7i18xncxeJPHcfavqBQ   (ECDSA)
+3072  SHA256:pv6XKSEbBn2q+q3WhK1trUlUVSe65eYgAOaGVmje8fM   (RSA)
+```
+
+Modern OpenSSH offers ed25519 first, so the prompt should show the first one.
+If what you see does not match a line above, **stop** — do not type `yes`.
+Re-read them off the Hub host with:
+
+```bash
+# on the Hub host
+for k in /etc/ssh/ssh_host_*_key.pub; do ssh-keygen -lf "$k"; done
+```
+
+(These change if the host is reinstalled or `openssh-server` is purged and
+reinstalled — a mismatch after either of those is expected, not an attack.)
+
+**Step 3 — push the public key.**
+
+```bash
+# on the Mac
+ssh-copy-id dmorozov@192.168.68.81
+```
+
+It asks for the Hub host's **login password** (the last time you should need
+it), then appends the public half to `~/.ssh/authorized_keys` there, creating it
+with the right modes. Only `id_ed25519.pub` leaves the Mac; `id_ed25519` — no
+`.pub` — must never be copied anywhere.
+
+**Step 4 — prove it, and load the passphrase into the Keychain.**
+
+```bash
+ssh -o PreferredAuthentications=publickey dmorozov@192.168.68.81 'echo key auth OK'
+```
+
+Forcing `publickey` is the point: without it, a silent failure just falls back
+to a password prompt and looks like success. You want `key auth OK` and no
+prompt.
+
+Then, so the passphrase is asked once rather than per connection:
+
+```bash
+# on the Mac
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+```
+
+**Step 5 — stop Ansible asking for the address.** Add to the Mac's
+`~/.ssh/config`:
+
+```
+Host smarthome-hub
+    HostName 192.168.68.81
+    User dmorozov
+    IdentityFile ~/.ssh/id_ed25519
+    IdentitiesOnly yes
+```
+
+`IdentitiesOnly yes` matters once you have more than one key: without it the
+agent offers each in turn and sshd can hit `MaxAuthTries` and refuse you while
+holding a key that would have worked.
+
+**A caveat this repo owes you:** `192.168.68.81` is still an **unreserved DHCP
+lease** (owner item **C1**), so both the `ssh-copy-id` above and the `HostName`
+here are pinned to an address that can move. If it does, key auth does not
+break — but the address in your config, in `hosts.ini`, and in `known_hosts`
+all point somewhere else, and the symptom is a host-key warning rather than
+anything that says "the lease moved". Doing C1 first makes this permanent.
+
+**Hardening — deliberately not done here.** Turning off `PasswordAuthentication`
+is the obvious next step and it is the one that locks you out of a headless box
+if the key is wrong. Do it only after step 4 has passed from a **second**
+terminal you keep open, and know that this Hub host has a physical keyboard, so
+recovery is possible. It is not required for Ansible and it is not on the owner
+list for that reason.
 
 ---
 
