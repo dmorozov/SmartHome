@@ -99,6 +99,7 @@ House loadHouse({required String houseYaml, required String bindingsYaml}) {
       position: _point(p['position'], 'the position: on $device'),
       entityId: binding.entityId,
       streamName: binding.streamName,
+      snapshotEntityId: binding.snapshotEntity,
     );
     final room = p['room'] as String;
     roomRefs.putIfAbsent(
@@ -293,14 +294,28 @@ void _checkPin(Room shape, Device device, String room, String label) {
 /// has the file open at the line, and "delete the stream: line" needs no
 /// value to act on.
 void _checkStream(ParsedBinding binding, DeviceKind kind) {
-  if (binding.streamName == null || specOf(kind).video) return;
-  throw FormatException(
-      'bindings.yaml: ${binding.label} is a ${specOf(kind).slug} and has a '
-      'stream: — only a camera or a doorbell plays video, so nothing would '
-      'ever play it; delete the line, or fix the marker\'s kind in the '
-      'drawing and re-run the converter. The name is not echoed: nothing else '
-      'in the Panel ever saw it, and a bare API token typed where a name goes '
-      'has the shape of a legal name.');
+  if (specOf(kind).video) return;
+  if (binding.streamName != null) {
+    throw FormatException(
+        'bindings.yaml: ${binding.label} is a ${specOf(kind).slug} and has a '
+        'stream: — only a camera or a doorbell plays video, so nothing would '
+        'ever play it; delete the line, or fix the marker\'s kind in the '
+        'drawing and re-run the converter. The name is not echoed: nothing '
+        'else in the Panel ever saw it, and a bare API token typed where a '
+        'name goes has the shape of a legal name.');
+  }
+  if (binding.snapshotEntity != null) {
+    // The same wrong-belief failure as a stream on a light, refused for the
+    // same reason. The value is withheld for symmetry with the stream
+    // message even though it passed the parser's camera-entity rule: two
+    // messages in one function with two disclosure policies is how the
+    // narrower one gets widened in a refactor.
+    throw FormatException(
+        'bindings.yaml: ${binding.label} is a ${specOf(kind).slug} and has a '
+        'snapshot: — only a camera or a doorbell wears a still-image face, '
+        'so nothing would ever fetch it; delete the line, or fix the '
+        'marker\'s kind in the drawing and re-run the converter.');
+  }
 }
 
 /// Distance from [p] to segment [a]–[b]. Exact for the axis-aligned

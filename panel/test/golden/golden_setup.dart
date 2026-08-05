@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 import 'package:panel/ui/video/live_video.dart';
+import 'package:panel/ui/video/snapshot.dart';
 
 /// The size the goldens render at: a real 16:10 panel resolution, and big
 /// enough that every pin and room label is legible. Costs ~100-200 KB per
@@ -50,12 +51,18 @@ void goldenTest(String description, Future<void> Function(WidgetTester) body) {
 /// stays the picture it already is. Pointing a golden at a live view would
 /// mean baking a new one on this host, which phase-0 open item 13 says
 /// nobody can do yet.
+///
+/// Since phase 7 (2026-08-05) every scene also carries the right-edge
+/// **Cameras tab** over the Dollhouse, which the committed goldens predate —
+/// so the next regeneration will differ for that reason as well as for the
+/// item-13 fonts. Regenerate and eyeball both causes together.
 Future<void> pumpPanel(
   WidgetTester tester,
   HubController controller, {
   Size size = kPanelSize,
   String hubLabel = 'FAKE HUB',
   VideoConfig video = const VideoConfig(),
+  SnapshotConfig snapshots = const SnapshotConfig(),
 }) async {
   tester.view
     ..physicalSize = size
@@ -63,8 +70,11 @@ Future<void> pumpPanel(
     // `size`, and it stays comparable to a `tool/shot.sh` capture.
     ..devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-      PanelApp(controller: controller, hubLabel: hubLabel, video: video));
+  await tester.pumpWidget(PanelApp(
+      controller: controller,
+      hubLabel: hubLabel,
+      video: video,
+      snapshots: snapshots));
   await tester.pumpAndSettle();
 }
 

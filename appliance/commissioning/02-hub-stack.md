@@ -239,8 +239,9 @@ mosquitto version 2.1.2 running
 
 ## 4. Tracked example → live config
 
-Three services take a config file that must never be committable, so the repo
-tracks an `*.example.*` starter and the live file is gitignored. Copying is a
+Four files must never be committable (three services plus, since phase 7,
+one HA include), so the repo tracks an `*.example.*` starter and the live
+file is gitignored. Copying is a
 bring-up step, not an optional polish step: **ring-mqtt v5.x refuses to start
 without `config.json`.**
 
@@ -249,12 +250,14 @@ without `config.json`.**
 | `ring-mqtt-data/config.example.json` | `ring-mqtt-data/config.json` | Embeds the `ring` broker password in `mqtt_url`. The whole directory later accumulates the Ring **refresh token** |
 | `go2rtc/go2rtc.example.yaml` | `go2rtc/go2rtc.yaml` | Stream URLs embed camera credentials (RTSP user:pass) |
 | `z2m-data/configuration.example.yaml` | `z2m-data/configuration.yaml` | Z2M **rewrites this file at runtime** and injects the generated Zigbee network key and pan_id on first start |
+| `ha-config/mqtt.example.yaml` | `ha-config/mqtt.yaml` | Topics embed the Ring **location id**, tracked nowhere (added phase 7 §A, 2026-08-05). Load-bearing: `configuration.yaml` includes it, so HA fails its config check without the copy |
 
 ```sh
 cp ring-mqtt-data/config.example.json ring-mqtt-data/config.json
 chmod 600 ring-mqtt-data/config.json
 # then edit: put the `ring` password into mqtt_url, and drop the "_comment" key
 cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml
+cp ha-config/mqtt.example.yaml ha-config/mqtt.yaml   # then fill the two Ring ids
 ```
 
 `ring-mqtt-data/config.json` ends as:
@@ -277,7 +280,8 @@ Confirm every live file is actually ignored before you go further:
 
 ```sh
 git check-ignore -v hub/go2rtc/go2rtc.yaml hub/ring-mqtt-data/config.json \
-                    hub/mosquitto/config/passwd hub/token
+                    hub/mosquitto/config/passwd hub/token \
+                    hub/ha-config/mqtt.yaml
 ```
 
 Every line must print a rule. Silence on any path means that file is

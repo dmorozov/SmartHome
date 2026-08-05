@@ -153,33 +153,33 @@ registry, the `event` domain is empty and this version offers one shape:
     connectivity: cloud
 ```
 
-That is `classifyDing()`'s **word shape** (rules 3–4), not the timestamp
-shape, and the difference is a real cost rather than a style point: a press
-that is the first thing the Panel hears about this entity after a gap is
-**lost**, because `on` restored from before the gap is byte-identical to `on`
-from a finger on the button. Only the next press rings.
-`panel/lib/domain/doorbell.dart` argues the alternative — ringing on first
-sight rings the house on every HA restart, and §1.4's #177014 turns that into
-a doorbell that then misses the real press.
+~~That is `classifyDing()`'s **word shape** (rules 3–4), not the timestamp
+shape~~ — **superseded 2026-08-05 by phase 7 §A**: the Panel no longer binds
+the binary_sensor at all. An HA MQTT-event entity minted over ring-mqtt's own
+ding topic (`hub/ha-config/mqtt.yaml`, gitignored; tracked example beside it)
+gives the classifier the **timestamp shape** (rule 2), which closes both word-
+shape losses — the first press after a gap, and a second press inside the
+ding window. `doorbell` binds `event.front_door_ding`. As part of the same
+change, **`number.front_door_ding_duration` was lowered 180 → 60 s** (set via
+`number.set_value`, 2026-08-05): nothing binds the binary_sensor any more,
+and the shorter window shrinks the one replay hole the event shape still has
+(an HA restart *during* an active window — phase-7 §A2, "two holes").
 
-**There is a way to buy the timestamp shape back, and it is deliberately not
-wired.** `binary_sensor.front_door_ding` carries a `lastDingTime` attribute
-(ISO-8601; it read `"2026-08-01T01:33:04Z"` at commissioning). A template
-sensor exposing that as its **state** would give the classifier rule 2 —
-press-time identity plus a freshness window:
+**The template-sensor escape hatch below is buried, not just unused.** It was
+"deliberately not wired" pending verification; research
+(`docs/research/ring-events-and-recording.md` §1) then confirmed ring-mqtt
+*does* write `lastDingTime` at the instant of the push — but also that the
+startup history-refetch can republish it in a different string format, so an
+attribute trigger can false-fire once per ring-mqtt restart. The event entity
+needs none of that reasoning and strictly dominates. Kept for the record:
 
 ```yaml
-# NOT INSTALLED — see the caveat below before you add this.
+# SUPERSEDED by the MQTT event entity (phase 7 §A) — do not install.
 template:
   - sensor:
       - name: "Front Door Ding At"
         state: "{{ state_attr('binary_sensor.front_door_ding','lastDingTime') }}"
 ```
-
-**UNVERIFIED:** whether ring-mqtt updates that attribute at the *instant* of
-the ding, or on some slower refresh. Only a real button press settles it, and
-a template that lags is a doorbell that rings late — worse than one that rings
-on a plain `on`. Press the button, watch the attribute, then decide.
 
 Not published, and worth knowing: **no battery entity**, so this unit is
 hardwired. Sizing anything on battery drain from live view is unnecessary

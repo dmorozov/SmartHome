@@ -27,7 +27,7 @@ research doc):
    automation (§5). The future "doorbell recordings" feature is a clip
    *catalog*, not a recorder.
 
-## A. `event.front_door_ding`, minted from ring-mqtt's topic
+## A. `event.front_door_ding`, minted from ring-mqtt's topic — **BUILT 2026-08-05**, presses pending
 
 ### A1. Why this shape, and what it fixes
 
@@ -206,7 +206,7 @@ no stream is open (#177014 rule still holds because nothing holds a stream).
   we'd depend on (#128332 multi-fire, #134431 unresponsive events). Keep
   in the back pocket if the MQTT event entity disappoints in practice.
 
-## B. The Cameras view
+## B. The Cameras view — **BUILT 2026-08-05** (hermetic tests; live-tap observation open)
 
 ### B1. The name, before the code
 
@@ -300,6 +300,16 @@ showing it costs **no Ring session**. Two things follow:
   (`Authorization` is a non-simple header, so the browser preflights;
   expected, not a bug.)
 
+**Amended as built, 2026-08-05 — where the Panel learns the snapshot's
+entity id.** The plan above never said, and it is not derivable: the
+doorbell's binding carries its *state* entity, and nothing turns
+`event.front_door_ding` into `camera.front_door_snapshot`. So the binding
+names both — a **`snapshot:` key in `bindings.yaml`**, riding `stream:`'s
+exact machinery: parser-validated (a `camera.*` entity id, never a URL,
+refusal never echoes the value), loader-refused on a non-video kind,
+deliberately not deduped (a still is read-only; two Devices may wear one).
+This is §B4 machinery, not recording schema — §C2.5's refusal stands.
+
 ### B5. Diagnostics and tests
 
 - Log vocabulary mirrors the Popup's, prefixed `cameras.`:
@@ -391,32 +401,73 @@ moving what A and B build. The research doc §4–§6 is the evidence base.
    one of these is cheap to add *when wanted* and expensive to carry
    speculatively.
 
+## As built — 2026-08-05, same day
+
+Everything above was implemented the day the plan merged, then put through
+an adversarial review (4 agents over the full diff). **What the review
+caught and the code now guards, so it is not re-learned the hard way:**
+
+1. The idle return's `Navigator.pop()` was blind — measured taking a ding
+   Popup that had opened over the prompt, and (raced against a non-tap pop)
+   taking the **Dollhouse home route**, leaving an empty Navigator on the
+   wall. It now pops only its own route (`isActive`/`isCurrent` checks, the
+   Popup's own discipline) and retries when obstructed
+   (`cameras.idle_blocked`).
+2. A session *born* settled (both real openers answer one for a
+   constructor throw) never fires a listener — `tile_failed` was never
+   logged and a dead session wore the LIVE badge. The open path now
+   reports it itself, `unsupported` logs `tile_unsupported` instead of a
+   lying `tile_open`, and LIVE means connecting-or-playing only.
+3. One tap on a tile whose open declined (go2rtc unconfigured) froze the
+   snapshot face forever; the still loop now restarts, and "Tap for live"
+   renders only where a tap can deliver.
+4. The closing census always read `live: 0` (children unmount first);
+   tile teardown now skips the census so `cameras.closed` counts what it
+   released. And live tiles keep-alive against the grid's lazy viewport,
+   so scrolling can never silently kill a stream a person chose.
+
+Each fix carries a regression test — 12 widget cases in
+`test/cameras_view_test.dart`. Suite: **368 tests, the same 5 pre-existing
+golden-font failures** (which now also predate the Cameras tab — the
+golden_setup header says so), 1 skipped live-Hub case.
+
 ## Done when
 
-Written 2026-08-05, all open. A is agent-plus-owner (physical presses); B
-is agent work verifiable on the dev Hub; C is a standing constraint, not a
-task.
+Re-read 2026-08-05, after the build and the review.
 
-- ⬜ **A.** `event.front_door_ding` exists on the live Hub via
-  `mqtt: !include mqtt.yaml` (+ tracked example, gitignore whitelist line,
-  hub/README bring-up `cp`), `ding_duration` lowered and recorded, and the
-  **four-press protocol passes** — including the gap press (2) and the
-  double press (3), the two that used to fail by construction. The quiet
-  restart (4) rings nothing.
-- ⬜ **A.** `doorbell` binds `event.front_door_ding`; the bindings.yaml
-  comment argues the new shape; phase-3 §2 and Ch. 5 §1.3 point here;
-  `flutter test` count unchanged (the five golden failures stay the five
-  golden failures).
-- ⬜ **B.** CONTEXT.md carries the **Cameras** Language entry; the view
-  ships behind the right-edge tab with slide-out/close exactly as
-  specified; tiles toggle their own sessions; the doorbell tile defaults
-  off showing the HA-held snapshot; `autoLive` is a tested `KindSpec` row.
-- ⬜ **B.** Teardown proven live: toggling tiles moves go2rtc consumer
-  counts at `:1984`, and closing the view returns every stream to bare
-  `url` stubs with `consumers: []`. On the web build, the snapshot renders
-  from the second-screen origin (CORS line landed) — or the origin does
-  not exist yet and the line is documented as pending.
-- ⬜ **C.** Still nothing recording: no new always-on consumer on any
-  stream, `preload` absent from `go2rtc.yaml`, `bindings.yaml` schema
-  untouched — and the seams ledger (C2) is what the future recording
-  phase opens with.
+- ✅ **A (built half), 2026-08-05.** `event.front_door_ding` is live on the
+  Hub via `mqtt: !include mqtt.yaml` (+ tracked example, gitignore
+  whitelist line, hub/README + Ch. 2 §4 bring-up `cp`),
+  `ding_duration` = 60 (set via `number.set_value`, recorded in Ch. 5
+  §1.3). Half of press (4) already observed: the HA restart that created
+  the entity met ring-mqtt's birth-republish of `OFF` and rang nothing —
+  state sat at `unknown`, no event fired.
+- ⬜ **A (owner half).** The **four-press protocol** (§A4) — including the
+  gap press (2) and the double press (3), the two that used to fail by
+  construction. The entity has never seen a real press; until it does,
+  the shape is correct by construction, which is not the same as correct.
+- ✅ **A, 2026-08-05.** `doorbell` binds `event.front_door_ding`; the
+  bindings.yaml comment argues the new shape; phase-3 §2, Ch. 5 §1.3 and
+  the repo README's B2 entry all point here. `flutter test`: no failure
+  moved — 368 tests minus the same five golden-font failures (34 tests
+  *added*; "count unchanged" as originally worded was the wrong invariant
+  — the *failures* are the invariant).
+- ✅ **B, 2026-08-05.** CONTEXT.md carries the **Cameras** Language entry;
+  the view ships behind the right-edge tab with slide-out/close exactly
+  as specified; tiles toggle their own sessions; the doorbell tile
+  defaults off wearing the HA-held snapshot (token as a Bearer header,
+  asserted by test); `autoLive` is a tested `KindSpec` row — and the
+  `video` flag got the row assertion it never had.
+- ⬜ **B (live half).** Teardown observed against the real go2rtc: real
+  taps move consumer counts at `:1984`, closing the view returns every
+  stream to bare `url` stubs with `consumers: []`. The hermetic tests
+  prove the lifecycle (every session closed by every route out); the
+  observation needs a hand on the glass or an Xvfb input-injection rig,
+  and neither existed today. The web-origin CORS line stays documented as
+  pending inside `configuration.yaml` (no second screen exists yet).
+- ✅ **C, 2026-08-05.** Still nothing recording: no new always-on consumer
+  on any stream, `preload` absent from `go2rtc.yaml`, and **no recording
+  schema** in `bindings.yaml` — the one schema addition, `snapshot:`, is
+  §B4's still-face key (see the as-built amendment there), a validated
+  camera entity id and not recording machinery. The seams ledger (C2) is
+  what the future recording phase opens with.

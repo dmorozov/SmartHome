@@ -142,6 +142,66 @@ bindings:
     expect(bindings['cam-hall']!.streamName, 'front_door');
   });
 
+  test('a snapshot names a camera entity, carried through', () {
+    final binding = parseBindings('''
+bindings:
+  doorbell:
+    snapshot: camera.front_door_snapshot
+    connectivity: cloud
+''')['doorbell']!;
+    expect(binding.snapshotEntity, 'camera.front_door_snapshot');
+  });
+
+  test('a snapshot that is not a camera entity is refused — the state and '
+      'the picture are different entities, and only one of them fetches', () {
+    // The ding entity is the plausible mis-paste: the doorbell's state and
+    // picture sit one line apart in HA's entity list, and camera_proxy
+    // would 404 the wrong one silently on every refresh tick.
+    expect(
+      () => parseBindings('''
+bindings:
+  doorbell:
+    snapshot: event.front_door_ding
+    connectivity: cloud
+'''),
+      _rejects('not a camera entity id'),
+    );
+  });
+
+  test('a URL pasted into snapshot: is refused without being echoed', () {
+    const pasted = 'http://admin:hunter2@192.168.68.44/snap.jpg';
+    try {
+      parseBindings('''
+bindings:
+  doorbell:
+    snapshot: $pasted
+    connectivity: cloud
+''');
+      fail('should have refused the URL');
+    } on FormatException catch (e) {
+      expect(e.message.contains('hunter2'), isFalse);
+      expect(e.message.contains(pasted), isFalse);
+      expect(e.message, contains('snapshot'));
+    }
+  });
+
+  test('two Devices may wear one snapshot: a still is read-only, like a '
+      'stream and unlike an entity binding', () {
+    final bindings = parseBindings('''
+bindings:
+  doorbell:
+    snapshot: camera.front_door_snapshot
+    connectivity: cloud
+  cam-porch:
+    snapshot: camera.front_door_snapshot
+    connectivity: cloud
+''');
+    expect(bindings['doorbell']!.snapshotEntity,
+        'camera.front_door_snapshot');
+    expect(bindings['cam-porch']!.snapshotEntity,
+        'camera.front_door_snapshot');
+  });
+
   test('a mistyped scalar is a FormatException naming the file, not a type '
       'error', () {
     // `007` is an integer to YAML, and a stream genuinely named 007 is a

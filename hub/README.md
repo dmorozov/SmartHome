@@ -42,7 +42,13 @@ included) with a generated stand-in for the device fleet — see
    ```sh
    cp z2m-data/configuration.example.yaml z2m-data/configuration.yaml
    cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml
+   cp ha-config/mqtt.example.yaml ha-config/mqtt.yaml
    ```
+
+   `mqtt.yaml` (manually-declared MQTT entities — its topics embed the Ring
+   location id) is **load-bearing for HA startup**: `configuration.yaml`
+   includes it, so skipping this copy fails HA's config check. Fill its two
+   ids per the comments in the example.
 
    In `z2m-data/configuration.yaml`, replace `SLZB-06-IP-OR-HOSTNAME` with
    the coordinator's LAN IP or hostname (give it a DHCP reservation).

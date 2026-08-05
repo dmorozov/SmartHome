@@ -164,33 +164,36 @@ bindings:
     # permanently — Ring has no local API at all (Ch. 5 §3.1), so this is not
     # a gap waiting to be closed.
     #
-    # THE WORD SHAPE, NOT THE TIMESTAMP SHAPE, and it is not a free choice:
-    # this ring-mqtt publishes NO `event.*` entity at all. Measured on the
-    # live Hub — 15 mqtt entities across binary_sensor/switch/select/camera/
-    # number/button/sensor, and zero in the `event` domain. The repo's
-    # standing advice was "prefer event.<name>_ding if this version offers
-    # both"; this version offers one, so classifyDing() rule 3/4 (the on/off
-    # words) is the path the doorbell actually takes here.
+    # THE TIMESTAMP SHAPE, since 2026-08-05 (phase 7 §A). ring-mqtt itself
+    # publishes NO `event.*` entity in any version, so this entity is OURS:
+    # an HA MQTT-event entity minted over ring-mqtt's ding topic
+    # (hub/ha-config/mqtt.yaml, gitignored; tracked example beside it). Its
+    # state is the press timestamp, restored across HA restarts WITHOUT
+    # re-firing, and it fires on every ON publish — so classifyDing() takes
+    # rule 2 (press-time identity + 60 s freshness), and the two losses the
+    # old binary_sensor word shape carried are gone: the first press after a
+    # restart rang nothing (first_sight), and a second press inside the ding
+    # window was `on -> on`, invisible by construction.
     #
-    # WHAT THAT COSTS, stated because it is real and not fixable from here:
-    # a press that is the FIRST thing the Panel hears about this entity is
-    # lost — after a reconnect whose snapshot reported it `unavailable`,
-    # nothing survives the gap, and `on` restored from before the gap is
-    # byte-identical to `on` from a finger on the button. Only the next press
-    # rings. The alternative is ringing on first sight, which rings the house
-    # on every HA restart, and #177014 turns that into a doorbell that then
-    # misses the real press. See panel/lib/domain/doorbell.dart rule 3.
+    # WHAT THE NEW SHAPE STILL COSTS, so nobody rediscovers it the hard way
+    # (phase-7 §A2, "two holes"): an HA restart DURING an active ding window
+    # meets ring-mqtt's birth-republish and can re-ring (bounded; ding
+    # duration lowered 180 -> 60 s to shrink the collision 3x), and a PANEL
+    # restart within 60 s of an answered press re-rings once (_rungFor is
+    # in-memory). Both bounded, both accepted, both documented there.
     #
-    # There IS a way to buy the timestamp shape back: this binary_sensor
-    # carries a `lastDingTime` attribute (ISO-8601, e.g.
-    # "2026-08-01T01:33:04Z"), so an HA template sensor exposing that as its
-    # STATE would hand classifyDing() rule 2 — press-time identity plus a
-    # freshness window. NOT DONE, and deliberately not: whether ring-mqtt
-    # updates that attribute at the instant of the ding is UNVERIFIED, and
-    # verifying it needs somebody to press the button. Do not wire it on the
-    # assumption; a template that lags is a doorbell that rings late.
-    entity: binary_sensor.front_door_ding
+    # The lastDingTime template-sensor escape hatch that used to be argued
+    # here is superseded — the event entity strictly dominates it
+    # (Ch. 5 §1.3 records the burial).
+    entity: event.front_door_ding
     stream: ring_doorbell
+    # The tile's still face in the Cameras view (phase 7 §B4): the ding
+    # entity above is the doorbell's STATE and this is its PICTURE — two
+    # different HA entities, underivable from each other, so the binding
+    # names both. Fetching it costs no Ring session: HA already holds the
+    # JPEG (snapshot mode Auto), which is the whole reason the tile's
+    # default-off state can show the front door without deafening the bell.
+    snapshot: camera.front_door_snapshot
     connectivity: cloud
   thermostat:
     # ecobee Smart Thermostat Premium "Main Floor", paired LOCALLY over

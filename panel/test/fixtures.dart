@@ -4,6 +4,7 @@ import 'package:panel/domain/house.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
 import 'package:panel/ui/video/live_video.dart';
+import 'package:panel/ui/video/snapshot.dart';
 
 import 'test_house.dart';
 
@@ -29,16 +30,19 @@ import 'test_house.dart';
 
 /// [house] with one Device given a go2rtc stream name.
 ///
-/// The shipped `bindings.yaml` deliberately names no stream on anything: no
-/// go2rtc feed exists for the placeholder cameras, and a `stream:` pointing
-/// at nothing would be a confident wrong answer in the one file a human
-/// hand-edits. So a test about video states the fact itself, here, rather
-/// than teaching the assets something for a test's benefit.
+/// The shipped `bindings.yaml` names no stream on any placeholder *camera*:
+/// no go2rtc feed exists for them, and a `stream:` pointing at nothing
+/// would be a confident wrong answer in the one file a human hand-edits.
+/// (The doorbell is the exception since 2026-08-05 — it is real hardware
+/// with a real `ring_doorbell` stream and a snapshot face.) So a test about
+/// camera video states the fact itself, here, rather than teaching the
+/// assets something for a test's benefit.
 ///
 /// Rebuilds the House rather than mutating it: [Device] is immutable and
 /// [House] is a tree of `const` values, which is exactly the property that
 /// makes a golden reproducible.
-House houseWithStream(House house, String deviceId, String streamName) {
+House houseWithStream(House house, String deviceId, String streamName,
+    {String? snapshotEntity}) {
   Device retarget(Device device) => device.id == deviceId
       ? Device(
           id: device.id,
@@ -48,6 +52,7 @@ House houseWithStream(House house, String deviceId, String streamName) {
           position: device.position,
           entityId: device.entityId,
           streamName: streamName,
+          snapshotEntityId: snapshotEntity ?? device.snapshotEntityId,
         )
       : device;
   return House(
@@ -86,5 +91,10 @@ Widget panelApp(
   HubController controller, {
   String hubLabel = 'FAKE HUB',
   VideoConfig video = const VideoConfig(),
+  SnapshotConfig snapshots = const SnapshotConfig(),
 }) =>
-    PanelApp(controller: controller, hubLabel: hubLabel, video: video);
+    PanelApp(
+        controller: controller,
+        hubLabel: hubLabel,
+        video: video,
+        snapshots: snapshots);

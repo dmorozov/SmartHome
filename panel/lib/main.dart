@@ -8,11 +8,14 @@ import 'config/runtime_env.dart';
 import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
 import 'diagnostics/url_redaction.dart';
+import 'domain/device_vocabulary.dart';
+import 'ui/cameras/cameras_view.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/doorbell_popup_host.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
 import 'ui/video/live_video.dart';
+import 'ui/video/snapshot.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -103,6 +106,10 @@ Future<void> main() async {
     controller: boot.controller,
     hubLabel: boot.hubLabel,
     video: VideoConfig(go2rtcUrl: config.go2rtcUrl),
+    // The Hub's own address and token, reused: a camera snapshot is an HA
+    // REST fetch authenticated exactly like the socket. The token travels
+    // in this object to become a header — never a URL part (snapshot.dart).
+    snapshots: SnapshotConfig(haUrl: config.url, token: config.token),
   ));
 }
 
@@ -134,6 +141,7 @@ class PanelApp extends StatelessWidget {
     required this.controller,
     required this.hubLabel,
     required this.video,
+    required this.snapshots,
   });
 
   final HubController controller;
@@ -149,6 +157,19 @@ class PanelApp extends StatelessWidget {
   /// the costume of a fact about the Panel. `test/fixtures.dart` is where it
   /// defaults, and it defaults to unconfigured.
   final VideoConfig video;
+
+  /// Where the Hub's REST API is, for the still faces in the Cameras view.
+  /// Required for [video]'s reason: an unconfigured default here would be a
+  /// test-fixture fact wearing a Panel costume — `test/fixtures.dart` is
+  /// where it defaults, and it defaults to unconfigured.
+  final SnapshotConfig snapshots;
+
+  /// Whether the House has anything the Cameras view could show. Decides
+  /// the tab's existence, not its behaviour: a tab onto an empty grid is
+  /// furniture.
+  bool get _hasCameras => controller.house.floors
+      .expand((f) => f.devices)
+      .any((d) => specOf(d.kind).video);
 
   @override
   Widget build(BuildContext context) {
@@ -196,10 +217,33 @@ class PanelApp extends StatelessWidget {
                     style: TextStyle(fontSize: 12, color: PanelTheme.inkFaint),
                   ),
                   Expanded(
-                    child: ListenableBuilder(
-                      listenable: controller,
-                      builder: (context, _) =>
-                          DollhouseView(controller: controller, video: video),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: ListenableBuilder(
+                            listenable: controller,
+                            builder: (context, _) => DollhouseView(
+                                controller: controller, video: video),
+                          ),
+                        ),
+                        // The right-edge tab (phase-7 §B2). Outside the
+                        // ListenableBuilder: its existence depends on the
+                        // House, which never changes after boot.
+                        if (_hasCameras)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Builder(
+                              builder: (context) => CamerasTab(
+                                onTap: () => showCamerasView(
+                                  context,
+                                  controller: controller,
+                                  video: video,
+                                  snapshots: snapshots,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                 ],

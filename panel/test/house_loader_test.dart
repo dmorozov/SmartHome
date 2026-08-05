@@ -209,6 +209,38 @@ bindings:
       expect(camera.streamName, 'den_cam');
     });
 
+    test('a doorbell carries its snapshot entity through the join', () {
+      final doorbell = loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: doorbell
+    name: "Front Door"
+    kind: doorbell
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  doorbell:
+    snapshot: camera.front_door_snapshot
+    connectivity: cloud
+''').floors.single.rooms.single.devices.single;
+      expect(doorbell.snapshotEntityId, 'camera.front_door_snapshot');
+    });
+
+    test('a snapshot on a light is refused: nothing would ever fetch it', () {
+      // The same wrong-belief failure as a stream on a light: the author
+      // thinks a still face is wired up, and nothing will ever read it.
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    entity: input_boolean.light_den
+    snapshot: camera.den
+    connectivity: local
+'''),
+        _rejects('only a camera or a doorbell wears a still-image face'),
+      );
+    });
+
     test('a stream on a light is refused: nothing would ever play it', () {
       // The same failure as a binding whose marker was deleted — a line
       // someone typed that nothing will ever read. Ignoring it would leave

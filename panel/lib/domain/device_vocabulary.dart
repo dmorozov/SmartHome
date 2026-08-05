@@ -70,6 +70,7 @@ class KindSpec {
     required this.family,
     required this.seed,
     this.video = false,
+    this.autoLive = false,
   });
 
   /// How the kind is written in the House Plan, and in the converter's
@@ -98,6 +99,18 @@ class KindSpec {
   /// library's opening paragraph gives: two spellings of one kind fact are
   /// two spellings that drift.
   final bool video;
+
+  /// Whether the Cameras view starts this kind's tile streaming on entry.
+  ///
+  /// Meaningful only on a [video] kind. `camera` answers true — a local
+  /// stream with no side effects beyond bandwidth. `doorbell` answers false
+  /// **and must stay false**: an open Ring live session suppresses ding
+  /// delivery (HA core #177014, phase-7 §B3), so a Cameras view that
+  /// auto-played the doorbell would deafen the bell for exactly as long as
+  /// somebody is looking at it. A kind fact rather than a per-device flag
+  /// for ADR-0006's reason: any brand's doorbell live view has cloud side
+  /// effects, and per-device would invite hand-editing the safety back off.
+  final bool autoLive;
 }
 
 /// The table. Exhaustive: a new [DeviceKind] without a row here does not
@@ -160,6 +173,7 @@ KindSpec specOf(DeviceKind kind) => switch (kind) {
           slug: 'camera',
           family: StateFamily.status,
           video: true,
+          autoLive: true,
           seed: (id) => StatusState(id, 'Live')),
       DeviceKind.doorbell => KindSpec(
           slug: 'doorbell',

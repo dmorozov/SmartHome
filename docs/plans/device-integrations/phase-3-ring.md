@@ -35,19 +35,22 @@ arguing was made by the integration, not by us:
     connectivity: cloud
 ```
 
-Read the argument anyway — it is what the **cost** of that shape is, and the
-cost is now being paid: a press the Panel hears about for the first time after
-a gap is lost (rule 3), because `on` restored from before the gap and `on`
-from a finger on the button are the same string.
+**Superseded 2026-08-05, phase 7 §A: the missing `event.*` entity was
+minted** — an HA MQTT-event entity over ring-mqtt's own ding topic
+(`hub/ha-config/mqtt.yaml`), and `doorbell` now binds
+`event.front_door_ding`, so rule 2 finally applies. The argument below is
+kept because it is *why phase 7 exists*.
 
-**One unexplored way out, deliberately left unwired:**
-`binary_sensor.front_door_ding` carries a `lastDingTime` attribute in ISO-8601.
-An HA template sensor exposing that as its *state* would hand `classifyDing()`
-the timestamp shape after all — rule 2, with press-time identity and a
-freshness window. Whether ring-mqtt writes that attribute at the instant of the
-ding is **UNVERIFIED**; it needs a real press to settle, and a template that
-lags is worse than the word shape. Ch. 5 §1.3 carries the snippet and the
-caveat.
+Read the argument anyway — it is what the **cost** of that shape is, and the
+cost was being paid until the supersession above: a press the Panel heard
+about for the first time after a gap was lost (rule 3), because `on` restored
+from before the gap and `on` from a finger on the button are the same string.
+
+~~**One unexplored way out, deliberately left unwired:**~~ the
+`lastDingTime` template-sensor idea is **settled and buried** (2026-08-05):
+research confirmed ring-mqtt writes the attribute at push time, but phase 7's
+MQTT event entity delivers rule 2 without the template layer or its
+startup-refetch format hazard. Ch. 5 §1.3 carries the burial.
 
 The original argument, kept in full:
 

@@ -1,0 +1,35 @@
+# Manually-declared MQTT entities — the template for the gitignored live
+# copy. Fresh bring-up: cp mqtt.example.yaml mqtt.yaml, then fill the two
+# ids below (hub/README step 1). The live file is gitignored because the
+# topics embed this install's Ring LOCATION id, which is tracked nowhere;
+# the device id already appears in the commissioning docs, but do not take
+# that as licence to paste a full topic anywhere tracked — half of it being
+# public is not a precedent for the other half.
+#
+# Why this entity exists (phase-7 §A, research doc §1–§2): ring-mqtt will
+# never publish an HA `event` entity, and the Panel's ding classifier needs
+# the timestamp shape — the binary_sensor word shape loses the first press
+# after a restart AND a second press inside the ding window. This event
+# entity fires on every ON publish and its state is the press timestamp,
+# restored across HA restarts without re-firing.
+#
+# Reading the ids: HA → Settings → Devices & services → MQTT →
+# "Front Door" device → "MQTT Info" (a device-page button, not per-entity)
+# → expand any entity → Subscribed topics. Copy, don't guess. (No broker
+# credentials needed.)
+event:
+  - name: "Front Door Ding"
+    unique_id: front_door_ding_event
+    state_topic: "ring/<location-id>/camera/<device-id>/ding/state"
+    availability_topic: "ring/<location-id>/camera/<device-id>/status"
+    payload_available: online
+    payload_not_available: offline
+    device_class: doorbell
+    event_types:
+      - ring        # the 2026.4 standard type for doorbell-class events —
+                    # anything else deprecation-warns until 2027.4
+    # ring-mqtt publishes bare ON/OFF, not JSON. Without this template the
+    # entity silently does nothing. '{}' renders are discarded by design,
+    # which is what filters OFF and the birth-republish replays of OFF.
+    value_template: >-
+      {{ '{"event_type":"ring"}' if value == 'ON' else '{}' }}

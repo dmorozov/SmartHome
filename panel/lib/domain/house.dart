@@ -167,6 +167,7 @@ class Device {
     required this.position,
     this.entityId,
     this.streamName,
+    this.snapshotEntityId,
   });
 
   final String id;
@@ -189,6 +190,13 @@ class Device {
   /// contract is pure *answers* about how a Device looks and behaves, and a
   /// stream name is neither — it is a fact the House Plan states.
   final String? streamName;
+
+  /// The HA camera entity whose still image faces this Device's tile in the
+  /// Cameras view while it is not live, e.g. `camera.front_door_snapshot`.
+  /// Null on every non-video Device, and normal on video ones too — a tile
+  /// with no snapshot face shows its icon. On the Device for [streamName]'s
+  /// reason: a House Plan fact, not a presentation answer.
+  final String? snapshotEntityId;
 
   /// Plan-space position on the Floor (same space as Room.footprint), meters.
   final Offset position;

@@ -26,3 +26,20 @@ automation: !include automations.yaml
 # an HA restart; edits to scripts.yaml afterwards only need the `script.reload`
 # service (Developer Tools -> Actions).
 script: !include scripts.yaml
+
+# Manually-declared MQTT entities (the UI-configured MQTT integration
+# handles discovery; this include adds entities discovery cannot mint —
+# today: the doorbell's event entity, phase-7 §A). Live file gitignored,
+# its topics embed this install's Ring ids. Fresh bring-up:
+# cp mqtt.example.yaml mqtt.yaml FIRST (hub/README step 1) — this include
+# makes the file load-bearing for HA startup.
+mqtt: !include mqtt.yaml
+
+# The web Panel (second-screen target) will fetch camera snapshots from
+# HA's REST camera_proxy cross-origin, which needs
+#   http:
+#     cors_allowed_origins:
+#       - "<the second-screen origin>"
+# No such origin exists yet, so the block is deliberately absent — add it
+# with the specific origin (never "*") when the second screen lands.
+# Phase-7 §B4 is the reasoning.

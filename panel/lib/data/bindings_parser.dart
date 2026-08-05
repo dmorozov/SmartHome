@@ -21,6 +21,7 @@ class ParsedBinding {
     required this.ordinal,
     required this.entityId,
     required this.streamName,
+    required this.snapshotEntity,
     required this.connectivity,
   });
 
@@ -47,6 +48,15 @@ class ParsedBinding {
   /// may carry one; the loader is what enforces that, because only it knows
   /// the Device's kind.
   final String? streamName;
+
+  /// The HA camera entity whose still image faces this Device's tile in the
+  /// Cameras view while it is not live, e.g. `camera.front_door_snapshot`.
+  /// Null is the normal case: a tile with no snapshot face shows its icon.
+  /// Exists because the doorbell's *state* entity (the ding) and its
+  /// *picture* entity are different entities, and nothing can derive one
+  /// from the other. Only a video kind may carry one; the loader enforces
+  /// that, as with [streamName].
+  final String? snapshotEntity;
 
   final Connectivity connectivity;
 
@@ -374,11 +384,29 @@ Map<String, ParsedBinding> parseBindings(String yaml) {
     // One camera watched from two rooms is a house this must not refuse;
     // the `streams=` count on `house.loaded` is the copy-paste safety net.
 
+    final snapshotEntity = _text(binding, key, ordinal, 'snapshot');
+    if (snapshotEntity != null &&
+        (!_entityId.hasMatch(snapshotEntity) ||
+            !snapshotEntity.startsWith('camera.'))) {
+      // Stricter than entity: above on purpose — this field is only ever
+      // fetched through HA's camera_proxy, which serves camera entities, so
+      // a ding sensor or a URL pasted here would fail silently on every
+      // refresh tick otherwise.
+      throw _refuses(key, ordinal, 'snapshot',
+          'is not a camera entity id (camera.object_id, lower case — e.g. '
+          'camera.front_door_snapshot); the still face of a tile comes from '
+          "an HA camera entity, copied from Home Assistant's entity list");
+    }
+    // Not deduped, like streams and unlike entity: — a snapshot is a
+    // read-only reference, and two Devices wearing one camera's still is a
+    // house this must not refuse.
+
     out[key] = ParsedBinding(
       key: key,
       ordinal: ordinal,
       entityId: entityId,
       streamName: streamName,
+      snapshotEntity: snapshotEntity,
       // Deliberately no default: a planned Ring camera is a Cloud Device
       // before it is ever bound, so guessing `local` would mislabel it.
       //

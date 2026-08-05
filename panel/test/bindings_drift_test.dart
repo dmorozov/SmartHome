@@ -34,7 +34,10 @@ const _integrated = <String>{
   'light-living', // -> switch.entry_light  (was switch.old_fridge)
   'light-landing', // -> switch.stairs_light (was switch.aquarium)
   // 2026-08-05 — ring-mqtt authenticated; the doorbell is real hardware now.
-  'doorbell', // -> binary_sensor.front_door_ding (+ stream: ring_doorbell)
+  // Later the same day (phase 7 §A) the binding moved to the minted event
+  // entity; the stream and snapshot ride along.
+  'doorbell', // -> event.front_door_ding
+  //            (+ stream: ring_doorbell, snapshot: camera.front_door_snapshot)
 };
 
 void main() {

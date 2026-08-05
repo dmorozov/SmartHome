@@ -52,6 +52,34 @@ void main() {
     }
   });
 
+  group('video is a kind fact', () {
+    test('exactly camera and doorbell play video', () {
+      // The `video` flag never had a row assertion before the Cameras view
+      // arrived to enumerate on it — a gap phase-7 §B3 closes: a kind
+      // quietly gaining `video: true` now changes what the grid shows, so
+      // the set is pinned.
+      const video = {DeviceKind.camera, DeviceKind.doorbell};
+      for (final kind in DeviceKind.values) {
+        expect(specOf(kind).video, video.contains(kind), reason: kind.name);
+      }
+    });
+
+    test('only the camera auto-lives, and autoLive implies video', () {
+      // The safety half of the pair: `doorbell` must never auto-live — an
+      // open Ring session suppresses dings (#177014), and the Cameras view
+      // trusts this table rather than knowing brands.
+      for (final kind in DeviceKind.values) {
+        final spec = specOf(kind);
+        expect(spec.autoLive, kind == DeviceKind.camera, reason: kind.name);
+        if (spec.autoLive) {
+          expect(spec.video, isTrue,
+              reason: '${kind.name}: autoLive on a kind with no video '
+                  'would dial nothing forever');
+        }
+      }
+    });
+  });
+
   group('togglability is a House-side fact', () {
     test('exactly the on/off families toggle', () {
       // The safety rule, stated once: a thermostat tap must never reach

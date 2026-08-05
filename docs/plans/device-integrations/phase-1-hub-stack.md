@@ -178,6 +178,8 @@ cd hub
 # 2. live configs from the tracked examples:
 cp ring-mqtt-data/config.example.json ring-mqtt-data/config.json   # + set the ring password
 cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml
+# (phase 7 later added a third: cp ha-config/mqtt.example.yaml ha-config/mqtt.yaml,
+#  load-bearing for HA startup — hub/README step 1 is current)
 # 3. everything up:
 docker compose up -d          # homeassistant, mosquitto, go2rtc, ring-mqtt
 docker compose ps             # 4 services Up; zigbee2mqtt absent (profile)

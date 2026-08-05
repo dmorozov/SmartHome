@@ -20,6 +20,9 @@
 #      the directory also accumulates the Ring refresh token).
 #   3. cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml (live file gitignored —
 #      stream URLs embed camera credentials).
+#   3b. cp ha-config/mqtt.example.yaml ha-config/mqtt.yaml and fill the Ring
+#      ids per its comments (live file gitignored; configuration.yaml
+#      includes it, so HA will not start without the copy).
 #   4. docker compose up -d   (zigbee2mqtt stays parked; when the SLZB-06
 #      arrives: configure z2m-data/, then docker compose --profile zigbee up -d)
 #   5. HA onboarding at http://<appliance>:8123; MQTT integration -> broker
