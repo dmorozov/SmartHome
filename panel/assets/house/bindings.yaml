@@ -86,6 +86,12 @@ bindings:
     # real drawing lands is a bindings.yaml-only edit by design (ADR-0005).
     # Nothing is wired to it yet; outdoor lighting is a future purchase, and
     # binding it now is what makes it usable the day it is.
+    #
+    # WHICH SOCKET: the one labelled "Plug 1" on the plug body — confirmed at
+    # the hardware 2026-08-05 by toggling this entity and watching it respond.
+    # Do NOT re-derive that from the entity name: TP-Link labels the sockets
+    # from 1 and HA numbers the children from 0, so "Plug 1" is child _0. The
+    # digits disagree on purpose. Full table: commissioning Ch. 4 §4.1.5.
     entity: switch.outdoor_outlet_a
     connectivity: local
 
@@ -122,6 +128,12 @@ bindings:
     # Kasa EP40 outdoor plug, socket B — same D5 caveat as outlet-outdoor-a.
     # Bind the CHILDREN, never switch.tp_link_smart_plug_722c: the parent
     # drives both sockets, so one pin would silently toggle the other's load.
+    #
+    # WHICH SOCKET: the one that is not "Plug 1" — i.e. child _1, presumably
+    # labelled "Plug 2". Established by elimination on 2026-08-05, not by
+    # toggling this entity at the plug; A is the one that was watched. Sound
+    # for a two-socket unit, but weaker evidence than A's, so if a pin ever
+    # seems to drive the wrong load, re-check THIS one first.
     entity: switch.outdoor_outlet_b
     connectivity: local
   cam-office:

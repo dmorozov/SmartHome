@@ -547,7 +547,7 @@ commissioning-relevant slice.
 | Repo checkout | **Manual.** |
 | HWE kernel meta + `apt-mark manual` | **kiosk role**, gated `kiosk_hwe_kernel` (true on real hardware, false in the test container). Already satisfied by hand on this host — **G1 done**, §1.5. |
 | cage / `wlr-randr` / `swayidle` / `grim` / `ddcutil` / `evtest` / `libinput-tools` / `wev` / `drm-info` | **kiosk role.** |
-| Flutter Linux toolchain (`clang`, `cmake`, `ninja-build`, `pkg-config`, `libgtk-3-dev`, `liblzma-dev`, `libstdc++-12-dev`) + bootstrap (`curl`, `git`, `unzip`, `zip`, `xz-utils`) | **kiosk role** — but read §1.7a before trusting that word. The host is complete and **builds**; the role, until 2026-08-04, could not have produced it. |
+| Flutter Linux toolchain (`clang`, `cmake`, `ninja-build`, `pkg-config`, `libgtk-3-dev`, `liblzma-dev`) + bootstrap (`curl`, `git`, `unzip`, `zip`, `xz-utils`) | **kiosk role.** As of 2026-08-05 this list is tested on both targets — see §1.7a. `libstdc++-12-dev` used to be here and was removed: `clang` pulls the release-matched headers itself, and any hand-written pin is wrong on one of the two releases. |
 | `cage` user, PAM, templated `cage@.service`, Panel env + token file | **kiosk role**, all enable/hardening behind gates that default `false`. |
 
 A plain converge is safe on a daily-driver laptop — every kiosk gate defaults
@@ -631,12 +631,13 @@ removing it needs sudo and would break the one machine known to build. "Absent
 from `ldd`" is a weaker statement than "the build does not need it", and this
 role's job is to reproduce a host that was measured, not to re-derive it.
 
-#### `libstdc++-12-dev` — stale, kept, and now on the record
+#### `libstdc++-12-dev` — removed 2026-08-05, after a build test on both targets
 
 Checked because §1.7 had been asserting it for a release nobody had verified it
-against. It is **wrong on 26.04**, and it is deliberately still in the list —
-flagging it here beats silently swapping a package in a role that would then
-have two unconverged changes in it instead of one.
+against. It was wrong on **both** targets, and it is now gone from the role.
+The evidence below is kept because the tempting fix — bump it to `-15-dev` —
+is also wrong, and the next person to read Flutter's setup page will want to
+add it back.
 
 ```bash
 apt-cache policy libstdc++-12-dev
@@ -670,17 +671,53 @@ apt-cache rdepends --installed libstdc++-15-dev
 `clang` → `clang-21` → `libstdc++-15-dev`. The role's own `clang` entry already
 drags in the correct, release-matched C++ headers; naming a libstdc++ version
 by hand can only ever disagree with the compiler that is actually installed.
-The likely right fix is therefore to **delete** the line rather than bump it —
-but that is a claim about apt's dependency graph on two releases, and it has
-been converged on neither.
 
-It is a drift, not a breakage: on this host the candidate resolves, so a
-converge installs a universe package the build never touches and carries on.
-Three things are **UNVERIFIED** and are why it stays put: whether 24.04 (the
-mini PC) offers `libstdc++-12-dev` at all and from which component, whether
-24.04's `clang` declares its libstdc++ dev the same way 26.04's does, and
-whether dropping the line leaves the test container still able to build.
-Closing it is a converge on both releases, which is agent work.
+##### The test that closed it
+
+Both targets, in disposable containers, installing the role's list with **no**
+libstdc++ entry at all:
+
+```bash
+docker run --rm ubuntu:24.04 bash -c 'apt-get -qq update >/dev/null &&
+  apt-get -qq install -y --no-install-recommends clang cmake ninja-build \
+    pkg-config libgtk-3-dev liblzma-dev >/dev/null &&
+  dpkg -l | grep -o "libstdc++-[0-9]*-dev"'
+```
+
+| | `clang` resolves to | libstdc++ that lands | C++17 compile+link+run |
+|---|---|---|---|
+| ubuntu:24.04 — mini PC | `clang-18` | `libstdc++-13-dev` | OK |
+| ubuntu:26.04 — laptop | `clang-21` | `libstdc++-15-dev` | OK |
+
+Then the real thing on the mini PC's OS — this repo's own Panel, clean tree,
+`flutter build linux --release` inside `ubuntu:24.04`:
+
+```
+libstdc++-12-dev installed? 0
+[✓] Linux toolchain - develop for Linux desktop
+✓ Built build/linux/x64/release/bundle/panel
+    libstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6
+```
+
+So the line went, and pinning `-15-dev` instead was rejected: it would break
+24.04, which wants `-13`, and re-create the same staleness one release later.
+
+**`liblzma-dev` survived the same test and was kept anyway.** The 24.04
+container built the app without it too — but it is on Flutter's own documented
+dependency list, and upstream's contract outranks one app's link graph. `ldd`
+proves this app does not need it *today*; it says nothing about the next
+Flutter release. Removing `-12-dev` fixes something actively wrong; removing
+`liblzma-dev` would trade an upstream guarantee for a few hundred KB.
+
+> **Harness trap, recorded because it cost an hour.** The first container run
+> failed with `The type 'dynamic' is not exhaustively matched` in
+> `device_popup.dart` — nothing to do with C++. The test had copied the host's
+> `.dart_tool/` in, whose `package_config.json` holds host-absolute paths;
+> inside the container those resolve to nothing, types collapse to `dynamic`,
+> and the CFE reports it as a source error in application code. Delete
+> `.dart_tool/` and `flutter pub get` inside the container. A clean
+> `rm -rf build .dart_tool && flutter pub get && flutter build linux --release`
+> on the host succeeds, which is what proved the tree innocent.
 
 ---
 

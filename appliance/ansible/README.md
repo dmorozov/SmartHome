@@ -53,22 +53,26 @@ ansible-playbook site.yml -l test-appliance
 ansible-playbook site.yml -l test-appliance   # expect changed=0
 ```
 
-`libstdc++-12-dev` stayed in the list and is **known stale on 26.04** —
-deliberately left rather than swapped, so this file carries one unconverged
-change and not two. Measured on the host that builds: `libstdc++-12-dev` is not
-installed at all (candidate 12.5.0, out of `resolute/universe`), the box has
-`libstdc++-15-dev` from `main`, and `clang++ -v` selects
-`/usr/lib/gcc/x86_64-linux-gnu/15`. So the entry is a copy of Flutter's setup
-page rather than a measurement.
+`libstdc++-12-dev` was **removed 2026-08-05** after being tested on both
+targets. Do not add it back, and do not "correct" it to `-15-dev`:
 
-The fix is probably to **delete** the line rather than bump it:
-`apt-cache depends clang-21` reads `Depends: libstdc++-15-dev`, so `clang` —
-already in the list — pulls the release-matched headers by itself, and a
-hand-written version can only disagree with the compiler apt installed. Left
-alone because that is a claim about apt's graph on **both** targets and has
-been converged on neither. Today it costs a converge one unused universe
-package; it does not fail. See
-[Ch. 1 §1.7a](../commissioning/01-host-and-network.md) for the numbers.
+| | `clang` resolves to | libstdc++ it pulls by itself |
+|---|---|---|
+| ubuntu:24.04 — mini PC | `clang-18` | `libstdc++-13-dev` |
+| ubuntu:26.04 — laptop | `clang-21` | `libstdc++-15-dev` |
+
+`clang` is already in this list and declares the release-matched C++ headers on
+both, so a hand-written version can only disagree with the compiler apt
+installs — and any single pin is wrong on one of the two targets. Proven at the
+real-build level, not just apt's graph: this repo's Panel builds clean inside
+`ubuntu:24.04` with no libstdc++ entry (`✓ Built bundle/panel`, linking the
+base system's `libstdc++.so.6`).
+
+`liblzma-dev` passed the same test and was **kept** anyway — it is on Flutter's
+own documented dependency list, and upstream's contract is worth more than the
+few hundred KB our link graph says we could save.
+[Ch. 1 §1.7a](../commissioning/01-host-and-network.md) has the full numbers and
+the container-harness trap that made the first attempt look like a Dart error.
 
 ## Panel runtime settings and the HA token
 

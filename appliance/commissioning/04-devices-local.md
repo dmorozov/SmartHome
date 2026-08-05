@@ -300,31 +300,53 @@ parent plus two children.
 is not harmless. Binding the parent to an `outlet` Key means one tap cuts both
 loads.
 
-**Which physical outlet is which is not yet established.** The owner has not
-identified child `_0` versus child `_1` against the two sockets on the unit.
-Until someone stands at the plug and toggles one, they carry the provisional
-names **`outdoor_outlet_a`** and **`outdoor_outlet_b`** — provisional meaning *do
-not bind them to Keys whose names imply a location* yet. Resolving it is a
-two-minute job at the hardware: toggle `..._kasa_smart_plug_722c_0`, see which
-socket clicks.
+**Which physical outlet is which — settled 2026-08-05**, by the owner at the
+plug: toggled `switch.outdoor_outlet_a` from HA, watched which socket
+responded. The names are no longer provisional.
 
-The EP40 is also still on its factory alias (`TP-LINK_Smart Plug_722C`), which
-is why its entity ids are the ugly ones below. Renaming it in the Kasa app
-before commissioning would have produced readable ids; renaming it now would
-change nothing already registered, because HA keeps the entity id assigned at
-first registration.
+| Panel Key | Entity | HA child | `unique_id` | Physical socket |
+|---|---|---|---|---|
+| `outlet-outdoor-a` | `switch.outdoor_outlet_a` | `Kasa_Smart Plug_722C_0` | `8006…F4F40F8` **00** | the socket labelled **"Plug 1"** on the plug body |
+| `outlet-outdoor-b` | `switch.outdoor_outlet_b` | `Kasa_Smart Plug_722C_1` | `8006…F4F40F8` **01** | the other socket — **inferred by elimination**, not independently toggled |
+
+**Mind the off-by-one.** TP-Link labels the sockets from **1** and HA numbers
+the children from **0**, so the socket marked "Plug 1" is child `_0`. Anyone who
+matches the digit in the entity id to the digit on the plastic gets both outlets
+backwards, and the mistake is invisible from a desk.
+
+The row for B is honest about its provenance: the unit has exactly two sockets
+and A is one of them, so B is the other by arithmetic. That is sound, but it is
+not the same evidence as A's, and if a future EP40 ever reports `child_num > 2`
+the arithmetic stops holding.
+
+Anchor the mapping to **`unique_id`**, not to the entity id and not to the
+friendly name. `unique_id` is what the `tplink` integration derives from the
+device's own child index — the trailing `00`/`01` above is that index — and it
+is the only one of the three that a rename cannot move (§7.4).
+
+The EP40 was added on its factory alias (`TP-LINK_Smart Plug_722C`), which is
+why the ids HA minted for it were the ugly ones. Renaming it in the Kasa app
+before commissioning would have produced readable ids; renaming it there now
+changes nothing already registered, because HA keeps the entity id assigned at
+first registration. The two children have since been renamed the only way that
+works — a registry `new_entity_id` update (§7.8) — and the parent device now
+reads "Patio Outlet", which is a `name_by_user` on the *device*. Note what that
+did and did not do: the parent's friendly name changed, its entity id is still
+`switch.tp_link_smart_plug_722c`. It is §7.4's rule sitting in the registry as a
+worked example.
 
 ### 4.1.6 Entities to expect — and the four to ignore
 
-Live registry, 2026-08-04:
+Live registry, re-read 2026-08-05 (the two children carry their post-rename
+ids; everything else is unchanged from 2026-08-04):
 
 | Entity | Bind? |
 |---|---|
 | `switch.old_fridge` | **No** — §4.1.1 |
 | `switch.aquarium` | **No** — §4.1.1 |
 | `switch.tp_link_smart_plug_722c` | **No** — parent, drives both outlets |
-| `switch.tp_link_smart_plug_722c_kasa_smart_plug_722c_0` | Yes — outlet 1 |
-| `switch.tp_link_smart_plug_722c_kasa_smart_plug_722c_1` | Yes — outlet 2 |
+| `switch.outdoor_outlet_a` | Yes — socket "Plug 1" (§4.1.5) |
+| `switch.outdoor_outlet_b` | Yes — the other socket (§4.1.5) |
 | `switch.old_fridge_led` | Never |
 | `switch.aquarium_led` | Never |
 | `switch.tp_link_smart_plug_722c_led` | Never |
@@ -348,17 +370,28 @@ Note these are **`binary_sensor`**, not `sensor` — the phase-2 plan calls them
 
 ```bash
 curl -s "$HA/api/states" -H "Authorization: Bearer $TOKEN" \
-  | jq -r '.[] | select(.entity_id|test("^(switch|binary_sensor)\\.")) | "\(.entity_id) = \(.state)"'
+  | jq -r '.[] | select(.entity_id|test("outdoor_outlet|722c|old_fridge|aquarium"))
+                | "\(.entity_id) = \(.state)"' | sort
 ```
 
-Expect exactly the eleven rows above. Then, the actual proof — pick an EP40
-child (**not** the fridge, **not** the aquarium, **not** the parent) and:
+Expect the eleven rows above, by **name**. Do not check this by counting the
+`switch` and `binary_sensor` domains: that number was eleven when the plugs were
+the only devices on the Hub and it is **27** as of 2026-08-05, because Ecobee and
+Rachio landed since. A count that moves whenever an unrelated integration is
+added is not a check — the names are. (Same trap as the `.storage` backup in
+Ch. 2 §8, and it caught this chapter too.)
 
-1. Toggle it from the HA UI. The outdoor plug clicks audibly.
+Then, the actual proof — pick an EP40 child (**not** the fridge, **not** the
+aquarium, **not** the parent) and:
+
+1. Toggle it from the HA UI. The outdoor plug clicks audibly. **Done
+   2026-08-05** — `switch.outdoor_outlet_a` toggles, and the socket it drives is
+   the one labelled "Plug 1" (§4.1.5).
 2. Toggle it at the plug's physical button. The entity state follows within a
    second or two — that is the `state_changed` round-trip the Panel depends on.
+   **Not done** — step 1 was one-way, HA → plug.
 3. Unplug the Hub host's WAN. Both directions still work. That is what
-   `connectivity: local` is asserting.
+   `connectivity: local` is asserting. **Not done.**
 
 ---
 

@@ -746,18 +746,25 @@ Then take the Key **out** of `_integrated` (§7.6, note 3) and run
 
 ## 7.8 Worked example — renaming the EP40's two outlets
 
-**INSTRUCTIONS, not as-built.** Nothing below has been executed. Every id,
-name and current value in it *was* measured on 2026-08-04 and is quoted
-unedited.
+**Mixed, and the split matters. §7.8.1–§7.8.4 are INSTRUCTIONS** — a correct
+recipe, whose ids and values were measured 2026-08-04 and are quoted unedited.
+**§7.8.5 is AS-BUILT:** the rename has since been performed, so that section
+records what the registry actually holds rather than what the commands above
+would have produced. The two differ, deliberately — see §7.8.5.
 
-### 7.8.0 Two things to settle first
+### 7.8.0 Two things to settle first — both now settled
 
-**Which outlet is which is not known.** The EP40's children are
-`Kasa_Smart Plug_722C_0` and `_1` and the owner has not identified what is
-plugged into either. The names below (`outdoor_outlet_a` / `outdoor_outlet_b`) are
-**provisional placeholders**. Establish the mapping before naming anything:
-toggle one child from the HA UI, watch which load stops, write it down. Do that
-now, while the plug is not yet on a Key that a stranger can tap.
+**Which outlet is which — established 2026-08-05.** `switch.outdoor_outlet_a`
+(child `_0`) drives the socket labelled **"Plug 1"** on the plug body; B is the
+other one by elimination. Full table, provenance and the 1-based/0-based
+off-by-one that will trip the next reader: **Ch. 4 §4.1.5**. The names below are
+therefore no longer provisional, which is what unblocks binding them to Keys a
+stranger can tap.
+
+Settle this *before* naming anything on a plug that is already on a Key —
+toggle one child from the HA UI, watch which load stops, write it down. Here it
+went the other way round (names first, mapping a day later) and it was survivable
+only because nothing was wired to either socket at the time.
 
 **Renaming does not create the Key.** These two entities are destined for
 `outlet-outdoor-a` / `outlet-outdoor-b` / `outlet-master` — placeholder Keys in a
@@ -850,14 +857,40 @@ for e in json.load(sys.stdin):
         print(e["entity_id"], "=", e["state"], "|", e["attributes"].get("friendly_name"))'
 ```
 
-Expect `switch.outdoor_outlet_a` / `_b` present with friendly names
-`Patio Plug Outlet A` / `Patio Plug Outlet B`, and **no**
-`switch.tp_link_smart_plug_722c_kasa_smart_plug_722c_*` rows. The parent
+**AS-BUILT, measured 2026-08-05.** What the Hub returns today:
+
+```
+binary_sensor.tp_link_smart_plug_722c_cloud_connection = on  | Patio Outlet Cloud connection
+switch.tp_link_smart_plug_722c                         = on  | Patio Outlet
+switch.tp_link_smart_plug_722c_led                     = on  | Patio Outlet LED
+switch.outdoor_outlet_a                                = off | Outdoor Outlet A
+switch.outdoor_outlet_b                                = on  | Outdoor Outlet B
+```
+
+The new ids are in place and **no**
+`switch.tp_link_smart_plug_722c_kasa_smart_plug_722c_*` rows remain. The parent
 `switch.tp_link_smart_plug_722c`, its `_led` and its `_cloud_connection` stay —
 they were not renamed and must not be bound (§7.3.6, §4.1.5).
 
-Then toggle one from the HA UI and confirm the right load responds. The
-mapping from §7.8.0 is the thing you are checking, not the plumbing.
+**Two divergences from §7.8.3–§7.8.4, both intentional, both worth reading:**
+
+1. The parent's `name_by_user` is **`Patio Outlet`**, not the `Patio Plug` the
+   command proposes, and the optional child-*device* rename was skipped
+   (`name_by_user: None` on both children). Neither matters: no entity id moved,
+   which is §7.4.1 demonstrated on live hardware.
+2. The friendly names are **`Outdoor Outlet A` / `Outdoor Outlet B`** — plain,
+   with no device prefix. The old expectation here read `Patio Plug Outlet A`,
+   and that was wrong about the naming model, not just about the string. Both
+   entities have `has_entity_name: true`, and the rule is: a user-set registry
+   `name` **replaces** the friendly name outright; only `original_name` gets
+   composed with the device name. The parent is the control — `name: None`,
+   `original_name: None`, so its friendly name falls through to the device's
+   `Patio Outlet`.
+
+Then toggle one from the HA UI and confirm the right load responds. **Done
+2026-08-05**, and that is where §7.8.0's mapping came from. Note that this is
+the one-way half of the round-trip; driving the plug's physical button and
+watching the entity follow is still untested (Ch. 4 §4.1.7 step 2).
 
 ### 7.8.6 Finish the chain in the repo
 
