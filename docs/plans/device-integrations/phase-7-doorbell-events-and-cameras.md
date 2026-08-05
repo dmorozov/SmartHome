@@ -442,10 +442,11 @@ Re-read 2026-08-05, after the build and the review.
   §1.3). Half of press (4) already observed: the HA restart that created
   the entity met ring-mqtt's birth-republish of `OFF` and rang nothing —
   state sat at `unknown`, no event fired.
-- ⬜ **A (owner half).** The **four-press protocol** (§A4) — including the
-  gap press (2) and the double press (3), the two that used to fail by
-  construction. The entity has never seen a real press; until it does,
-  the shape is correct by construction, which is not the same as correct.
+- ⬜ **A (owner half) — README item A8.** The **four-press protocol**
+  (§A4) — including the gap press (2) and the double press (3), the two
+  that used to fail by construction. The entity has never seen a real
+  press; until it does, the shape is correct by construction, which is
+  not the same as correct.
 - ✅ **A, 2026-08-05.** `doorbell` binds `event.front_door_ding`; the
   bindings.yaml comment argues the new shape; phase-3 §2, Ch. 5 §1.3 and
   the repo README's B2 entry all point here. `flutter test`: no failure
@@ -458,13 +459,14 @@ Re-read 2026-08-05, after the build and the review.
   defaults off wearing the HA-held snapshot (token as a Bearer header,
   asserted by test); `autoLive` is a tested `KindSpec` row — and the
   `video` flag got the row assertion it never had.
-- ⬜ **B (live half).** Teardown observed against the real go2rtc: real
-  taps move consumer counts at `:1984`, closing the view returns every
-  stream to bare `url` stubs with `consumers: []`. The hermetic tests
-  prove the lifecycle (every session closed by every route out); the
-  observation needs a hand on the glass or an Xvfb input-injection rig,
-  and neither existed today. The web-origin CORS line stays documented as
-  pending inside `configuration.yaml` (no second screen exists yet).
+- ⬜ **B (live half) — README item A9.** Teardown observed against the
+  real go2rtc: real taps move consumer counts at `:1984`, closing the
+  view returns every stream to bare `url` stubs with `consumers: []`. The
+  hermetic tests prove the lifecycle (every session closed by every route
+  out); the observation needs a hand on a mouse or glass — A9 is the
+  windowed no-touchscreen path, and the touchscreen version folds into
+  spike day (A7). The web-origin CORS line stays documented as pending
+  inside `configuration.yaml` (no second screen exists yet).
 - ✅ **C, 2026-08-05.** Still nothing recording: no new always-on consumer
   on any stream, `preload` absent from `go2rtc.yaml`, and **no recording
   schema** in `bindings.yaml` — the one schema addition, `snapshot:`, is
