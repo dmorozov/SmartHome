@@ -24,6 +24,17 @@ Compiled from the research fragments: cage-on-Ubuntu, Flutter-GTK-on-Wayland, to
 layer, and prior-art/fallbacks (all researched 2026-07-30 against primary sources). Inline
 citations and **UNVERIFIED** flags are preserved from those fragments.
 
+**Re-audited 2026-08-05 against what the spike box actually ships** — cage `0.2.1-1` /
+`libwlroots-0.19` `0.19.2-1` / systemd 259 on Ubuntu 26.04 (resolute) — by source diff (cage
+`8a009212..v0.2.1`, wlroots at tag `0.19.2`), by extracting the resolute packages, and by
+`systemd-analyze verify` on the rendered kiosk unit (phase-0 open item 12 asked for exactly this
+before spike day). **Every load-bearing claim held**: the touch path, the missing output-power
+management (the screen-power ladder stands), both `WLR_*` env-var names the Ansible pin depends
+on (present in the 0.19.2 source *and* in `strings` of the resolute `.deb`), the Step 8 unit
+recipe, and the xwayland fallback. Dated *Re-audit 2026-08-05* amendments below record what
+moved: version citations, two UNVERIFIEDs resolved (libseat backend order; a systemd-259 utmp
+nuance), and a corrected reading of U4/#515.
+
 ---
 
 ## 1. What we must learn
@@ -72,11 +83,16 @@ noble's cage package was verified commit-by-commit to contain the whole touch pa
 
 **Why unknown:** three environment-specific facts could not be verified from sources:
 (a) whether `libpam-systemd` is present on *minimized* Ubuntu images (**UNVERIFIED** — it is on
-standard Server installs); (b) Ubuntu's `libseat1` default backend order (**UNVERIFIED** — logind
-inside a PAM session is the path the cage wiki assumes and "the common report is that it just
-works"); (c) noble's cage is a git snapshot (`0.1.5+20240127`, effectively master-as-of-Dec-2023
-on wlroots 0.17) — no AMD-specific cage bugs were found in the tracker, but this exact build has
-never been observed on Strix Point/amdgpu by anyone we can cite.
+standard Server installs, and confirmed installed on the spike box); (b) Ubuntu's `libseat1`
+default backend order — **RESOLVED, re-audit 2026-08-05**, read out of the exact source Ubuntu
+builds (`seatd 0.9.2` orig + debian tarballs): libseat autodetects **seatd socket → logind →
+builtin**, `LIBSEAT_BACKEND` overrides. logind-via-PAM is the default path *only because no
+seatd is running*; see the Step 8 escape-hatch note for the group/socket caveat; (c) noble's
+cage is a git snapshot (`0.1.5+20240127`, effectively master-as-of-Dec-2023 on wlroots 0.17) —
+no AMD-specific cage bugs were found in the tracker, but this exact build has never been
+observed on Strix Point/amdgpu by anyone we can cite. *(Re-audit 2026-08-05: (c) now describes
+only the mini-PC/noble target — the spike box's package is cage `0.2.1-1` on wlroots `0.19.2`,
+audited in §2.)*
 
 ### U4 — Screen power control (blank at night, wake on touch)
 
@@ -93,6 +109,17 @@ whether cage's scene and the fullscreen Flutter surface survive off/on cycles cl
 tap is safely swallowed by the app (it *will* be delivered to Flutter as a real touch), and
 whether this panel implements DDC/CI at all (`ddcutil` power/brightness — "many small HDMI
 touchscreens don't").
+
+*Re-audit 2026-08-05 (cage `8a009212..v0.2.1` diff + wlroots 0.18/0.19 release notes):* the
+off/on cycle now runs against a **rewritten and bug-fixed apply path** — 0.2.x reworked cage's
+output-management apply/rollback code (incl. `d07afac`, fixing a wlr-randr reconfigure crash
+class the noble snapshot still carries), and wlroots 0.18.2/0.18.3 fixed DRM output
+disable/re-enable plus a touch-point teardown crash. The resize-back question stays UNVERIFIED
+end-to-end, but pass bar 9 is materially more likely to pass on this box than the 2026-07-30
+text implied. [#515](https://github.com/cage-kiosk/cage/issues/515) also reads narrower than
+this section suggested (and did *before* the research date — the original characterization was
+simply off): it is a **teardown segfault under `-m last`** — a crash on exit, fine without
+`-m last`, which the Step 8 unit never passes.
 
 ### U5 — Boot-to-UI time
 
@@ -119,6 +146,17 @@ unplug ([commit 96ffaa34](https://github.com/cage-kiosk/cage/commit/96ffaa340e))
 and app-exit-code propagation. **Verdict: noble's cage is fine for the spike.** For the real
 build, cage 0.2.1 on Ubuntu 26.04 LTS (or 0.3.1 from source, which requires building wlroots
 0.20) is the better long-term base — decide only if the spike actually hits a fixed-upstream bug.
+
+*Re-audit 2026-08-05:* that sentence stopped being a future option — the spike box **is** Ubuntu
+26.04 and its candidate package **is** cage `0.2.1-1` on `libwlroots-0.19` `0.19.2-1`. The full
+source diff `8a009212..v0.2.1` was audited: the touch path (`7ec7e3df` and per-point forwarding
+are ancestors of `v0.2.1`), cursor auto-hide, no-exit-on-unplug (`96ffaa34`) and exit-code
+propagation all carry over unchanged, and getopt is `dDhm:sv` — still no cursor flag (PRs #335
+and #519 both closed unmerged). New in 0.2.x and worth knowing on spike day: a `-D`
+debug-logging flag, application arguments are now optional, xdg-decoration is applied on the
+initial commit (more deterministic CSD suppression for GTK), primary-selection support, and
+shutdown/exit-leak fixes that matter under `Restart=always` churn. resolute's package still
+hard-depends on `xwayland`, so Rung B survives unchanged.
 
 **Boot recipe is documented.** The canonical `cage@.service` + `/etc/pam.d/cage` come verbatim
 from the [cage wiki](https://github.com/cage-kiosk/cage/wiki/Starting-Cage-on-boot-with-systemd)
@@ -163,13 +201,14 @@ mitigations: udev `ENV{LIBINPUT_IGNORE_DEVICE}="1"`, or Flutter-side
 `MouseRegion(cursor: SystemMouseCursors.none)` (mapped to GDK cursor `"none"` in
 [fl_mouse_cursor_handler.cc](https://github.com/flutter/flutter/blob/master/engine/src/flutter/shell/platform/linux/fl_mouse_cursor_handler.cc)).
 
-**Protocols under cage (noble snapshot):**
+**Protocols under cage (noble snapshot; every row re-verified unchanged at the v0.2.1 source,
+2026-08-05):**
 
 | Protocol | Support | Consequence |
 |---|---|---|
-| wlr-output-management-v1 | Yes | `wlr-randr` works: modes, `--transform`, `--off/--on` (noble packages `wlr-randr 0.3.0-1`) |
-| wlr-output-power-management-v1 | **No** ([#245](https://github.com/cage-kiosk/cage/issues/245)) | **`wlopm` does not work under cage** — even though noble packages it, and upstream cage 0.3.x still lacks it |
-| idle-notify-v1 | Yes | `swayidle` works — noble's swayidle **1.8.0** gained ext-idle-notify support exactly in 1.8.0 ([releases](https://github.com/swaywm/swayidle/releases)) |
+| wlr-output-management-v1 | Yes | `wlr-randr` works: modes, `--transform`, `--off/--on` (noble `wlr-randr 0.3.0-1`; resolute `0.4.1-1build1` — same CLI, adds `--dryrun`) |
+| wlr-output-power-management-v1 | **No** ([#245](https://github.com/cage-kiosk/cage/issues/245)) | **`wlopm` does not work under cage** — even though noble packages it, and upstream cage 0.3.x still lacks it. Re-audit 2026-08-05: absent from the v0.2.1 source too (wlroots ships the server impl — 0.17 already did — cage just never wires it); implementing PR [#512](https://github.com/cage-kiosk/cage/pull/512) is in active review as of 2026-06 — re-check before the mini-PC build |
+| idle-notify-v1 | Yes | `swayidle` works — noble's swayidle **1.8.0** gained ext-idle-notify support exactly in 1.8.0 ([releases](https://github.com/swaywm/swayidle/releases)); resolute: 1.9.0-1 |
 | idle-inhibit-v1 | Yes | An app/plugin could hold the screen awake (pub.dev plugin existence: **UNVERIFIED**) |
 | virtual-keyboard-v1 | Yes | Key-injecting OSKs could type — but see next row |
 | input-method-v2 / text-input-v3 | **No** ([#406](https://github.com/cage-kiosk/cage/issues/406), [#417](https://github.com/cage-kiosk/cage/issues/417)) | No compositor-mediated OSK (squeekboard/wvkbd dead ends under cage). Plan: **in-app Flutter OSK widget** |
@@ -232,8 +271,9 @@ attributable to the right layer.
    2026-08-03, not the 24.04 this runbook was written against (GNOME wanted for
    daily dev; it includes `libpam-systemd`). Enable OpenSSH. During spike runs, GNOME's display
    manager must release the seat: either `sudo systemctl stop gdm3` (or `gdm`, depending on
-   package) before launching cage from a TTY, or run the Step 8 boot test with
-   `sudo systemctl disable gdm3` for the session. (On the
+   package — on 26.04 the canonical unit is `gdm.service` and `gdm3` is an alias, so both
+   spellings work; re-audit 2026-08-05) before launching cage from a TTY, or run the Step 8
+   boot test with `sudo systemctl disable gdm3` for the session. (On the
    final mini PC appliance: Ubuntu **Server** standard install, no DE at all.)
 ### Step 0a — Hybrid-graphics check (laptop-specific, do this FIRST)
 
@@ -554,8 +594,25 @@ Notes baked into the recipe:
 - Do **not** pass `-s` to cage — VT switching stays disabled (default), Ctrl-Alt-F2 is dead.
   **Keep SSH working before you reboot.**
 - If cage logs "no seat" errors, escape hatch: `apt install seatd`, enable `seatd.service`, add
-  the user to `video`+`input` groups, `LIBSEAT_BACKEND=seatd` (libseat default backend order on
-  Ubuntu: **UNVERIFIED**; logind-via-PAM is the expected path).
+  the user to `video`+`input` groups, `LIBSEAT_BACKEND=seatd`. *(Re-audit 2026-08-05 — the
+  backend order is no longer UNVERIFIED: libseat autodetects **seatd → logind → builtin**, read
+  from the source Ubuntu builds. Once seatd runs, even the autodetect picks it — but only for a
+  user that can reach its socket: Ubuntu runs `seatd -g video` with `/run/seatd.sock` at 0770,
+  which is why the `video` group above is load-bearing; a refused connect falls through to
+  logind cleanly. logind-via-PAM stays the default path only while no seatd is running.)*
+- systemd 259 (the 26.04 spike box) accepts every directive in this unit — `systemd-analyze
+  verify` on the rendered template reports no unknown keys (re-audit 2026-08-05; the empirical
+  corrections above were made against 255) — but it is compiled **without utmp** (`-UTMP` in
+  `systemctl --version`): the `UtmpIdentifier=`/`UtmpMode=` lines are harmless no-ops there,
+  kept for the 24.04 mini PC. Consequence: `who` will not show the cage session on 26.04 (no
+  `/run/utmp`); `w` still does, via logind.
+- The wiki header's "wlroots must be built with systemd logind support" is dated phrasing:
+  modern wlroots delegates seats to **libseat** (resolute's `libwlroots-0.19` depends on
+  `libseat1`; session support is a meson feature whose only implementation is libseat), and
+  logind-vs-seatd is libseat's runtime choice, not a wlroots build flag. The wiki page itself
+  is unchanged since 2025-04-01 (checked against its git history, re-audit 2026-08-05), so
+  Step 8's documented deviations from it — no `Alias=`, `DefaultInstance=tty1`, no `nullok` —
+  all still apply.
 - Appliance polish (optional for the spike, record findings anyway): in `/etc/default/grub` set
   `GRUB_TIMEOUT=0` and `GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3"`; in
   `/etc/systemd/logind.conf` set `NAutoVTs=0` and `ReserveVT=0`
@@ -610,7 +667,9 @@ strict sequence). Same systemd skeleton works for A and D by swapping `ExecStart
 quirks) while the Flutter Wayland client is fine.
 
 Noble ships weston 13.0.0 with `kiosk-shell.so` in the package
-([packages.ubuntu.com/noble/weston](https://packages.ubuntu.com/noble/weston)). Minimal
+([packages.ubuntu.com/noble/weston](https://packages.ubuntu.com/noble/weston)); resolute ships
+14.0.2-5, kiosk-shell still in the package and the `weston.ini` keys below unchanged in its
+manpage (re-audit 2026-08-05). Minimal
 `weston.ini` (keys verified against the
 [noble weston.ini(5) manpage](https://manpages.ubuntu.com/manpages/noble/en/man5/weston.ini.5.html)):
 
@@ -654,7 +713,8 @@ pointer-emulation edge cases for the first touch point.
 **Trigger:** cage's *stale noble package* (0.1.5-snapshot/wlroots 0.17 vs upstream 0.3.1/wlroots
 0.20) is identified as the root cause, and you want a current, apt-packaged wlroots compositor
 without building cage+wlroots from source or adopting snaps. (Noble ships labwc 0.7.1 —
-[packages.ubuntu.com/noble/labwc](https://packages.ubuntu.com/noble/labwc).)
+[packages.ubuntu.com/noble/labwc](https://packages.ubuntu.com/noble/labwc); resolute 0.9.3-1,
+three minor series on — spot-check the `rc.xml` windowRule syntax before leaning on this rung.)
 
 `~/.config/labwc/rc.xml` (from [labwc-config(5)](https://labwc.github.io/labwc-config.5.html)):
 
@@ -734,7 +794,8 @@ power-control axis specifically, not researched in depth.
 - **Long-term cage base.** Whether to stay on noble's snapshot, move to Ubuntu 26.04 LTS (cage
   0.2.1/wlroots 0.19), or build 0.3.1+wlroots 0.20 from source — decide only if the spike hits a
   fixed-upstream bug; no trustworthy 0.3.x PPA for noble exists (**UNVERIFIED** whether any
-  third-party one is current).
+  third-party one is current). *(Re-audit 2026-08-05: for the spike box the question is closed
+  by fiat — 26.04 ships 0.2.1, audited in §2. It stays open only for the noble mini PC.)*
 - **Which engine commit fixed #182606** — still unidentified upstream (**UNVERIFIED**); the
   practical mitigation is the ≥ 3.44 pin, permanently.
 - **Idle-inhibit from Flutter** — cage supports idle-inhibit-v1, but whether any pub.dev plugin

@@ -3,7 +3,9 @@
 #
 # Part 1 (wlr-randr): discovers the output on the running cage session and
 # runs one off / sleep 3 / on cycle. cage has no wlr-output-power-management
-# (wlopm does NOT work under cage); --off removes the output from the layout,
+# (wlopm does NOT work under cage — re-verified at the v0.2.1 source,
+# 2026-08-05; implementing PR cage#512 still unmerged); --off removes the
+# output from the layout,
 # and whether the Flutter surface comes back fullscreen is the UNVERIFIED part
 # this probe exists to answer.
 #

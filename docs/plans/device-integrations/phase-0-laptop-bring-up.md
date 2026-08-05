@@ -465,6 +465,24 @@ link-local IPv6 only (`fe80::…`) and `resolvectl mdns` is off on every link.
       `drm-info` 2.6.0. The §2 touch-path commit audit and the #182606 analysis
       were all done against wlroots 0.17.
 
+    ✅ **Re-audit done — 2026-08-05**, recorded as dated *Re-audit 2026-08-05*
+    amendments in the runbook. Answers, in this item's own order: (1) wlroots
+    0.19 **does** implement wlr-output-power-management — and 0.17 already did
+    — but the ladder does **not** collapse: the gap was always cage-side
+    wiring, and the v0.2.1 source still never calls it (implementing PR #512
+    open, in active review 2026-06 — re-check before the mini-PC build).
+    (2) `WLR_DRM_DEVICES` and `WLR_LIBINPUT_NO_DEVICES` are both intact in the
+    0.19.2 source *and* in `strings` of the resolute `.deb` — the hybrid-GPU
+    pin, `host_vars/laptop.yml` and `cage@.service.j2` keep working untouched.
+    (3) Version drift is recorded in the runbook's §2 table and §5 rungs; the
+    touch-path commits (`7ec7e3df`, per-point forwarding, `96ffaa34`) are all
+    ancestors of `v0.2.1`, so the noble-era commit audit carries over to the
+    spike box's package. Bonus resolutions beyond what this item asked:
+    libseat's backend order (seatd → logind → builtin, read from Ubuntu's own
+    source — the runbook's U3(b) UNVERIFIED is closed) and the kiosk unit
+    verified against systemd 259 (`systemd-analyze verify` clean; the utmp
+    lines are no-ops there, 259 being built `-UTMP`).
+
 13. **The Panel's golden tests are red on 26.04 — 5 failures, and they are the
     upgrade's doing, not any code change.** `flutter test` in `panel/` gives
     `+169 ~1 -5`; all five are in `test/golden/dollhouse_golden_test.dart`

@@ -96,7 +96,11 @@ Environment=LOG={{ panel_log_level }}
 EnvironmentFile=-{{ panel_env_file }}
 User={{ kiosk_user }}
 # Log this user with utmp, letting it show up with commands 'w' and
-# 'who'. This is needed since we replace (a)getty.
+# 'who'. This is needed since we replace (a)getty. On systemd builds without
+# utmp (Ubuntu 26.04's 259 reports -UTMP) these two lines are harmless no-ops
+# — 'who' shows nothing there, 'w' still works via logind — kept for the
+# 24.04 mini PC. Verified clean under systemd-analyze verify on 259
+# (runbook re-audit 2026-08-05).
 UtmpIdentifier=%I
 UtmpMode=user
 # A virtual terminal is needed.
