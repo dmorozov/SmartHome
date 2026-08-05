@@ -18,13 +18,23 @@ import 'package:yaml/yaml.dart';
 ///
 /// [_integrated] is the ledger of Devices whose bindings have moved to real
 /// hardware and are therefore *expected* not to resolve against the dev
-/// Hub. It is empty today; adding a Device to it is the deliberate act of
-/// saying "this one is real now".
+/// Hub. Adding a Device to it is the deliberate act of saying "this one is
+/// real now".
 const _integrated = <String>{
   // Phase 2, 2026-08-04 — real hardware on the laptop Hub.
   'outlet-outdoor-a', // Kasa EP40 outdoor socket A -> switch.outdoor_outlet_a
   'outlet-outdoor-b', // Kasa EP40 outdoor socket B -> switch.outdoor_outlet_b
   'thermostat', // ecobee "Main Floor" -> climate.main_floor (HomeKit, local)
+  // 2026-08-05 — two Kasa HS103s repurposed from a fridge and an aquarium to
+  // house lights, which is what made them bindable at all (Ch. 4 §4.1.1,
+  // ADR-0006). The Key names are placeholder-house fictions: the entry light
+  // is NOT in the living room and the stairs light is NOT on the landing.
+  // `light-hall` would have been right for the entry and is deliberately not
+  // used — it is this suite's own togglable fixture; see bindings.yaml.
+  'light-living', // -> switch.entry_light  (was switch.old_fridge)
+  'light-landing', // -> switch.stairs_light (was switch.aquarium)
+  // 2026-08-05 — ring-mqtt authenticated; the doorbell is real hardware now.
+  'doorbell', // -> binary_sensor.front_door_ding (+ stream: ring_doorbell)
 };
 
 void main() {

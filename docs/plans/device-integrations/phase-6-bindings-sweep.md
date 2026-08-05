@@ -24,10 +24,14 @@ Run the Panel against the laptop Hub with `LOG=info` in the environment
     `ev-charger` (the Tesla Wall Connector serves no API — phase 2 §2),
     `oven` (D3 — unless the October decision funds it), `tv-*` (out of
     scope), plus any `light-*`/`outlet-*` Key with no physical device yet.
-  - **in the Hub but bound to nothing, on purpose**: `switch.old_fridge`
-    and `switch.aquarium` (ADR-0006 single-tap hazard), the EP40 parent
+  - **in the Hub but bound to nothing, on purpose**: the EP40 parent
     switch (it drives both children), and all of Rachio (no irrigation
     `DeviceKind` exists). None of these show up in `missing` — §1a.
+    (`switch.old_fridge` and `switch.aquarium` were on this list under the
+    ADR-0006 single-tap hazard until 2026-08-05, when both plugs were
+    repurposed to lights, renamed `switch.entry_light` / `switch.stairs_light`
+    and bound to `light-living` / `light-landing`. Both are live on the Panel;
+    neither should appear in any bucket now.)
 
 ## 1a. `missing=0` is only half a check — the inverse pass
 
@@ -78,7 +82,7 @@ buckets, and the buckets go into §2's table alongside the mapping:
 | Bucket | Meaning | Action |
 |---|---|---|
 | **Not a Device** | HA internals, diagnostics, LED and status children | none — expected noise |
-| **Deliberately unexposed** | real and controllable, and we chose not to pin it (`switch.old_fridge`, `switch.aquarium`) | record *why*, with the ADR reference — otherwise the next sweep re-litigates it |
+| **Deliberately unexposed** | real and controllable, and we chose not to pin it | record *why*, with the ADR reference — otherwise the next sweep re-litigates it. **This bucket is empty as of 2026-08-05**: its only two members, `switch.old_fridge` and `switch.aquarium`, left it by becoming lights. Worth keeping — the bucket exists because the *reason* has to outlive the entry, and this is the case where the reason expired instead |
 | **Redundant** | a parent whose children are bound (`switch.tp_link_smart_plug_722c`) | none — binding it too would double-drive the outlets |
 | **Genuinely unexposed** | a real Device with no Key | the only real finding. Needs a drawing session (ADR-0005), and possibly a new `DeviceKind` before that |
 

@@ -28,7 +28,7 @@ cannot be automated from an agent session.
 
 | Device / integration | Deployed? | Authenticated? | Phase | Local or cloud |
 |---|---|---|---|---|
-| Ring doorbell (ring-mqtt) | **yes** — container Up | **no** — sitting at the auth gate | 3 | cloud, permanently (§3.1) |
+| Ring doorbell (ring-mqtt) | **yes** — container Up | **yes** — authenticated 2026-08-05, 15 entities, bound, video proven (§1.3) | 3 | cloud, permanently (§3.1) |
 | Wyze cameras | no | n/a | 4 | mixed, per unit (D1) |
 | HACS | no — `/config/custom_components` holds only `README.md` | n/a | 5 | cloud at install time only |
 | LG washer + dryer (`lg_thinq`) | no | n/a | 5 | cloud |
@@ -38,13 +38,18 @@ cannot be automated from an agent session.
 | SmartThings oven | no | n/a | **none** | cloud — D3, a decision, not a build task |
 
 ring-mqtt 5.9.3 is the only one already running, because phase 1 put it in
-[`../../hub/compose.yaml`](../../hub/compose.yaml). It has been up for
-hours doing nothing, and says so:
+[`../../hub/compose.yaml`](../../hub/compose.yaml). **It was authenticated on
+2026-08-05 and is now doing real work** (§1.3). Between phase 1 and that day it
+sat at its auth gate and said so — quoted because this is what an
+*unauthenticated* ring-mqtt looks like, and it is not an error:
 
 ```
 ring-mqtt State file /data/ring-state.json not found. No saved state data available.
 ring-mqtt No refresh token was found in the state file, use the Web UI at http://<host_ip_address>:55123/ to generate a token.
 ```
+
+If those two lines ever come back, the pairing has been lost and §1.2's cliff
+is the thing that happened.
 
 ## Credentials the operator must obtain
 
@@ -121,21 +126,64 @@ therefore governs three operational rules:
    the Ring app's authorized-device screen is **UNVERIFIED** — do not
    quote a menu path at the operator.
 
-### 1.3 What arrives, and what to bind
+### 1.3 What arrived, and what is bound — AS-BUILT 2026-08-05
 
-Phase 3 expects a device named for the doorbell with, typically, a ding
-event entity, a motion binary sensor, a snapshot camera, and
-battery/Wi-Fi diagnostics. **Which entity style this version emits
-(`event.*_ding` vs `binary_sensor.*_ding`) is version-dependent — read it
-off HA, do not assume.** Bind the `doorbell` Key in
-[`../../panel/assets/house/bindings.yaml`](../../panel/assets/house/bindings.yaml)
-to whichever one changes when the button is pressed:
+Authenticated 2026-08-05. ring-mqtt 5.9.3 published **15 entities** on one
+device, "Front Door":
+
+```
+binary_sensor.front_door_ding          switch.front_door_live_stream
+binary_sensor.front_door_motion        switch.front_door_event_stream
+camera.front_door_snapshot             switch.front_door_motion_detection
+button.front_door_take_snapshot        switch.front_door_motion_warning
+select.front_door_event_select         number.front_door_snapshot_interval
+select.front_door_snapshot_mode        number.front_door_motion_duration
+sensor.front_door_info                 number.front_door_ding_duration
+sensor.front_door_wireless
+```
+
+**No `event.*` entity, at all.** The advice above used to read "prefer
+`event.*_ding` if this version offers both" — measured against the live
+registry, the `event` domain is empty and this version offers one shape:
 
 ```yaml
   doorbell:
-    entity: event.<front_door>_ding    # or binary_sensor.<...>_ding
+    entity: binary_sensor.front_door_ding
+    stream: ring_doorbell
     connectivity: cloud
 ```
+
+That is `classifyDing()`'s **word shape** (rules 3–4), not the timestamp
+shape, and the difference is a real cost rather than a style point: a press
+that is the first thing the Panel hears about this entity after a gap is
+**lost**, because `on` restored from before the gap is byte-identical to `on`
+from a finger on the button. Only the next press rings.
+`panel/lib/domain/doorbell.dart` argues the alternative — ringing on first
+sight rings the house on every HA restart, and §1.4's #177014 turns that into
+a doorbell that then misses the real press.
+
+**There is a way to buy the timestamp shape back, and it is deliberately not
+wired.** `binary_sensor.front_door_ding` carries a `lastDingTime` attribute
+(ISO-8601; it read `"2026-08-01T01:33:04Z"` at commissioning). A template
+sensor exposing that as its **state** would give the classifier rule 2 —
+press-time identity plus a freshness window:
+
+```yaml
+# NOT INSTALLED — see the caveat below before you add this.
+template:
+  - sensor:
+      - name: "Front Door Ding At"
+        state: "{{ state_attr('binary_sensor.front_door_ding','lastDingTime') }}"
+```
+
+**UNVERIFIED:** whether ring-mqtt updates that attribute at the *instant* of
+the ding, or on some slower refresh. Only a real button press settles it, and
+a template that lags is a doorbell that rings late — worse than one that rings
+on a plain `on`. Press the button, watch the attribute, then decide.
+
+Not published, and worth knowing: **no battery entity**, so this unit is
+hardwired. Sizing anything on battery drain from live view is unnecessary
+here; the #177014 event-suppression argument is unaffected and still governs.
 
 ### 1.4 The #177014 rule
 
@@ -147,9 +195,34 @@ NVR/Frigate use of Ring cameras at all: it drains batteries, overheats
 devices, and suppresses the events the doorbell exists to deliver (§3.1).
 Do not plan Ring recording. Drive automations from *events*.
 
-Live-view plumbing (`rtsp://127.0.0.1:8556/<ring-device-id>_live` into
-`hub/go2rtc/go2rtc.yaml`) is phase 3 §3; the port remap to 8556 is
-already in `compose.yaml` because go2rtc owns 8554.
+Live-view plumbing is **done, 2026-08-05**. `hub/go2rtc/go2rtc.yaml` carries:
+
+```yaml
+  ring_doorbell:
+    - rtsp://127.0.0.1:8556/90486cf35236_live
+    - ffmpeg:ring_doorbell#video=mjpeg
+```
+
+The port remap to 8556 is in `compose.yaml` because go2rtc owns 8554 — and
+note that the placeholder in `go2rtc.example.yaml` said `8554` until this
+landed, which would have pointed go2rtc at itself. The device id is **read off
+the Hub, never typed**: `sensor.front_door_info` → `attributes.stream_Source`
+reports ring-mqtt's own in-container address
+(`rtsp://172.21.0.3:8554/90486cf35236_live`); take the id from it, not the
+address, because go2rtc is host-networked and dials the published port.
+
+**Measured end to end the same day.** `GET /api/stream.mjpeg?src=ring_doorbell`
+— the exact endpoint the appliance build consumes — returned **5,330,367 bytes
+containing 54 JPEG frames in 8 s**. That is the second producer doing its job:
+the RTSP source is H.264, and without the `ffmpeg:…#video=mjpeg` line the same
+request would have returned 200 OK with **zero bytes** and held the connection
+open (see the note in `go2rtc.example.yaml`).
+
+**And the #177014 teardown was measured, not assumed**, because that is the
+part that can quietly break the doorbell: pulling the stream flipped
+`switch.front_door_live_stream` to `on`, and **within 5 s** of the pull ending
+it was back `off` with go2rtc reporting `consumers: []`. The Ring session does
+not outlive the viewer. Re-check this if the Panel ever seems to stop ringing.
 
 ---
 

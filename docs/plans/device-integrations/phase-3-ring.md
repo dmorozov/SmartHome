@@ -5,7 +5,7 @@ authenticates it, binds the doorbell, and lays the go2rtc plumbing that
 phase 4's Panel popup will consume. Cloud, permanently (§3.1) —
 `connectivity: cloud` and at peace with it.
 
-## 1. Authenticate
+## 1. Authenticate — DONE 2026-08-05
 
 Browser → `http://<hub-ip>:55123` → Ring account + 2FA code. The refresh
 token lands in `hub/ring-mqtt-data/` (gitignored). `docker compose logs
@@ -23,15 +23,33 @@ similar) with, typically:
 
 ## 2. Bind the doorbell
 
-The `doorbell` kind opens the Popup on tap (vocabulary table) and its
-state is a `StatusState`. Bind the entity whose state changes on a press
-— check which of ding-event/binary_sensor this ring-mqtt version emits:
+**AS-BUILT 2026-08-05 — and the preference below did not get to apply.**
+ring-mqtt 5.9.3 on this Hub published **no `event.*` entity at all**: 15 mqtt
+entities, the `event` domain empty. So the choice this section spends a page
+arguing was made by the integration, not by us:
 
 ```yaml
   doorbell:
-    entity: event.<front_door>_ding    # or binary_sensor.<...>_ding
+    entity: binary_sensor.front_door_ding
+    stream: ring_doorbell
     connectivity: cloud
 ```
+
+Read the argument anyway — it is what the **cost** of that shape is, and the
+cost is now being paid: a press the Panel hears about for the first time after
+a gap is lost (rule 3), because `on` restored from before the gap and `on`
+from a finger on the button are the same string.
+
+**One unexplored way out, deliberately left unwired:**
+`binary_sensor.front_door_ding` carries a `lastDingTime` attribute in ISO-8601.
+An HA template sensor exposing that as its *state* would hand `classifyDing()`
+the timestamp shape after all — rule 2, with press-time identity and a
+freshness window. Whether ring-mqtt writes that attribute at the instant of the
+ding is **UNVERIFIED**; it needs a real press to settle, and a template that
+lags is worse than the word shape. Ch. 5 §1.3 carries the snippet and the
+caveat.
+
+The original argument, kept in full:
 
 **Prefer `event.<name>_ding`, and the preference is not cosmetic.** This
 stopped being a toss-up when §4's classifier landed

@@ -84,11 +84,28 @@ uses:
 ## Migration to the mini PC
 
 The stack moves **unchanged**: stop the stack, copy this entire directory
-(including the gitignored runtime state: `ha-config/.storage`, `z2m-data`
-database and network keys, Mosquitto persistence) to the mini PC, and
+(including the gitignored runtime state) to the mini PC, and
 `docker compose up -d` there. Nothing in the compose file is
 laptop-specific — the SLZB-06 is on the LAN, not on USB, so even the Zigbee
 radio needs no re-pairing.
+
+The runtime state that must come with it:
+
+| Path | Why it cannot be recreated |
+|---|---|
+| `ha-config/.storage` | Every config entry and credential, plus the auth store. 5 of its files are `0600 root`, so an unprivileged `tar` silently drops them |
+| `ring-mqtt-data/ring-state.json` | **The Ring refresh token.** Added to this list 2026-08-05, when B2 created it — before that the directory held nothing worth copying. Losing it is the only failure here that costs a **live 2FA session with a human present**, and it cannot be re-derived from anything |
+| `z2m-data` | Zigbee database and network keys — losing them re-pairs every Zigbee device by hand |
+| Mosquitto persistence | Retained messages and subscriptions |
+
+`go2rtc/go2rtc.yaml` and `z2m-data/configuration.yaml` are gitignored config
+rather than state — recreate them from their `.example` files, then re-add the
+camera credentials and the Zigbee coordinator address.
+
+**Never restore a stale `ring-state.json` over a newer one**, and never run two
+ring-mqtt instances against one Ring account: the token rotates in place, so a
+rolled-back or duplicated copy is expected to invalidate the session and drop
+you back at the 2FA prompt.
 
 Mosquitto is already off anonymous access (`allow_anonymous false` +
 `password_file`, decision D4 — see the comment block in

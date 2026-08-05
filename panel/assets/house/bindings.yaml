@@ -114,7 +114,25 @@ bindings:
     entity: input_boolean.tv_living
     connectivity: local
   light-living:
-    entity: input_boolean.light_living
+    # THE ENTRY LIGHT — Kasa HS103, 192.168.68.59, MAC 5C:A6:E6:09:B6:19.
+    # REPURPOSED 2026-08-05: this plug ran a refrigerator until that day, and
+    # Ch. 4 §4.1.1 still carries the safety analysis that made it unbindable.
+    # A `light` Key toggles on a single tap with no confirmation anywhere in
+    # the Panel (ADR-0006), so while a fridge was on it, a wall screen at child
+    # height was one mis-tap from silently killing it. The hazard is not
+    # mitigated, it is GONE — the load changed. Nothing in the Panel or the Hub
+    # can tell a fridge from a lamp, so if this plug is ever moved back onto
+    # something that must not lose power, THIS BINDING COMES OUT FIRST, before
+    # the plug is moved.
+    #
+    # Why `light-living` and not `light-hall`, which is what the entry
+    # actually is: `light-hall` is the test suite's canonical togglable-Device
+    # fixture and ha_hub_live_test toggles it against the dev Hub. Binding it
+    # to real hardware turns 8 tests red. `light-living` has no test
+    # references. Both names are placeholder-house fictions anyway (D5, same
+    # as outlet-outdoor-a) and get re-keyed when the real drawing lands —
+    # a bindings.yaml-only edit by design (ADR-0005).
+    entity: switch.entry_light
     connectivity: local
   cam-living:
     entity: sensor.living_cam
@@ -142,7 +160,37 @@ bindings:
 
   # Hall (front door south side)
   doorbell:
-    entity: sensor.ring_doorbell
+    # Ring doorbell via ring-mqtt 5.9.3, authenticated 2026-08-05. Cloud
+    # permanently — Ring has no local API at all (Ch. 5 §3.1), so this is not
+    # a gap waiting to be closed.
+    #
+    # THE WORD SHAPE, NOT THE TIMESTAMP SHAPE, and it is not a free choice:
+    # this ring-mqtt publishes NO `event.*` entity at all. Measured on the
+    # live Hub — 15 mqtt entities across binary_sensor/switch/select/camera/
+    # number/button/sensor, and zero in the `event` domain. The repo's
+    # standing advice was "prefer event.<name>_ding if this version offers
+    # both"; this version offers one, so classifyDing() rule 3/4 (the on/off
+    # words) is the path the doorbell actually takes here.
+    #
+    # WHAT THAT COSTS, stated because it is real and not fixable from here:
+    # a press that is the FIRST thing the Panel hears about this entity is
+    # lost — after a reconnect whose snapshot reported it `unavailable`,
+    # nothing survives the gap, and `on` restored from before the gap is
+    # byte-identical to `on` from a finger on the button. Only the next press
+    # rings. The alternative is ringing on first sight, which rings the house
+    # on every HA restart, and #177014 turns that into a doorbell that then
+    # misses the real press. See panel/lib/domain/doorbell.dart rule 3.
+    #
+    # There IS a way to buy the timestamp shape back: this binary_sensor
+    # carries a `lastDingTime` attribute (ISO-8601, e.g.
+    # "2026-08-01T01:33:04Z"), so an HA template sensor exposing that as its
+    # STATE would hand classifyDing() rule 2 — press-time identity plus a
+    # freshness window. NOT DONE, and deliberately not: whether ring-mqtt
+    # updates that attribute at the instant of the ding is UNVERIFIED, and
+    # verifying it needs somebody to press the button. Do not wire it on the
+    # assumption; a template that lags is a doorbell that rings late.
+    entity: binary_sensor.front_door_ding
+    stream: ring_doorbell
     connectivity: cloud
   thermostat:
     # ecobee Smart Thermostat Premium "Main Floor", paired LOCALLY over
@@ -154,6 +202,13 @@ bindings:
     entity: climate.main_floor
     connectivity: local
   light-hall:
+    # DELIBERATELY still a dev stand-in. The entry light was bound here first
+    # and reverted the same hour: `light-hall` is the test suite's canonical
+    # togglable-Device fixture (ha_hub_test, hub_contract_test — which runs
+    # against BOTH adapters — dollhouse_test, fake_hub_test), and
+    # ha_hub_live_test *toggles* it against the dev Hub, which real hardware
+    # can never satisfy. Pointing this Key at a real entity turns 8 tests red.
+    # The entry light lives on `light-living` instead; see there.
     entity: input_boolean.light_hall
     connectivity: local
 
@@ -191,7 +246,17 @@ bindings:
     entity: input_boolean.light_kids_bath
     connectivity: local
   light-landing:
-    entity: input_boolean.light_landing
+    # THE STAIRS LIGHT — Kasa HS103, 192.168.68.60, MAC 5C:A6:E6:09:B5:F8.
+    # REPURPOSED 2026-08-05 from the aquarium; same §4.1.1 note as the entry
+    # light on `light-living`, and the same standing rule: a pump and heater
+    # were on this socket, so if it ever goes back onto a load that must not
+    # lose power, this binding comes out before the plug moves.
+    #
+    # `light-stairs` was asked for and does NOT exist — house.yaml is
+    # generated from the drawing and says DO NOT EDIT BY HAND (ADR-0004/0005),
+    # so a new Key is a Sweet Home 3D session, not a YAML line. `light-landing`
+    # is the top of the stairs and has no test references. Re-key at F1.
+    entity: switch.stairs_light
     connectivity: local
   litter-robot:
     entity: sensor.litter_robot_5

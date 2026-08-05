@@ -130,46 +130,117 @@ curl -s "$HA/api/states" -H "Authorization: Bearer $TOKEN" \
 
 Read this before you touch `bindings.yaml`. It is not a style note.
 
-| Device | IP | What is actually on it |
-|---|---|---|
-| `switch.old_fridge` | 192.168.68.59 | **A refrigerator.** ON continuously for 8+ days. |
-| `switch.aquarium` | 192.168.68.60 | **A fish tank.** Pump and heater. ON continuously. |
+**Current, 2026-08-05 — both plugs were repurposed and both now drive lights:**
+
+| Entity | IP / MAC | What is actually on it | Bindable? |
+|---|---|---|---|
+| `switch.entry_light` | 192.168.68.59 · `5C:A6:E6:09:B6:19` | **The entry light.** Was a refrigerator until 2026-08-05 | **Yes** — bound to `light-living` (§4.1.1b) |
+| `switch.stairs_light` | 192.168.68.60 · `5C:A6:E6:09:B5:F8` | **The stairs light.** Was a fish tank until 2026-08-05 | **Yes** — bound to `light-landing` (§4.1.1b) |
+
+The hazard that governed this section for a day is **gone, not mitigated** —
+the loads changed. Read the analysis below anyway: it is the reason these two
+were unbindable, and it is the test to re-apply the day either plug moves again.
+
+#### The analysis, and why it no longer binds
 
 Under [ADR-0006](../../docs/adr/0006-togglability-is-decided-by-the-house.md)
 togglability is a property of the Device **kind**, decided in the drawing, not
-of the entity's live state. `outlet` is an on/off state family, so an `outlet`
-Key toggles on a single tap — **there is no confirmation step anywhere in the
-Panel, by design.** Binding either of these to `outlet-outdoor-a`,
-`outlet-outdoor-b`, or `outlet-master` puts "silently kill the fridge" one
-mis-tap away from a wall-mounted touchscreen at child height.
+of the entity's live state. `outlet` and `light` are both on/off state families,
+so either Key toggles on a single tap — **there is no confirmation step anywhere
+in the Panel, by design.** While these plugs ran a fridge and a fish tank, that
+put "silently kill the fridge" one mis-tap away from a wall-mounted touchscreen
+at child height. A light carries no such consequence, which is the whole of the
+change: the Panel behaves identically, the load does not.
 
-The options were: do not bind them at all (the Hub still owns them; the Panel
-simply has no pin), or give them a Key whose kind is a **reading** family rather
-than an on/off family.
+Note what did **not** save them, and could not have: nothing in the Panel, the
+Hub or the ADR can tell a fridge from a lamp. Both are `switch` entities that
+report `on`. The protection was always a human writing down what is physically
+plugged in — which is why this table is the first thing in the chapter, and why
+it has to be corrected the same day a plug is repurposed rather than the next
+time somebody edits `bindings.yaml`.
 
-#### Owner decision, 2026-08-04 — bind them normally
+#### Superseded — owner decision, 2026-08-04
 
-**The risk above was put to the owner explicitly, with ADR-0006's one-tap
-consequence spelled out, and the owner reaffirmed: bind "Old fridge" and
-"Aquarium" as normal outlets.** That is the decision of record. Do not
-re-litigate it, do not quietly implement the reading-family alternative instead,
-and do not treat a future reader's surprise as a bug report.
+**The risk was put to the owner explicitly, with ADR-0006's one-tap consequence
+spelled out, and the owner reaffirmed: bind "Old fridge" and "Aquarium" as
+normal outlets.** That was the decision of record for one day. It is now **moot
+rather than reversed** — it authorised accepting a hazard that no longer exists.
+Kept because the reasoning is worth re-reading, and because the standing rule it
+established still holds: this call is the owner's, not that of whoever is editing
+`bindings.yaml`.
 
-What the decision does **not** do is make the work smaller. These two still need
-**new Keys**, and under
-[ADR-0005](../../docs/adr/0005-devices-authored-in-the-drawing.md) a new Key is
-authored in the drawing — a Sweet Home 3D session — never a `bindings.yaml`
-edit. The kitchen has no outlet Key at all today. So this is drawing work
-before it is binding work; see §4.5.
+It also no longer implies the work it used to. That decision left both plugs
+waiting on **new outlet Keys drawn in Sweet Home 3D** — the kitchen has no
+outlet Key at all. As lights they need nothing of the sort: the placeholder
+house already carries 13 `light` Keys, so this became binding work instead of
+drawing work. The outlet arithmetic that used to appear here (four live sockets,
+three outlet Keys) is retired with it — the EP40's two children are the only
+outlets left, and they have `outlet-outdoor-a` / `-b`. `outlet-master` is spare.
 
-The three outlet Keys that exist today (`outlet-outdoor-a`, `outlet-outdoor-b`,
-`outlet-master`) are for the **EP40's two children** and one spare. They are not
-the answer here: there are four live switchable sockets and three outlet Keys,
-and the fridge and the aquarium are waiting on Keys that have not been drawn.
+#### 4.1.1a Entity ids were renamed, and the ids are the reason
 
-The safety analysis above stays in this chapter regardless of the decision. It
-is the reason the decision had to be made by the owner and not by whoever was
-editing `bindings.yaml` that day.
+The plugs were renamed **in Home Assistant**, which sets `name_by_user` on the
+*device*. That fixes every display surface and **moves no entity id** (§7.4) —
+so for a few hours `switch.old_fridge` was the entry light, and a binding would
+have had to say so. Both switch entities were therefore renamed properly, via a
+registry `new_entity_id` update:
+
+```
+switch.old_fridge  -> switch.entry_light    unique_id 5C:A6:E6:09:B6:19 (unchanged)
+switch.aquarium    -> switch.stairs_light   unique_id 5C:A6:E6:09:B5:F8 (unchanged)
+```
+
+`unique_id` is the plug's MAC and does not move, which is what proves these are
+the same two devices and not new registrations.
+
+**The diagnostic entities still carry the old ids** — `switch.old_fridge_led`,
+`sensor.aquarium_signal_strength`, `binary_sensor.old_fridge_cloud_connection`,
+`button.aquarium_restart` and the two `_on_since` sensors. Nothing binds them
+(§4.1.6) and they were left alone deliberately, but a `grep` for `aquarium` in
+this Hub still returns hits and that is expected, not leftover work.
+
+#### 4.1.1b Which Keys they took, and the trap in choosing one
+
+| Light | Key | The Key's fictional name |
+|---|---|---|
+| Entry | `light-living` | "Living Room Light" |
+| Stairs | `light-landing` | "Landing Light" |
+
+Both names are wrong about the house and that is fine — the placeholder house
+is a fiction, this is the D5 mismatch already accepted for `outlet-outdoor-a`
+on a "media" Key, and re-keying at **F1** is a `bindings.yaml`-only edit by
+design (ADR-0005).
+
+**`light-hall` is the one that should have taken the entry light, and it is
+deliberately not used.** It is the *test suite's* canonical togglable-Device
+fixture: `hub_contract_test` builds its world around it and runs that world
+against **both** adapters, and `ha_hub_test`, `dollhouse_test` and
+`fake_hub_test` all seed `input_boolean.light_hall`. Worse,
+`ha_hub_live_test` **toggles** `light-hall` against the dev Hub — a Key bound
+to real hardware can never satisfy that, because the dev Hub does not serve
+the entity. Binding `light-hall` to `switch.entry_light` was tried and turned
+**8 tests red**; the revert is why the entry light sits on a living-room Key.
+
+**The general trap, because this will happen again:** every Key moved to real
+hardware must also be added to `_integrated` in
+`panel/test/bindings_drift_test.dart`, which is the ledger of Keys expected
+*not* to resolve against the dev Hub. Before picking a Key, check it is not a
+test fixture:
+
+```bash
+cd panel && rg -c 'light-landing|light_landing' test/   # 0 = safe to take
+```
+
+A Key with zero test references is free. A Key the tests seed is not, and the
+failure will look like a broken adapter rather than a binding choice.
+
+**`light-stairs` was requested and does not exist.** There is no `stair`
+anywhere in `house.yaml` — only an "Upstairs" *floor*. Creating that Key is
+not a YAML edit: `house.yaml` opens with *"Generated by sh3d_to_yaml.py …
+DO NOT EDIT BY HAND (ADR-0004)"*, so a new Key is authored in Sweet Home 3D
+and the file regenerated. Doing that against the **placeholder** drawing would
+be throwaway work, since F1 replaces the whole house — which is why the stairs
+light took an existing Key instead.
 
 ### 4.1.2 These are local, and no TP-Link account is involved
 
@@ -342,13 +413,13 @@ ids; everything else is unchanged from 2026-08-04):
 
 | Entity | Bind? |
 |---|---|
-| `switch.old_fridge` | **No** — §4.1.1 |
-| `switch.aquarium` | **No** — §4.1.1 |
+| `switch.entry_light` | **Yes** — bound to `light-living` (§4.1.1b) |
+| `switch.stairs_light` | **Yes** — bound to `light-landing` (§4.1.1b) |
 | `switch.tp_link_smart_plug_722c` | **No** — parent, drives both outlets |
 | `switch.outdoor_outlet_a` | Yes — socket "Plug 1" (§4.1.5) |
 | `switch.outdoor_outlet_b` | Yes — the other socket (§4.1.5) |
-| `switch.old_fridge_led` | Never |
-| `switch.aquarium_led` | Never |
+| `switch.old_fridge_led` | Never — and the id is stale on purpose (§4.1.1a) |
+| `switch.aquarium_led` | Never — likewise |
 | `switch.tp_link_smart_plug_722c_led` | Never |
 | `binary_sensor.old_fridge_cloud_connection` | Never |
 | `binary_sensor.aquarium_cloud_connection` | Never |
@@ -370,7 +441,7 @@ Note these are **`binary_sensor`**, not `sensor` — the phase-2 plan calls them
 
 ```bash
 curl -s "$HA/api/states" -H "Authorization: Bearer $TOKEN" \
-  | jq -r '.[] | select(.entity_id|test("outdoor_outlet|722c|old_fridge|aquarium"))
+  | jq -r '.[] | select(.entity_id|test("outdoor_outlet|722c|entry_light|stairs_light|old_fridge|aquarium"))
                 | "\(.entity_id) = \(.state)"' | sort
 ```
 

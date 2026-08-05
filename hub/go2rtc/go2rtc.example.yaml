@@ -107,11 +107,26 @@ streams:
   #   - rtsp://user:pass@CAMERA-IP/live
   #   - ffmpeg:wyze_living_room#video=mjpeg
 
-  # Ring doorbell arrives via ring-mqtt's RTSP output when that container is
-  # added (research §3.1).
+  # Ring doorbell, via ring-mqtt's RTSP output. LIVE on this Hub since
+  # 2026-08-05; the shape is here because the live file is gitignored.
   # ring_doorbell:
-  #   - rtsp://127.0.0.1:8554/RING-CAMERA-ID_live
+  #   - rtsp://127.0.0.1:8556/RING-CAMERA-ID_live
   #   - ffmpeg:ring_doorbell#video=mjpeg
+  #
+  # THE PORT IS 8556, NOT 8554, and this line said 8554 until 2026-08-05.
+  # 8554 is go2rtc's OWN RTSP port, so the old value pointed go2rtc at itself.
+  # compose.yaml publishes ring-mqtt's 8554 as host 8556 for exactly that
+  # reason, and go2rtc is host-networked so it dials the published port.
+  #
+  # RING-CAMERA-ID is read off the Hub, never typed from memory:
+  #   sensor.front_door_info -> attributes.stream_Source
+  # which reports ring-mqtt's own in-container address
+  # (rtsp://<bridge-ip>:8554/<id>_live). Take the id from it, not the address.
+  #
+  # #177014: pulling this opens a REAL Ring cloud session, which can suppress
+  # the ding and motion events the doorbell exists to deliver. No always-on
+  # consumer, ever — the Panel opens video on tap and closes it with the
+  # Popup.
 
   # The synthetic pattern every check in the docs is runnable against, with
   # no Ring and no Wyze credentials — and written in the two-producer shape
