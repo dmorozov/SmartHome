@@ -19,7 +19,7 @@ streams:
 
   # Ring doorbell: ring-mqtt runs its own RTSP server INSIDE the compose
   # network. The exact path (device id) is shown in the ring-mqtt web UI at
-  # http://localhost:65123 and in `docker compose logs ring-mqtt`:
+  # http://localhost:65123 and in `docker logs ring-mqtt-dev`:
   # ring_doorbell: rtsp://ring-mqtt:8554/RING-CAMERA-ID_live
 
 webrtc:

@@ -15,9 +15,11 @@ import 'golden_setup.dart';
 /// working on it: `flutter test --update-goldens test/golden` regenerates
 /// every scene in a couple of seconds.
 ///
-/// Goldens are host-rendered, so a small pixel tolerance is allowed (see
-/// golden_setup.dart). Regenerate and eyeball the diff rather than
-/// rubber-stamping a failure.
+/// Goldens are baked in the devcontainer — the canonical golden host
+/// (ADR-0009) — and match exactly there; the tolerance knob in
+/// golden_setup.dart exists only for genuine cross-rebuild drift inside
+/// the container. Regenerate (in-container) and eyeball the diff rather
+/// than rubber-stamping a failure.
 void main() {
   setUpPanelGoldens();
 

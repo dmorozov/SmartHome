@@ -48,14 +48,10 @@ void goldenTest(String description, Future<void> Function(WidgetTester) body) {
 /// [video] defaults to unconfigured, and every committed golden depends on
 /// it staying that way: an unconfigured Popup draws the same box, icon and
 /// sentence it drew before go2rtc existed, so `goldens/device_popup.png`
-/// stays the picture it already is. Pointing a golden at a live view would
-/// mean baking a new one on this host, which phase-0 open item 13 says
-/// nobody can do yet.
-///
-/// Since phase 7 (2026-08-05) every scene also carries the right-edge
-/// **Cameras tab** over the Dollhouse, which the committed goldens predate —
-/// so the next regeneration will differ for that reason as well as for the
-/// item-13 fonts. Regenerate and eyeball both causes together.
+/// stays the picture it already is. Pointing a golden at a live view means
+/// deliberately baking a new one — in the devcontainer only, the canonical
+/// golden host (ADR-0009; phase-0 item 13 closed with the 2026-08-06
+/// in-container bake, which already includes the phase-7 Cameras tab).
 Future<void> pumpPanel(
   WidgetTester tester,
   HubController controller, {
@@ -148,10 +144,13 @@ Directory? _materialFontsDir() {
 /// ~1,150 — so a loose tolerance would let an entire pin change without
 /// anyone noticing, which is most of what these goldens are guarding.
 ///
-/// The knob exists only for the day the goldens go permanently red on the
-/// Linux laptop rather than here (Skia anti-aliases differently across
-/// platforms). Raise it as little as possible, and keep it well under the
-/// size of the smallest thing you want to catch.
+/// The goldens are baked and verified in the devcontainer, the canonical
+/// golden host (ADR-0009); red on any other machine is the expected
+/// out-of-container state and safe to ignore. The knob exists only for
+/// genuine cross-rebuild drift *inside* the container — an SDK or
+/// base-image bump shifting Skia's anti-aliasing. Raise it as little as
+/// possible, and keep it well under the size of the smallest thing you
+/// want to catch.
 void _useTolerantComparator(double tolerance) {
   final current = goldenFileComparator as LocalFileComparator;
   goldenFileComparator =

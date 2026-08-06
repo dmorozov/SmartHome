@@ -20,7 +20,10 @@ URL="${1:-http://localhost:8100/}"
 OUT="${2:-panel-shot.png}"
 W="${3:-1440}"
 H="${4:-900}"
-CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+# Resolution order: explicit $CHROME wins, then $CHROME_EXECUTABLE (the
+# devcontainer image sets it — amd64 only, Chrome ships no arm64 Linux
+# build), then the Mac app path as a last resort.
+CHROME="${CHROME:-${CHROME_EXECUTABLE:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}}"
 
 if [ ! -x "$CHROME" ]; then
   echo "Chrome not found at: $CHROME" >&2

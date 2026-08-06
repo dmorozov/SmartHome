@@ -555,7 +555,7 @@ binding for an entity id that does not exist yet.
 | 2 | `config/entity_registry/update` with `new_entity_id` (and `name`) | Hub | **The id never changes.** `bindings.yaml` keeps working against the old ugly id — nothing is broken, but the rename did not happen |
 | 3 | Repoint the Key in [`../../panel/assets/house/bindings.yaml`](../../panel/assets/house/bindings.yaml) | repo | **This is the dangerous one.** The Panel still boots — nothing validates entity existence at load. The pin goes blank forever and the only evidence is one `hub.missing_entities` line (§7.7.3) |
 | 4 | Add the Key to `_integrated` in [`../../panel/test/bindings_drift_test.dart`](../../panel/test/bindings_drift_test.dart) | repo | `flutter test` goes red: *"binding(s) point at entities the dev Hub does not serve"*. The suite is correct; real entity ids are not in `hub/dev/ha-config/packages/panel_dev.yaml` and never will be |
-| 5 | `flutter test` | repo | You find out on the wall instead of at the laptop |
+| 5 | `flutter test` | repo | You find out on the wall instead of in the devcontainer |
 
 Notes that only bite in practice:
 
@@ -919,7 +919,12 @@ One commit, both files. Then restart the Panel (§7.5).
 
 ## 7.9 Verification checklist
 
-Run after any operation in this chapter. Every line is pasteable.
+Run after any operation in this chapter. Every line is pasteable. (The paths
+are the Hub host's checkout; in the devcontainer the same files sit under
+`/workspaces/SmartHome` — and there, `127.0.0.1:8123` reaches nothing, so
+use `HA=http://192.168.68.81:8123` and
+`TOKEN=$(cat /workspaces/SmartHome/hub/token)`, same as Ch. 6's
+from-the-devcontainer note.)
 
 ```bash
 export HA=http://127.0.0.1:8123

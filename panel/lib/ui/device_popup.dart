@@ -589,9 +589,9 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
 /// A null [session] means nothing was dialled, which renders exactly what
 /// this Popup rendered before go2rtc existed — same box, same icon, same
 /// sentence. That is not nostalgia: `test/golden/goldens/device_popup.png`
-/// was baked before this feature and phase-0 open item 13 means no golden
-/// can be re-baked on this host, so the unconfigured body has to stay the
-/// pixels it already is.
+/// pins those pixels, and changing this body means re-baking that golden
+/// on purpose — in the devcontainer only, the canonical golden host
+/// (ADR-0009) — not as a side effect of a video change.
 class _LiveVideoBox extends StatelessWidget {
   const _LiveVideoBox({required this.session});
 

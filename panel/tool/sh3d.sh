@@ -30,12 +30,20 @@
 
 set -e
 
+# Runs on a HOST, and today that means a Mac: Sweet Home 3D is the repo's
+# one host-side GUI tool (ADR-0009) — only its converter runs in the
+# devcontainer — and this wrapper drives the macOS app bundle layout
+# (SH3D_APP may point at a different .app, but there is no Linux path in
+# here). On Linux, set the same JVM property by hand:
+#     JAVA_TOOL_OPTIONS="-Dcom.eteks.sweethome3d.additionalFurnitureProperties=placementKey,kind" sweethome3d
 APP="${SH3D_APP:-/Applications/Sweet Home 3D.app}"
 BIN="$APP/Contents/MacOS/SweetHome3D"
 
 if [ ! -x "$BIN" ]; then
   echo "Sweet Home 3D not found at $APP" >&2
-  echo "Install it (brew install --cask sweet-home3d) or set SH3D_APP." >&2
+  echo "Set SH3D_APP to your .app bundle (brew install --cask sweet-home3d)." >&2
+  echo "This is a macOS wrapper; on Linux pass the property by hand — see" >&2
+  echo "the header comment. It never runs in the devcontainer." >&2
   exit 1
 fi
 

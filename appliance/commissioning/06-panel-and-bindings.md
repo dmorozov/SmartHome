@@ -264,7 +264,11 @@ never a Flutter rebuild.
 `localhost:8123`. On web, `--dart-define` is the only route. The boot log says
 `env=unavailable` when this is happening.
 
-Linux desktop — this laptop, and the kiosk target:
+Linux desktop — the appliance/kiosk build, run on the machine that owns the
+display (the interim Hub host today, the mini PC later). This is the Panel
+running where it lives, not a development flow — development happens in the
+devcontainer
+([ADR-0009](../../docs/adr/0009-development-in-the-devcontainer-on-the-target-os.md)):
 
 ```sh
 cd panel
@@ -283,7 +287,8 @@ flutter run -d chrome \
 ```
 
 `127.0.0.1` works from the Hub host itself because Home Assistant is
-host-networked. From the Mac, use `192.168.68.81:8123`.
+host-networked. From the devcontainer (or any machine on the LAN), use
+`192.168.68.81:8123`.
 
 The token is the Hub's long-lived access token, kept at `hub/token`
 (gitignored, 0600). `$(cat …)` keeps it out of shell history. The Panel logs
@@ -663,6 +668,10 @@ cd panel
 PANEL_LIVE_HUB=1 HA_URL=http://192.168.68.81:8123 HA_TOKEN="$(cat ../hub/token)" \
   flutter test test/ha_hub_live_test.dart
 ```
+
+The devcontainer terminal runs it fine — outbound LAN routing works from
+in-container, so `192.168.68.81` is reachable there like from any machine on
+the network.
 
 It loads the real `bindings.yaml` through `test/test_house.dart` and asserts
 Device readings against the **Device vocabulary's seed values** — the dev

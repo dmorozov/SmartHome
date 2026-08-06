@@ -19,7 +19,13 @@ Panel development (Flutter web/macOS against the laptop's Hub over LAN)
 and the disposable protocol sandbox `hub/dev/` (bridge networking,
 generated stand-in entities, cloud-only services — nothing
 discovery-dependent may be attempted there, and its results must never be
-read as evidence about production networking).
+read as evidence about production networking). **Both Mac roles are
+superseded by
+[ADR-0009](0009-development-in-the-devcontainer-on-the-target-os.md):**
+Panel development and the `hub/dev/` sandbox moved into the devcontainer,
+which runs the same on a Mac — and the sandbox's
+nothing-discovery-dependent rule travels with it unchanged. The decision
+above — no multicast stack on macOS, ever — stands.
 
 **Consequences:** the house's Hub is up only while the laptop is; real
 Hub state (HA config, Ring token, HomeKit pairings) accumulates on the

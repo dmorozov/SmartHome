@@ -130,9 +130,10 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 
 ## Repository layout
 
+- `.devcontainer/` — the development environment (ADR-0009): pinned toolchain on the mini-PC target OS + the dev Hub stack as sibling containers; its `README.md` is the how-to
 - `appliance/` — provisioning for the Appliance (laptop now, mini PC later): Ansible playbooks (`ansible/`), interactive diagnostics (`scripts/`), disposable Docker test host (`test/`)
 - `hub/` — the Hub stack: Docker Compose (HA, Mosquitto, Zigbee2MQTT, go2rtc, pinned), HA config, `custom_components/` for future device fixes (volume-mounted — no custom image until system deps demand one)
-- `panel/` — the Panel Flutter app: dollhouse UI prototype, `FakeHub` and the real Home Assistant WebSocket client (pick with `HUB=fake|ha` in the environment, or `--dart-define=HUB=fake|ha` — the only route on web), structured `[panel]` logging, and golden tests that render the UI headlessly (runs on web/macOS today; Linux/kiosk validation comes with the spike)
+- `panel/` — the Panel Flutter app: dollhouse UI prototype, `FakeHub` and the real Home Assistant WebSocket client (pick with `HUB=fake|ha` in the environment, or `--dart-define=HUB=fake|ha` — the only route on web), structured `[panel]` logging, and golden tests that render the UI headlessly (baked and verified in the devcontainer, the canonical golden host; kiosk validation comes with the spike)
 - `spike/` — the Flutter-under-cage validation app + bootstrap script; runbook in `docs/research/flutter-cage-spike.md`
 - `docs/` — research (cited), ADRs, agent docs; `CONTEXT.md` — domain glossary
 
@@ -175,11 +176,11 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 - **Screen power (night blank / wake on touch)**: REQUIRED, mechanism-flexible. Research finding: cage has no wlr-output-power-management, so `wlopm` does not work. Priority order: `wlr-randr --off/--on` trick (spike pass-item 9) → DDC/CI via `ddcutil` (panel-dependent) → compositor swap to sway/labwc → Flutter-side night mode as last resort.
 - **Runbook**: `docs/research/flutter-cage-spike.md` — 10-step layer-by-layer procedure (evtest → libinput → cage → Flutter), 13-item pass/fail checklist, 5-rung fallback ladder, verbatim systemd/PAM units, hybrid-GPU Step 0a for the laptop.
 
-## Development topology (decided 2026-07-30)
+## Development environment (decided 2026-08-06 — [ADR-0009](docs/adr/0009-development-in-the-devcontainer-on-the-target-os.md); the 2026-07-30 host/Mac topology is superseded)
 
-- **Primary dev box**: the Intel laptop (Lenovo Legion 9 16IRX8 — i9-13980HX, Intel UHD iGPU, NVIDIA RTX 4090 Laptop dGPU), Ubuntu 26.04 LTS, GNOME for daily work (NVIDIA proprietary driver 595.84 OK for the desktop). One machine does: Flutter UI dev natively (hot reload + Linux release builds), the Docker hub stack (HA, Mosquitto, Zigbee2MQTT, go2rtc) with real host networking + mDNS device discovery, and the cage spike (on the `i915` iGPU, separate TTY or DE stopped).
-- **macOS**: optional secondary for UI dev (`flutter run -d macos`); cannot build Linux bundles and Docker-on-macOS breaks multicast/mDNS (kills Ecobee HomeKit-controller pairing and TV discovery) — so the laptop hosts everything stateful. **Exception (2026-07-31)**: `hub/dev/` runs Home Assistant alone on the Mac (arm64 image, same 2026.7 pin) with a generated stand-in fleet, so the Panel's `HubClient` can be developed against real HA protocol traffic without the appliance. Only discovery-dependent integrations need the Linux box.
-- **Migration**: the Docker stack moves unchanged from laptop to mini PC when it arrives.
+- **All development runs in the devcontainer** — open the repo in VS Code, "Reopen in Container", done. [`.devcontainer/README.md`](.devcontainer/README.md) is the guide; the hook scripts are the setup documentation. Inside: Flutter 3.44.8 pinned on **Ubuntu 24.04 — the mini-PC target OS, deliberately not the host's 26.04** (which sits outside Flutter's supported 20.04–24.04 range) — full web + Linux toolchains, and the dev Hub stack (`hub/dev/`) up automatically as sibling containers on shifted host ports. Appliance bundles built in it are glibc-guaranteed to run on the mini PC; the goldens are baked in it and canonical there; it works the same on any machine with Docker, Apple silicon included.
+- **The laptop keeps its non-development roles**: interim production Hub host (ADR-0008 — `hub/compose.yaml`, host networking, mDNS; the canonical ports on this machine are the real house's), and the physical half of spike day (cage on the `i915` iGPU, the touchscreen). Both are appliance concerns, documented in `appliance/`.
+- **Migration**: the production Docker stack moves unchanged from laptop to mini PC when it arrives.
 
 ## First implementation steps (original plan — superseded, kept for the shape of it)
 
@@ -202,6 +203,10 @@ phase plans; what still needs *you* is in [TODO — needs you](#todo--needs-you)
 
 ### First time initialization
 
+Opening the repo in the devcontainer brings the dev Hub up and prints
+these same steps (`post-create.sh` §3); they are manual because they
+create credentials:
+
 1. open http://localhost:18123, finish onboarding (18123, not 8123: the dev
    Hub publishes shifted host ports because the production stack runs on the
    same machine and owns the canonical ones — hub/dev/compose.yaml's header
@@ -222,11 +227,8 @@ Live demo: https://demo.home-assistant.io/#/lovelace/home
 
 ### Create a house
 
-0. Install Seet Home 3D
-
-You can use free version or install from the App Store (OSX):
-
-```bash
-brew install --cask sweet-home3d
-```
+0. Install Sweet Home 3D — the one GUI tool that stays on a host machine
+   (the converter it feeds runs in the devcontainer). Free from
+   <https://www.sweethome3d.com/>; on a Mac, `brew install --cask
+   sweet-home3d` also works.
 

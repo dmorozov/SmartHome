@@ -100,9 +100,9 @@ const defaultHaUrl = 'http://localhost:8123';
 /// a rebuild is never involved.
 ///
 /// Build defines remain the fallback so the documented dev loop
-/// (`flutter run -d chrome --dart-define=HA_URL=...`) is unchanged, and so
-/// the web build — which has no process environment — behaves exactly as it
-/// did.
+/// (`flutter run -d web-server --dart-define=HA_URL=...`) is unchanged, and
+/// so the web build — which has no process environment — behaves exactly as
+/// it did.
 ///
 /// An environment variable that is present but **empty** counts as absent. A
 /// blank `HA_TOKEN` exported by a shell should not silently defeat the token

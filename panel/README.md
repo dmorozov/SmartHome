@@ -59,11 +59,16 @@ runner patches) once the spike passes.
 `HubClient` has two implementations; `lib/main.dart` picks one at boot.
 
 ```sh
-flutter run -d chrome                       # FakeHub (default)
-flutter run -d chrome --dart-define=HUB=ha \
+flutter run -d web-server --web-port 8080   # FakeHub (default)
+flutter run -d web-server --web-port 8080 --dart-define=HUB=ha \
   --dart-define=HA_URL=http://localhost:18123 \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
+
+Then open `localhost:8080` in the **host** browser. `localhost:18123` is
+right *because* of that: the dart-defines are dialled by the browser, which
+runs on the host, where the dev Hub's shifted ports live
+([`.devcontainer/README.md`](../.devcontainer/README.md)'s addressing rule).
 
 `HUB`, `HA_URL`, `HA_TOKEN` and `GO2RTC_URL` are read from the **process
 environment first**, falling back to the build's `--dart-define`, then to the
@@ -73,18 +78,25 @@ thing that could exist, so `GO2RTC_URL` is the only **address** the Panel
 refuses to guess. [Live video in the Popup](#live-video-in-the-popup) says why,
 and is where that setting is documented.
 
-**The environment form works on every target except web.** `-d chrome` is a
-web build, and web has no process environment — a `HA_URL=…` prefix there is
+**The environment form works on every target except web.** `-d web-server` is
+a web build, and web has no process environment — a `HA_URL=…` prefix there is
 silently discarded and you get FakeHub on the **built-in default**,
 `localhost:8123` (`defaultHaUrl` — a property of the binary, so the dev
 Hub's shifted host ports do not move it). So use
-`--dart-define` with `-d chrome`, and the environment with `-d linux`
-(the kiosk/cage target), `-d macos`, or `flutter test`:
+`--dart-define` with `-d web-server`, and the environment with `flutter
+test` and with `-d linux` (the appliance/kiosk path, not a dev loop —
+ADR-0009). In the devcontainer the environment form dials by service
+name — this is the live end-to-end test, runnable as written:
 
 ```sh
-HUB=ha HA_URL=http://localhost:18123 HA_TOKEN="$(cat ../hub/dev/token)" \
-  flutter run -d linux
+PANEL_LIVE_HUB=1 HUB=ha HA_URL=http://homeassistant:8123 \
+  HA_TOKEN="$(cat ../hub/dev/token)" flutter test test/ha_hub_live_test.dart
 ```
+
+On the appliance the same mechanism carries the real Hub's address
+(`127.0.0.1:8123` + `hub/token` — Ch. 6 §6.5); there is no documented
+environment where `flutter run -d linux` pairs with the dev Hub's
+`localhost:18123`.
 
 The order matters on the appliance: the Hub's address is an operational
 setting, not a property of the binary. A Hub that moves — or an unreserved
@@ -124,7 +136,8 @@ entity is read depends on the **Device's kind**, not the entity's domain, so a
 washer behind a `sensor.*` and one behind a vendor integration both fold into
 a `StatusState`. Devices without an `entity:` render with unknown state.
 
-Run a Home Assistant to develop against — on this Mac, no appliance needed:
+The Home Assistant to develop against comes up with the devcontainer
+automatically, as sibling containers — no appliance needed:
 [`../hub/dev/README.md`](../hub/dev/README.md).
 
 ## Live video in the Popup
@@ -143,7 +156,7 @@ Two settings feed it, deliberately at opposite ends of the House Plan:
 | Which stream a Device plays | `stream:` in `bindings.yaml`, per Device | `ring_doorbell` — a **name**, never a URL |
 
 ```sh
-flutter run -d chrome --dart-define=GO2RTC_URL=http://127.0.0.1:11984
+flutter run -d web-server --web-port 8080 --dart-define=GO2RTC_URL=http://127.0.0.1:11984
 ```
 
 `GO2RTC_URL` has **no built-in default**, and `HA_URL` does. That asymmetry is
@@ -278,11 +291,13 @@ house's configuration and make every camera two entries that can drift apart.
 
 **What is not proven.** The MJPEG player has been driven against the live
 go2rtc and through the whole suite, but **never in the cage kiosk it ships
-to** — this host has no clang/cmake/ninja/GTK, so `flutter build linux` has
-never run here (phase-0 open item G4). The MSE player was driven in real
-Chrome against the live server, but its `HtmlElementView` was never *mounted*
-in a widget tree. Both gaps are stated again in the code, at the class that
-carries them.
+to** — no longer for want of a build: `flutter build linux --release` ran on
+the Hub host 2026-08-04 (**G4**, done — root README) and in the devcontainer
+2026-08-06, whose bundle's measured glibc ceiling (`GLIBC_2.34`) runs on the
+24.04 mini PC; what is still missing is cage itself and a touchscreen
+(**A7**/**G6**). The MSE player was driven in real Chrome against the live
+server, but its `HtmlElementView` was never *mounted* in a widget tree. Both
+gaps are stated again in the code, at the class that carries them.
 
 ### Five answers, because one grey rectangle would be a lie
 
@@ -420,15 +435,19 @@ real Ring stream takes 2–5 s to *start*, because ring-mqtt only opens the
 cloud session when an RTSP client connects, and that is on top of the 2.1 s
 MJPEG transcode spin-up.
 
-**2. The appliance build has never been compiled.** `flutter build linux`
-needs clang, cmake, ninja and the GTK dev headers, and this host has none of
-them (phase-0 open item **G4**). The MJPEG player is exercised by the suite on
-the Dart VM and has been run end-to-end against the live server from here —
-but the cage kiosk it actually ships to has never rendered a frame of it, and
-saying otherwise would be inventing evidence. Same class of gap on the other
-side: `MseLiveVideoSession.view` was proven in Chrome with no widget tree
-around it, so `HtmlElementView.fromTagName` and the reparenting of the
-`<video>` element into it are argued for and untested.
+**2. The appliance build has never run in the cage.** Compiling it stopped
+being the gap on 2026-08-04: `flutter build linux --release` succeeded on the
+Hub host (**G4**, done — the root README records the release binary running
+headless under Xvfb against the real Hub and go2rtc, MJPEG test pattern
+rendering in the Popup), and the devcontainer ships the full Linux toolchain
+— the same build verified in-container 2026-08-06, the bundle's measured
+glibc ceiling (`GLIBC_2.34`) fine on the 24.04 mini PC. What still stands is
+cage and touch (**A7**/**G6**): Xvfb with software GL is not the kiosk
+compositor, so the cage the Panel actually ships into has still never drawn a
+frame of it, and saying otherwise would be inventing evidence. Same class of
+gap on the other side: `MseLiveVideoSession.view` was proven in Chrome with
+no widget tree around it, so `HtmlElementView.fromTagName` and the reparenting
+of the `<video>` element into it are argued for and untested.
 
 **Settled 2026-08-04, and no longer on this list: go2rtc's cross-origin
 refusal (E8).** It used to 403 any WebSocket upgrade carrying an `Origin`
@@ -667,9 +686,8 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 
 | Target | Command | Works on |
 |---|---|---|
-| Web | `flutter run -d chrome` | this Mac, today |
-| macOS desktop | `flutter run -d macos` | Mac — needs full Xcode (App Store) + CocoaPods, not just Command Line Tools |
-| Linux desktop | `flutter run -d linux` | the dev laptop (Ubuntu) — also the kiosk/cage path |
+| Web | `flutter run -d web-server --web-port 8080` | the devcontainer (host browser via forwarded 8080) — the dev loop |
+| Linux desktop | `flutter run -d linux` | builds in the devcontainer; runs where there is a display — the appliance/kiosk path, not a dev loop |
 
 Screenshot the web build without a visible browser (handy for checking the
 kiosk's real resolution, and for agents/CI):
@@ -678,6 +696,11 @@ kiosk's real resolution, and for agents/CI):
 flutter build web --profile && (cd build/web && python3 -m http.server 8100 &)
 tool/shot.sh http://localhost:8100/ /tmp/panel.png 1920 1080
 ```
+
+`tool/shot.sh` resolves Chrome as: explicit `$CHROME`, else
+`$CHROME_EXECUTABLE` — which the devcontainer image sets — so this runs
+in-container exactly as written; except on Apple-silicon hosts, where the
+image ships no Chrome (amd64-only).
 
 ## Diagnostics
 
@@ -818,19 +841,27 @@ Popup, and an unreachable Hub. They catch unintended changes to the
 dollhouse's shape, and on failure write `failures/*_isolatedDiff.png`
 showing exactly what moved.
 
-**Five of them are red on the Ubuntu 26.04 Hub host right now**, and that is
-host font drift from the 25.10 → 26.04 upgrade, not a code change — tracked
-as [phase-0 open item 13](../docs/plans/device-integrations/phase-0-laptop-bring-up.md).
-The Popup's video work was built to leave them exactly as they were rather
-than take item 13's decision inside an unrelated feature: an unconfigured
-`GO2RTC_URL` renders the same box, icon and sentence the Popup rendered before
-go2rtc existed, byte for byte, which is why no golden was added or re-baked
-for any of it. Until item 13 is settled, a golden change here means one host
-is green and the other cannot be.
+**The devcontainer is the canonical golden host**
+([ADR-0009](../docs/adr/0009-development-in-the-devcontainer-on-the-target-os.md)):
+the goldens were baked in it 2026-08-06, where the whole suite runs **398
+pass / 1 skip / 0 failures**. Green is promised there and nowhere else — a
+host renders with its own font stack, so red on any non-container host is the
+expected state, and the host's problem rather than the goldens'. Red
+*in-container* is the signal that matters: a real rendering change, or a
+moved SDK pin — investigate before touching `--update-goldens`, and never
+re-bake outside the devcontainer.
+
+*Historical note:* five goldens ran red on the Ubuntu 26.04 Hub host through
+2026-08-05 — font drift from the 25.10 → 26.04 upgrade, tracked as
+[phase-0 item 13](../docs/plans/device-integrations/phase-0-laptop-bring-up.md)
+— and the problem was unresolvable while the goldens were baked on one host
+and checked on another: any golden change meant one host green and the other
+could not be. The in-container bake **closed item 13**: cross-host drift
+stopped being a defect the day green stopped being promised on hosts.
 
 ```sh
 flutter test test/golden                    # check
-flutter test --update-goldens test/golden   # regenerate, then look at them
+flutter test --update-goldens test/golden   # re-bake — devcontainer only; then look at them
 python3 tool/test_sh3d_to_yaml.py           # the converter's own suite
 ```
 
@@ -840,10 +871,12 @@ default: real fonts (loaded from the Flutter SDK's cache, so no font
 binaries in the repo) and real shadows (`debugDisableShadows`, without
 which the neumorphic look disappears).
 
-Matching is exact, and should stay close to it: at 1280×800 even a 1%
-tolerance is ~10,000 pixels while a whole 34px Device pin is only ~1,150,
-so a loose tolerance would let an entire pin change unnoticed. The images
-are host-rendered, so if they ever go permanently red on the Linux laptop
-rather than here, raise `tolerance` on `setUpPanelGoldens` as little as
-possible. Either way: regenerate and eyeball the diff, don't rubber-stamp
-a failure.
+Matching is exact, and with one canonical host it can stay exact: at
+1280×800 even a 1% tolerance is ~10,000 pixels while a whole 34px Device pin
+is only ~1,150, so a loose tolerance would let an entire pin change
+unnoticed. The `tolerance` dial on `setUpPanelGoldens` existed to reconcile
+two rendering hosts (a Mac baking, a Linux laptop checking); that framing is
+obsolete — one image both bakes and checks, so there is no cross-host drift
+left to absorb, and red elsewhere is answered by running the check
+in-container, not by loosening the match. When a golden does move
+in-container: regenerate and eyeball the diff, don't rubber-stamp a failure.

@@ -48,7 +48,7 @@ brew install --cask sweet-home3d
 
 Or download it from <https://www.sweethome3d.com/download.jsp>. It's Java-based and the installer bundles everything.
 
-You also need Python 3, which is already on the Mac. Check with `python3 --version` if you like; the converter uses nothing you'd have to install.
+You also need Python 3, which the devcontainer already has (and most host machines too). Check with `python3 --version` if you like; the converter uses nothing you'd have to install.
 
 ## 1.2 Build and import the device markers
 
@@ -222,8 +222,10 @@ This reads your real files and checks everything fits together: every device has
 Then look at it:
 
 ```sh
-flutter run -d chrome
+flutter run -d web-server --web-port 8080
 ```
+
+— and open `localhost:8080` in the host browser.
 
 If the geometry looks wrong, fix the *drawing* and convert again. Never edit `house.yaml` — the next conversion would erase it.
 

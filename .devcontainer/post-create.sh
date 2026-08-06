@@ -46,7 +46,12 @@ else
   echo "         mounted (docker-outside-of-docker feature)? Try: docker ps"
 fi
 
-curl -fsSL https://claude.ai/install.sh | bash
+# Claude Code CLI, refreshed on every container create. The devcontainer
+# FEATURE (devcontainer.json, digest-pinned) installs it at image-build
+# time, but the CLI self-ships faster than images rebuild — this keeps it
+# current without unpinning the feature. Failure is non-fatal by design
+# (|| true): no network at create time must not brick the container.
+curl -fsSL https://claude.ai/install.sh | bash || true
 
 # ---- 3. What remains is yours — these steps create credentials --------------
 # Same steps as hub/dev/README.md "Bring it up"; addresses adjusted for
@@ -105,9 +110,10 @@ cat <<'EOF'
      docker restart homeassistant-dev # after regenerating panel_dev.yaml
  Recreating the stack = VS Code "Rebuild Container", or compose on the host.
 
- Goldens: host-rendered — the committed images may differ on this host for
- font reasons alone (phase-0 open item 13 tracks exactly this). Regenerate
- and eyeball diffs; don't commit a regeneration just to make CI-of-one green.
+ Goldens: THIS container is the canonical golden host (ADR-0009; baked
+ 2026-08-06, suite 398/1/0 in here). A red golden in-container is a real
+ change — investigate, and re-bake (--update-goldens) only in here, never
+ on a host. Red on a host machine is expected and means nothing.
 
 EOF
 echo "== post-create done =="

@@ -1,9 +1,10 @@
 # Development Hub
 
-A real Home Assistant for the Panel to talk to, running on whatever
-machine you are coding on — including an Apple-silicon Mac (the HA image
-ships an arm64 variant, verified against the same `2026.7` pin the
-appliance uses).
+A real Home Assistant for the Panel to talk to, brought up automatically
+as the devcontainer's sibling containers (ADR-0009) on whatever machine
+hosts the devcontainer — Apple-silicon Macs included, because the HA
+image ships an arm64 variant, verified against the same `2026.7` pin the
+appliance uses.
 
 This started as HA-alone, so the Panel's WebSocket `HubClient` could be
 built against real HA protocol traffic instead of waiting for the mini PC.
@@ -28,29 +29,31 @@ stand-in (below).
 
 ## Bring it up
 
-The repo's devcontainer (`.devcontainer/`) uses this same compose file as
-its base: opening the repo in a devcontainer brings this stack up as
-sibling containers and seeds the two gitignored files below automatically
-(`.devcontainer/initialize.sh` is the script that does it, and says why).
-The by-hand-in-the-browser steps further down still apply either way. The
-two drivers share one compose project (the `name:` in this compose file
-wins), so run one at a time. Before opening the devcontainer:
-`docker compose down` here — `initialize.sh` refuses otherwise, so a
-hand-started stack cannot change owners by accident. The other direction
-needs nothing special: closing the editor stops its stack, and a plain
-`docker compose up -d` here takes it back (expect a harmless orphan
-warning about the editor's `workspace` container). Or, by hand:
+Open the repo in the devcontainer — that IS the bring-up
+(`.devcontainer/README.md` is the guide, ADR-0009 the decision). The
+devcontainer uses this same compose file as its base, so opening the
+editor brings this stack up as sibling containers, closing the window
+stops it (state survives in the bind mounts here), and **"Rebuild
+Container"** recreates it. `.devcontainer/initialize.sh` seeds the two
+gitignored files below on every start, and says why that must happen
+host-side. One host-side step remains, once: if a stack was ever started
+by hand in this directory, `docker compose down` here before the first
+devcontainer open — the two drivers share one compose project (the
+`name:` in this compose file wins), and `initialize.sh` refuses to adopt
+a hand-started stack, so ownership cannot change hands by accident. The
+by-hand-in-the-browser credential steps further down apply either way.
 
-```sh
-cd hub/dev
-cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml   # live file is gitignored
-docker compose up -d
-```
+What `initialize.sh` seeds — kept here as the recovery reference, not as
+a setup step:
 
-`ring-mqtt-data/config.json` must exist before ring-mqtt starts (v5.x
-refuses to run without it; the whole directory is gitignored because
-ring-mqtt later stores the Ring refresh token next to it). If it is
-missing, recreate it:
+- `go2rtc/go2rtc.yaml`, copied from the tracked
+  `go2rtc/go2rtc.example.yaml` (the live file is gitignored because real
+  stream URLs embed camera credentials).
+- `ring-mqtt-data/config.json`, which must exist before ring-mqtt starts
+  (v5.x refuses to run without it; the whole directory is gitignored
+  because ring-mqtt later stores the Ring refresh token next to it).
+  This is the canonical content — `initialize.sh` writes it verbatim
+  from here:
 
 ```json
 {
@@ -67,6 +70,11 @@ missing, recreate it:
 }
 ```
 
+If either file goes missing (both are gitignored, so a `git clean` loses
+them), re-run `bash .devcontainer/initialize.sh` on the host — it is
+idempotent and runs on every devcontainer start anyway — or recreate
+them from the above by hand.
+
 Then, **by hand in the browser** — these steps create credentials, so do
 them yourself:
 
@@ -78,7 +86,8 @@ them yourself:
    shifted = this sandbox).
 2. Create the Panel's long-lived token: click your user (bottom left) →
    **Security** → *Long-lived access tokens* → **Create token**. Copy it —
-   HA shows it once.
+   HA shows it once. Save it to `token` in this directory (gitignored) —
+   every command below reads it from there.
 3. Keep it out of git. It reaches the Panel as `HA_TOKEN` — in the process
    environment on native targets, or `--dart-define` for web builds — the
    same way the appliance's token will.
@@ -90,7 +99,12 @@ gitignored along with the database and logs; only `configuration.yaml` and
 ## Real device integrations
 
 Ports for the services below are published on **127.0.0.1 only** — the web
-UIs and the broker are reachable from this machine, never from the LAN.
+UIs and the broker are reachable from the host machine, never from the
+LAN. That is only the host-side half of the addressing rule: from inside
+the devcontainer, dial the compose service name on the canonical
+container port instead (`mosquitto:1883`, `http://go2rtc:1984`,
+`http://homeassistant:8123`) — the `localhost` + shifted-port addresses
+are for the browser, which runs on the host.
 
 **MQTT into HA** (once, before Ring): Settings → *Devices & Services* →
 *Add integration* → **MQTT**. Broker `mosquitto`, port `1883`, no
@@ -110,7 +124,7 @@ stream can suppress doorbell events.
 discovery does not cross the bridge network). Local protocol, no cloud.
 
 **Cameras** (go2rtc): put stream URLs in `go2rtc/go2rtc.yaml` (gitignored;
-see the example file), `docker compose restart go2rtc`, preview at
+see the example file), `docker restart go2rtc-dev`, preview at
 <http://localhost:11984>. Wyze cameras need the official RTSP firmware
 first — test one unit before flashing the fleet.
 
@@ -145,7 +159,7 @@ Regenerate after re-running the converter (the Placements are its input):
 
 ```sh
 cd panel && dart run tool/gen_dev_entities.dart
-cd ../hub/dev && docker compose restart
+docker restart homeassistant-dev
 ```
 
 The generator refuses unknown Device kinds and duplicate Device names
@@ -153,62 +167,65 @@ The generator refuses unknown Device kinds and duplicate Device names
 
 ## Point the Panel at it
 
+From a terminal in the devcontainer — `-d web-server`, because the
+browser lives on the host (`post-create.sh` prints this same command):
+
 ```sh
 cd panel
-flutter run -d chrome \
+flutter run -d web-server --web-port 8080 \
   --dart-define=HUB=ha \
   --dart-define=HA_URL=http://localhost:18123 \
-  --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
+  --dart-define=HA_TOKEN="$(cat ../hub/dev/token)" \
+  --dart-define=GO2RTC_URL=http://localhost:11984
 ```
 
-From the environment instead — which wins over the dart-defines
-(`panel/lib/config/hub_config.dart`). **Not on `-d chrome`:** web has no
-process environment, so an `HA_URL=…` prefix there is discarded and you
-silently get FakeHub. Use a native target:
-
-```sh
-cd panel
-HUB=ha HA_URL=http://localhost:18123 HA_TOKEN="$(cat ../hub/dev/token)" \
-  flutter run -d linux        # or -d macos
-```
+Then open <http://localhost:8080> on the host (VS Code forwards the
+port). `localhost` + shifted ports are correct in those dart-defines
+even though the command runs in-container: the BROWSER dials HA and
+go2rtc, and the browser is on the host, where compose publishes the dev
+stack on 18123/11984. Dart-defines, not an environment prefix: a web
+build has no process environment, so `HA_URL=…` in front of the command
+would be silently discarded and you would get FakeHub
+(`panel/README.md` owns the environment-vs-dart-define order).
 
 Without `HUB=ha` the Panel runs on `FakeHub` as before. The header badge
 shows which Hub the Panel talks to and whether it is currently reachable;
 `[panel] I hub.config … env=available|unavailable` names where each setting
 came from, and whether the environment was consulted at all.
 
-`GO2RTC_URL` rides along the same way — same file, same environment-first
-order — and points the camera and doorbell Popups at go2rtc:
-
-```sh
-flutter run -d chrome … --dart-define=GO2RTC_URL=http://localhost:11984
-```
-
-Leaving it off is a supported state and the boot log says so
+`GO2RTC_URL` (in the recipe above) points the camera and doorbell Popups
+at go2rtc. Leaving it off is a supported state and the boot log says so
 (`GO2RTC_URL=absent`, then `popup.go2rtc url=absent`): there is no built-in
 default, on purpose, because a camera is a camera under every Hub and a
 default address would open a socket to nothing on every dev run. A Device
 also needs a `stream:` name in `panel/assets/house/bindings.yaml`, and none of
 the generated stand-ins has one — the dev fleet has no video. Setting both
-against a go2rtc that has the named stream now gets you an actual picture, on
-either target: `-d chrome` plays it over a WebSocket, `-d linux` over HTTP
-MJPEG. `selftest` is the stream to point at while there is no camera. See
-`panel/README.md`, "Live video in the Popup" — and note that a camera added to
-`go2rtc.yaml` needs **two producers**, or the `-d linux` build gets an empty
-stream and says nothing about why.
+against a go2rtc that has the named stream gets you an actual picture: in
+the browser it plays over a WebSocket; a native `-d linux` build plays HTTP
+MJPEG instead and needs **two producers** in `go2rtc.yaml`, or it gets an
+empty stream and says nothing about why. `selftest` is the stream to point
+at while there is no camera. See `panel/README.md`, "Live video in the
+Popup".
 
 The end-to-end check — real handshake, real snapshot, real command
-round-trip — is a test:
+round-trip — is a test. The canonical form, from a terminal in the
+devcontainer (service-name DNS, because here the TEST process is the one
+dialling; `post-create.sh` prints this same command):
 
 ```sh
 cd panel
-flutter test test/ha_hub_live_test.dart \
-  --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
-
-# or, pointing at a different Hub without recompiling the test:
-PANEL_LIVE_HUB=1 HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)" \
-  flutter test test/ha_hub_live_test.dart
+PANEL_LIVE_HUB=1 HA_URL=http://homeassistant:8123 \
+  HA_TOKEN="$(cat ../hub/dev/token)" flutter test test/ha_hub_live_test.dart
 ```
+
+Never drop `HA_URL`: the test's built-in default is `localhost:8123`,
+which from in-container reaches nothing — and on the host is the REAL
+house's HA. Pointing at a different Hub is the same command with a
+different `HA_URL` and token file, no recompile. Right now the run fails
+at the `ThermostatState` cast — the dev-Hub parity drift
+(`.devcontainer/README.md`, "Standing caveats") — while connecting,
+authenticating and snapshotting is the pass signal; failing before the
+cast is a real problem.
 
 Plain `flutter test` stays hermetic: the test only runs for a
 `--dart-define=HA_TOKEN` (already per-invocation) or an explicit
@@ -225,9 +242,21 @@ whose config directory is gitignored; never do it on the appliance. Wiping
 `ha-config/` (below) clears it.
 
 ```sh
-docker compose logs -f          # watch it
-docker compose down             # stop, keep the account and token
-docker compose down && rm -rf ha-config/.storage ha-config/*.db   # start over
+docker logs -f homeassistant-dev   # watch it — any service, by container name
+```
+
+Lifecycle belongs to the devcontainer — never `docker compose` from
+in-container, where the relative bind paths resolve against the wrong
+filesystem (`.devcontainer/compose.yaml` header): opening the repo is
+`up`, closing the VS Code window stops the whole stack (the account and
+token survive in the bind mounts here), **"Rebuild Container"**
+recreates it. To start over — works from in-container too, once HA is
+stopped:
+
+```sh
+docker stop homeassistant-dev
+rm -rf ha-config/.storage ha-config/*.db
+docker start homeassistant-dev
 ```
 
 No *state* here migrates to the appliance — the HA account, tokens and
