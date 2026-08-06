@@ -202,7 +202,10 @@ phase plans; what still needs *you* is in [TODO — needs you](#todo--needs-you)
 
 ### First time initialization
 
-1. open http://localhost:8123, finish onboarding
+1. open http://localhost:18123, finish onboarding (18123, not 8123: the dev
+   Hub publishes shifted host ports because the production stack runs on the
+   same machine and owns the canonical ones — hub/dev/compose.yaml's header
+   has the table)
 2. profile → Security → create a long-lived access token
 
 Onboarding: https://www.home-assistant.io/getting-started/onboarding/

@@ -37,9 +37,11 @@
     "postCreateCommand": "bash .devcontainer/post-create.sh",
     // Only the Panel's own web-server port needs forwarding — it listens
     // inside the workspace container. Everything else is published to the
-    // host by hub/dev/compose.yaml itself, exactly as in the manual flow —
-    // go2rtc :1984, ring-mqtt :55123 and MQTT :1883 on the host's
-    // 127.0.0.1, HA :8123 on all interfaces — so the host browser reaches
+    // host by hub/dev/compose.yaml itself, exactly as in the manual flow,
+    // on the SHIFTED dev ports (the production Hub stack runs on this same
+    // machine and owns the canonical ones — see that file's header):
+    // go2rtc :11984, ring-mqtt :65123 and MQTT :11883 on the host's
+    // 127.0.0.1, HA :18123 on all interfaces — so the host browser reaches
     // them without the forwarder.
     "forwardPorts": [
         8080

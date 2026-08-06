@@ -61,7 +61,7 @@ runner patches) once the spike passes.
 ```sh
 flutter run -d chrome                       # FakeHub (default)
 flutter run -d chrome --dart-define=HUB=ha \
-  --dart-define=HA_URL=http://localhost:8123 \
+  --dart-define=HA_URL=http://localhost:18123 \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
 
@@ -75,12 +75,14 @@ and is where that setting is documented.
 
 **The environment form works on every target except web.** `-d chrome` is a
 web build, and web has no process environment — a `HA_URL=…` prefix there is
-silently discarded and you get FakeHub on `localhost:8123`. So use
+silently discarded and you get FakeHub on the **built-in default**,
+`localhost:8123` (`defaultHaUrl` — a property of the binary, so the dev
+Hub's shifted host ports do not move it). So use
 `--dart-define` with `-d chrome`, and the environment with `-d linux`
 (the kiosk/cage target), `-d macos`, or `flutter test`:
 
 ```sh
-HUB=ha HA_URL=http://localhost:8123 HA_TOKEN="$(cat ../hub/dev/token)" \
+HUB=ha HA_URL=http://localhost:18123 HA_TOKEN="$(cat ../hub/dev/token)" \
   flutter run -d linux
 ```
 
@@ -141,7 +143,7 @@ Two settings feed it, deliberately at opposite ends of the House Plan:
 | Which stream a Device plays | `stream:` in `bindings.yaml`, per Device | `ring_doorbell` — a **name**, never a URL |
 
 ```sh
-flutter run -d chrome --dart-define=GO2RTC_URL=http://127.0.0.1:1984
+flutter run -d chrome --dart-define=GO2RTC_URL=http://127.0.0.1:11984
 ```
 
 `GO2RTC_URL` has **no built-in default**, and `HA_URL` does. That asymmetry is
@@ -692,9 +694,9 @@ order is not cosmetic and is pinned by tests (`hub.config` renders in
 [panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build GO2RTC_URL=absent env=unavailable
 [panel] I popup.go2rtc url=absent
 [panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33 streams=0
-[panel] I hub.configured url=http://localhost:8123 token=set
-[panel] I hub.connecting url=ws://localhost:8123
-[panel] I hub.connected url=ws://localhost:8123 devices=33
+[panel] I hub.configured url=http://localhost:18123 token=set
+[panel] I hub.connecting url=ws://localhost:18123
+[panel] I hub.connected url=ws://localhost:18123 devices=33
 [panel] I hub.snapshot entities=66 bound=33 missing=0
 ```
 

@@ -46,27 +46,32 @@ else
   echo "         mounted (docker-outside-of-docker feature)? Try: docker ps"
 fi
 
+curl -fsSL https://claude.ai/install.sh | bash
+
 # ---- 3. What remains is yours — these steps create credentials --------------
 # Same steps as hub/dev/README.md "Bring it up"; addresses adjusted for
 # where each thing runs. Rule of thumb: YOUR BROWSER runs on the host, so
-# it uses localhost — hub/dev/compose.yaml publishes HA :8123 to the host
-# on all interfaces and go2rtc/ring-mqtt/MQTT to the host's 127.0.0.1.
-# Anything running IN THIS CONTAINER uses the compose service name instead
-# (http://homeassistant:8123), because the dev Hub's ports are published to
-# the host, not to this container's localhost.
+# it uses localhost with the SHIFTED dev ports — the production Hub stack
+# runs on this same machine and owns the canonical ones (hub/dev/
+# compose.yaml's header has the table): dev HA localhost:18123 (all
+# interfaces), go2rtc :11984 / ring-mqtt :65123 / MQTT :11883 on the
+# host's 127.0.0.1. Anything running IN THIS CONTAINER uses the compose
+# service name with the CANONICAL container port instead
+# (http://homeassistant:8123) — the shift is host-side only.
 cat <<'EOF'
 
 == One-time, by hand in the HOST browser (creates credentials) ==
 
- 1. HA onboarding:   http://localhost:8123
+ 1. HA onboarding:   http://localhost:18123
+    (18123, not 8123 — :8123 on this machine is the REAL house's HA.)
     Create the admin user; skip location/analytics if you like.
  2. Panel token:     your user (bottom left) -> Security ->
     Long-lived access tokens -> Create. HA shows it ONCE. Save it to:
         hub/dev/token          (gitignored)
  3. MQTT into HA (once, before Ring): Settings -> Devices & Services ->
     Add integration -> MQTT. Broker `mosquitto`, port 1883, no credentials
-    (compose-network hostname — NOT localhost).
- 4. Ring (optional): http://localhost:55123 — Ring login + 2FA; the
+    (compose-network hostname and container port — NOT localhost).
+ 4. Ring (optional): http://localhost:65123 — Ring login + 2FA; the
     refresh token lands in hub/dev/ring-mqtt-data/ (gitignored).
 
 == Daily commands (terminal in this container) ==
@@ -75,12 +80,13 @@ cat <<'EOF'
      cd panel
      flutter run -d web-server --web-port 8080 \
        --dart-define=HUB=ha \
-       --dart-define=HA_URL=http://localhost:8123 \
+       --dart-define=HA_URL=http://localhost:18123 \
        --dart-define=HA_TOKEN="$(cat ../hub/dev/token)" \
-       --dart-define=GO2RTC_URL=http://localhost:1984
+       --dart-define=GO2RTC_URL=http://localhost:11984
      # then open http://localhost:8080 on the host (VS Code forwards it).
-     # localhost is correct in those dart-defines: the BROWSER dials HA and
-     # go2rtc, and the browser is on the host, where compose publishes them.
+     # localhost + shifted ports are correct in those dart-defines: the
+     # BROWSER dials HA and go2rtc, and the browser is on the host, where
+     # compose publishes the dev stack on 18123/11984.
 
  Tests (hermetic):        cd panel && flutter test
  The live end-to-end test (in-container, so service-name DNS):

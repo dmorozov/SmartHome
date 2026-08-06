@@ -70,8 +70,12 @@ missing, recreate it:
 Then, **by hand in the browser** — these steps create credentials, so do
 them yourself:
 
-1. Open <http://localhost:8123> and complete onboarding (create the admin
-   user; skip the location/analytics steps if you like).
+1. Open <http://localhost:18123> and complete onboarding (create the admin
+   user; skip the location/analytics steps if you like). 18123, not 8123 —
+   every host port here is the SHIFTED dev set, because the production Hub
+   stack runs on this same machine and owns the canonical ports
+   (compose.yaml's header has the full table; canonical = the real house,
+   shifted = this sandbox).
 2. Create the Panel's long-lived token: click your user (bottom left) →
    **Security** → *Long-lived access tokens* → **Create token**. Copy it —
    HA shows it once.
@@ -93,7 +97,7 @@ UIs and the broker are reachable from this machine, never from the LAN.
 credentials (the compose network hostname — NOT `localhost`, which inside
 the HA container is the HA container).
 
-**Ring** (ring-mqtt): open <http://localhost:55123>, log in with the Ring
+**Ring** (ring-mqtt): open <http://localhost:65123>, log in with the Ring
 account + 2FA code; ring-mqtt stores the refresh token in
 `ring-mqtt-data/` (gitignored — it IS a credential). Devices then appear
 in HA via MQTT discovery. The doorbell's live-stream RTSP path for
@@ -107,7 +111,7 @@ discovery does not cross the bridge network). Local protocol, no cloud.
 
 **Cameras** (go2rtc): put stream URLs in `go2rtc/go2rtc.yaml` (gitignored;
 see the example file), `docker compose restart go2rtc`, preview at
-<http://localhost:1984>. Wyze cameras need the official RTSP firmware
+<http://localhost:11984>. Wyze cameras need the official RTSP firmware
 first — test one unit before flashing the fleet.
 
 As each real entity appears, point the Device's `entity:` at it in
@@ -153,7 +157,7 @@ The generator refuses unknown Device kinds and duplicate Device names
 cd panel
 flutter run -d chrome \
   --dart-define=HUB=ha \
-  --dart-define=HA_URL=http://localhost:8123 \
+  --dart-define=HA_URL=http://localhost:18123 \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
 
@@ -164,7 +168,7 @@ silently get FakeHub. Use a native target:
 
 ```sh
 cd panel
-HUB=ha HA_URL=http://localhost:8123 HA_TOKEN="$(cat ../hub/dev/token)" \
+HUB=ha HA_URL=http://localhost:18123 HA_TOKEN="$(cat ../hub/dev/token)" \
   flutter run -d linux        # or -d macos
 ```
 
@@ -177,7 +181,7 @@ came from, and whether the environment was consulted at all.
 order — and points the camera and doorbell Popups at go2rtc:
 
 ```sh
-flutter run -d chrome … --dart-define=GO2RTC_URL=http://localhost:1984
+flutter run -d chrome … --dart-define=GO2RTC_URL=http://localhost:11984
 ```
 
 Leaving it off is a supported state and the boot log says so

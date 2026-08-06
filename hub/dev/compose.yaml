@@ -27,6 +27,26 @@
 # Host-published ports are bound to 127.0.0.1 where only this machine needs
 # them (MQTT debugging, the two web UIs); containers talk to each other over
 # the compose network by service name.
+#
+# HOST PORTS ARE SHIFTED, never canonical (learned the hard way 2026-08-05:
+# the first devcontainer `up` died on "address already in use"). The interim
+# Hub host (ADR-0008) and the dev workstation are the SAME laptop, so the
+# PRODUCTION stack — ../compose.yaml on host networking — already owns every
+# canonical port here: HA :8123, go2rtc :1984/:8554/:8555 (and :18554/:18555),
+# Mosquitto :1883, ring-mqtt :55123/:8556. The container-side ports stay
+# canonical (service-name URLs like http://homeassistant:8123 are unchanged);
+# only the HOST side moves:
+#
+#     dev HA        localhost:18123   (8123  + 10000)
+#     dev MQTT      localhost:11883   (1883  + 10000)
+#     dev go2rtc    localhost:11984   (1984  + 10000)
+#     dev ring-mqtt localhost:65123   (55123 + 10000)
+#     dev RTSP      localhost:28554   (8554  + 20000 — production go2rtc
+#     dev WebRTC    localhost:28555    also listens on :18554/:18555)
+#
+# On the host, canonical port = the real house; shifted port = this sandbox.
+# That reading is the point: a browser tab on :8123 can never quietly be the
+# dev Hub, and onboarding the dev Hub can never quietly hit production.
 name: smarthome-dev-hub
 
 services:
@@ -38,7 +58,8 @@ services:
     environment:
       TZ: ${TZ:-UTC}
     ports:
-      - "8123:8123"
+      # Shifted (see header): production HA owns :8123 on this machine.
+      - "18123:8123"
     volumes:
       - ./ha-config:/config
     restart: unless-stopped
@@ -50,7 +71,8 @@ services:
     ports:
       # localhost-only: for mosquitto_sub/pub debugging from this machine.
       # ring-mqtt and HA reach the broker over the compose network instead.
-      - "127.0.0.1:1883:1883"
+      # Shifted (see header): production Mosquitto owns :1883.
+      - "127.0.0.1:11883:1883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
@@ -72,7 +94,8 @@ services:
     ports:
       # Web UI for the Ring login/2FA -> refresh-token flow, and for reading
       # each camera's internal RTSP path. localhost-only.
-      - "127.0.0.1:55123:55123"
+      # Shifted (see header): production ring-mqtt owns :55123.
+      - "127.0.0.1:65123:55123"
     volumes:
       # config.json (authored, no secrets — recreate from README.md if lost)
       # plus runtime state including the Ring REFRESH TOKEN. The whole
@@ -87,15 +110,18 @@ services:
     container_name: go2rtc-dev
     ports:
       # API + web UI (stream preview via MSE works over this port alone).
-      - "127.0.0.1:1984:1984"
+      # Shifted (see header): production go2rtc owns :1984.
+      - "127.0.0.1:11984:1984"
       # RTSP out, for checking streams with VLC/ffprobe from this machine.
-      - "127.0.0.1:8554:8554"
+      # +20000, not +10000: production go2rtc also listens on :18554/:18555.
+      - "127.0.0.1:28554:8554"
       # WebRTC media. Bound to localhost like the rest — the Panel runs in a
-      # browser on this machine; go2rtc.yaml lists 127.0.0.1:8555 as the
-      # candidate. To view from another device, publish these on the LAN and
-      # add this machine's LAN IP as a candidate.
-      - "127.0.0.1:8555:8555/tcp"
-      - "127.0.0.1:8555:8555/udp"
+      # browser on this machine; go2rtc.yaml lists 127.0.0.1:28555 as the
+      # candidate (the HOST port a browser can actually dial, not the
+      # container's 8555). To view from another device, publish these on the
+      # LAN and add this machine's LAN IP as a candidate.
+      - "127.0.0.1:28555:8555/tcp"
+      - "127.0.0.1:28555:8555/udp"
     volumes:
       # Stream definitions (may embed camera credentials — gitignored; copy
       # go2rtc.example.yaml -> go2rtc.yaml first, see README.md).
