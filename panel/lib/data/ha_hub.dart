@@ -158,6 +158,61 @@ class HaHubClient implements HubClient {
   }
 
   @override
+  Future<void> setThermostatTarget(String deviceId, double target) async {
+    final device = _byId[deviceId];
+    if (device == null ||
+        specOf(device.kind).family != StateFamily.thermostat) {
+      // The mirror of toggle's refusal, and for the mirror-image reason:
+      // `climate.set_temperature` on anything else is a command the House
+      // never meant, and the entity behind a Device is not the caller's to
+      // know.
+      Log.warn('hub', 'set_target_refused', {
+        'device': deviceId,
+        'kind': device?.kind.name,
+        'reason': 'not_thermostat',
+      });
+      return;
+    }
+    if (!target.isFinite) {
+      // jsonEncode throws on NaN/infinity — an uncaught async error one
+      // layer down, blamed on the socket. Refused here, where the value is
+      // still a value and the line can say so. `'$target'` because a
+      // non-finite double is exactly the thing the fields map cannot carry
+      // as a number.
+      Log.warn('hub', 'set_target_refused', {
+        'device': deviceId,
+        'kind': device.kind.name,
+        'reason': 'not_finite',
+        'target': '$target',
+      });
+      return;
+    }
+    final entityId = device.entityId;
+    if (entityId == null) {
+      // toggle_unbound's twin: a setpoint row that does nothing, silently,
+      // is the same worst bug to chase on a wall.
+      Log.warn('hub', 'set_target_unbound', {'device': deviceId});
+      return;
+    }
+    // The value is a room temperature, not a secret — and without it the
+    // debug trail cannot answer "did the Panel command what the wall showed".
+    Log.debug('hub', 'set_target',
+        {'device': deviceId, 'entity': entityId, 'target': target});
+    // Absolute and unconverted — hub_client.dart states why. Single-setpoint
+    // only: a thermostat in heat/cool mode. In heat_cool the entity carries
+    // no `temperature` attribute, so [_toDeviceState] already reports it
+    // unusable and the wall never offers the controls that would call this.
+    _send({
+      'id': _nextId++,
+      'type': 'call_service',
+      'domain': 'climate',
+      'service': 'set_temperature',
+      'service_data': {'temperature': target},
+      'target': {'entity_id': entityId},
+    });
+  }
+
+  @override
   void dispose() {
     Log.info('hub', 'closed');
     _disposed = true;

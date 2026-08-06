@@ -74,6 +74,38 @@ class FakeHub implements HubClient {
   }
 
   @override
+  Future<void> setThermostatTarget(String deviceId, double target) async {
+    final device = _byId[deviceId];
+    if (device == null ||
+        specOf(device.kind).family != StateFamily.thermostat) {
+      Log.warn('hub', 'set_target_refused', {
+        'device': deviceId,
+        'kind': device?.kind.name,
+        'reason': 'not_thermostat',
+      });
+      return;
+    }
+    if (!target.isFinite) {
+      Log.warn('hub', 'set_target_refused', {
+        'device': deviceId,
+        'kind': device.kind.name,
+        'reason': 'not_finite',
+        'target': '$target',
+      });
+      return;
+    }
+    final state = _states[deviceId];
+    // Unknown state: the real Hub knows the Device even when the Panel's
+    // knowledge has lapsed — toggle's argument — so the command lands on
+    // the kind's seed, wearing the commanded target.
+    final from = state is ThermostatState
+        ? state
+        : specOf(device.kind).seed(deviceId) as ThermostatState;
+    pushState(ThermostatState(deviceId,
+        current: from.current, target: target, unit: from.unit));
+  }
+
+  @override
   void dispose() {
     _driftTimer?.cancel();
     _changes.close();

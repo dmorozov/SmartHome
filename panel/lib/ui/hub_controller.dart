@@ -120,6 +120,11 @@ class HubController extends ChangeNotifier {
 
   Future<void> toggle(String deviceId) => _hub.toggle(deviceId);
 
+  /// Command a thermostat's target — the adapters own the refusal rules and
+  /// the wire; see [HubClient.setThermostatTarget].
+  Future<void> setThermostatTarget(String deviceId, double target) =>
+      _hub.setThermostatTarget(deviceId, target);
+
   /// Tapping a Room acts on it: all lights on if none is lit, all off
   /// otherwise.
   Future<void> toggleRoomLights(Room room) async {

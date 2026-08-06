@@ -28,6 +28,19 @@ stand-in (below).
 
 ## Bring it up
 
+The repo's devcontainer (`.devcontainer/`) uses this same compose file as
+its base: opening the repo in a devcontainer brings this stack up as
+sibling containers and seeds the two gitignored files below automatically
+(`.devcontainer/initialize.sh` is the script that does it, and says why).
+The by-hand-in-the-browser steps further down still apply either way. The
+two drivers share one compose project (the `name:` in this compose file
+wins), so run one at a time. Before opening the devcontainer:
+`docker compose down` here — `initialize.sh` refuses otherwise, so a
+hand-started stack cannot change owners by accident. The other direction
+needs nothing special: closing the editor stops its stack, and a plain
+`docker compose up -d` here takes it back (expect a harmless orphan
+warning about the editor's `workspace` container). Or, by hand:
+
 ```sh
 cd hub/dev
 cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml   # live file is gitignored

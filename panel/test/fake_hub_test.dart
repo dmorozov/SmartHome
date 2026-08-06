@@ -43,4 +43,39 @@ void main() {
     expect((hub.states['light-hall'] as SwitchState).on, isTrue);
     hub.dispose();
   });
+
+  test('setThermostatTarget moves only the target — the reading and the '
+      'unit are the room\'s and the Hub\'s to change', () async {
+    final hub = FakeHub(loadTestHouse(), driftEvery: Duration.zero);
+    const id = 'thermostat';
+    hub.pushState(const ThermostatState(id,
+        current: 21.4, target: 21.0, unit: TemperatureUnit.celsius));
+
+    final emitted = hub.stateChanges.first;
+    await hub.setThermostatTarget(id, 22.5);
+
+    expect(await emitted, id);
+    final state = hub.states[id] as ThermostatState;
+    expect(state.target, 22.5);
+    expect(state.current, 21.4);
+    expect(state.unit, TemperatureUnit.celsius);
+    hub.dispose();
+  });
+
+  test('a setpoint commanded at an unknown-state thermostat lands on the '
+      'seed', () async {
+    final hub = FakeHub(loadTestHouse(), driftEvery: Duration.zero);
+    const id = 'thermostat';
+    hub.dropDevice(id);
+
+    final emitted = hub.stateChanges.first;
+    await hub.setThermostatTarget(id, 19.5);
+
+    // Same argument as the unknown-state toggle above: the command lands.
+    expect(await emitted, id);
+    final state = hub.states[id] as ThermostatState;
+    expect(state.target, 19.5);
+    expect(state.current, 21.4); // the vocabulary seed's reading
+    hub.dispose();
+  });
 }

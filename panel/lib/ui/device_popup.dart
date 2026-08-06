@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../diagnostics/log.dart';
 import '../domain/house.dart';
 import 'device_presentation.dart';
+import 'hub_controller.dart';
 import 'theme.dart';
+import 'thermostat_controls.dart';
 import 'video/live_video.dart';
 
 /// Popup — a transient overlay on the Panel (CONTEXT.md). Cameras and the
@@ -29,10 +31,19 @@ import 'video/live_video.dart';
 /// open a second consumer on a stream the first Popup still holds. It says
 /// only "the Popup *I* pushed has gone"; [whenDevicePopupGone] is the one to
 /// ask about a Device, whoever pushed what is showing it.
+///
+/// [controller] is the Popup's hands and its live feed, and it is optional
+/// because only one body needs hands so far: with it, a thermostat gets its
+/// setpoint controls (ThermostatControls); without it, every body renders
+/// exactly what it rendered before the controls existed, from the one
+/// [presentation] snapshot. Who omits it is not only tests: the doorbell
+/// host holds a controller and deliberately passes none, because the only
+/// Popups it pushes are video bodies, which never grow hands.
 Future<void> showDevicePopup(
   BuildContext context, {
   required DevicePresentation presentation,
   required VideoConfig video,
+  HubController? controller,
   Duration? dismissAfter,
   Duration? dismissCeiling,
   VoidCallback? onGone,
@@ -43,6 +54,7 @@ Future<void> showDevicePopup(
     builder: (context) => _DevicePopupBody(
       presentation: presentation,
       video: video,
+      controller: controller,
       dismissAfter: dismissAfter,
       dismissCeiling: dismissCeiling,
       onGone: onGone,
@@ -165,6 +177,7 @@ class _DevicePopupBody extends StatefulWidget {
   const _DevicePopupBody({
     required this.presentation,
     required this.video,
+    required this.controller,
     required this.dismissAfter,
     required this.dismissCeiling,
     required this.onGone,
@@ -172,6 +185,7 @@ class _DevicePopupBody extends StatefulWidget {
 
   final DevicePresentation presentation;
   final VideoConfig video;
+  final HubController? controller;
   final Duration? dismissAfter;
   final Duration? dismissCeiling;
   final VoidCallback? onGone;
@@ -475,6 +489,25 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
     route.navigator?.pop();
   }
 
+  /// The body under the name row: live video for the video kinds, setpoint
+  /// controls for a thermostat that came with hands, one status sentence for
+  /// everything else. The kind decides — never the live state's shape, which
+  /// lapses routinely and must not reshape a Popup somebody is looking at.
+  Widget _body() {
+    final presentation = widget.presentation;
+    if (presentation.isVideo) return _LiveVideoBox(session: _session);
+    final controller = widget.controller;
+    if (controller != null &&
+        specOf(presentation.device.kind).family == StateFamily.thermostat) {
+      return ThermostatControls(
+          controller: controller, device: presentation.device);
+    }
+    return Text(
+      presentation.statusText,
+      style: const TextStyle(fontSize: 15, color: PanelTheme.ink),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final presentation = widget.presentation;
@@ -534,14 +567,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
                 ],
               ),
               const SizedBox(height: 18),
-              if (presentation.isVideo)
-                _LiveVideoBox(session: _session)
-              else
-                Text(
-                  presentation.statusText,
-                  style:
-                      const TextStyle(fontSize: 15, color: PanelTheme.ink),
-                ),
+              _body(),
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,

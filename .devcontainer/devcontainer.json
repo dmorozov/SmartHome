@@ -1,0 +1,79 @@
+// The SmartHome devcontainer: one pinned toolchain (Flutter 3.44.8 on
+// Ubuntu 24.04 — the mini-PC target OS, see the root README architecture
+// table) PLUS the hub/dev compose stack as sibling containers, so "open
+// the repo" and "have a real HA to develop against" are the same step.
+//
+// The setup narrative lives in the two hook scripts, in the order they run:
+//   initialize.sh  — on the HOST, before `up`: seeds the gitignored dev-hub
+//                    files the sibling containers need, refuses to race a
+//                    manually-started stack.
+//   post-create.sh — INSIDE the workspace, once after create: pub get,
+//                    toolchain verification, and it prints the manual
+//                    (owner-only) steps that remain plus the daily commands.
+{
+    "name": "SmartHome",
+    "dockerComposeFile": [
+        "../hub/dev/compose.yaml",
+        "compose.yaml"
+    ],
+    "service": "workspace",
+    // Explicit for documentation: these four are the dev Hub stack. The
+    // appliance stack (hub/compose.yaml, host networking, Zigbee) is NOT
+    // run here and never will be — mDNS/multicast does not cross bridge
+    // networking, which is the whole reason hub/dev exists.
+    "runServices": [
+        "homeassistant",
+        "mosquitto",
+        "ring-mqtt",
+        "go2rtc"
+    ],
+    "workspaceFolder": "/workspaces/SmartHome",
+    "remoteUser": "vscode",
+    // Closing the window stops the dev Hub too. Deliberate: the stack is a
+    // dev dependency, not a service this machine owes anyone while the
+    // editor is closed. State survives in bind mounts under hub/dev/.
+    "shutdownAction": "stopCompose",
+    "initializeCommand": "bash .devcontainer/initialize.sh",
+    "postCreateCommand": "bash .devcontainer/post-create.sh",
+    // Only the Panel's own web-server port needs forwarding — it listens
+    // inside the workspace container. Everything else is published to the
+    // host by hub/dev/compose.yaml itself, exactly as in the manual flow —
+    // go2rtc :1984, ring-mqtt :55123 and MQTT :1883 on the host's
+    // 127.0.0.1, HA :8123 on all interfaces — so the host browser reaches
+    // them without the forwarder.
+    "forwardPorts": [
+        8080
+    ],
+    "portsAttributes": {
+        "8080": {
+            "label": "Panel (flutter run -d web-server)"
+        }
+    },
+    "features": {
+        // Docker CLI against the HOST daemon (socket mount, not
+        // docker-in-docker): the dev Hub containers are siblings, and
+        // `docker logs homeassistant-dev` / `docker restart go2rtc-dev`
+        // work from an in-container terminal. See compose.yaml for the one
+        // thing this must never be used for (compose up/down: path skew).
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+        // The issue tracker is GitHub Issues via `gh` (CLAUDE.md).
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        // npx for ctx7 and friends.
+        "ghcr.io/devcontainers/features/node:1": {
+            "version": "lts"
+        },
+        "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "Dart-Code.flutter",
+                "ms-azuretools.vscode-docker",
+                "ms-python.python"
+            ],
+            "settings": {
+                "dart.flutterSdkPath": "/opt/flutter"
+            }
+        }
+    }
+}

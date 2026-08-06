@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/ha_hub.dart';
+import 'package:panel/data/house_loader.dart';
 import 'package:panel/data/hub_client.dart';
 import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/device_state.dart';
@@ -134,6 +135,103 @@ void main() {
     expect(refused.level, LogLevel.warn);
     expect(refused.area, 'hub');
     expect(refused.fields, {'device': 'thermostat', 'kind': 'thermostat'});
+  });
+
+  test('setThermostatTarget calls climate.set_temperature with the absolute '
+      'value', () async {
+    await connectAndSeed(channel, [
+      entityFrame('climate.main_floor', 'heat',
+          {'current_temperature': 21.4, 'temperature': 21.0}),
+    ]);
+    channel.sent.clear();
+
+    await hub.setThermostatTarget('thermostat', 22.5);
+
+    final sent = channel.sent.single;
+    expect(sent['type'], 'call_service');
+    expect(sent['domain'], 'climate');
+    expect(sent['service'], 'set_temperature');
+    // Absolute and unconverted: the value is denominated by the Hub itself
+    // (hub_client.dart), so nothing on the way out may translate it.
+    expect(sent['service_data'], {'temperature': 22.5});
+    expect(sent['target'], {'entity_id': 'climate.main_floor'});
+  });
+
+  test('refuses setThermostatTarget on a light — nothing reaches the Hub',
+      () async {
+    final records = <LogRecord>[];
+    Log.sink = records.add;
+    addTearDown(() => Log.sink = Log.printRecord);
+
+    await connectAndSeed(channel, [entityFrame('input_boolean.light_hall', 'off')]);
+    channel.sent.clear();
+
+    await hub.setThermostatTarget('light-hall', 22.0);
+
+    // The contract suite proves the log line and the silent states map; only
+    // this seam's own test can see the channel, and "refused but sent
+    // anyway" is precisely the regression the channel is needed to catch.
+    expect(channel.sent, isEmpty);
+    final refused =
+        records.singleWhere((r) => r.event == 'set_target_refused');
+    expect(refused.level, LogLevel.warn);
+    expect(refused.fields, {
+      'device': 'light-hall',
+      'kind': 'light',
+      'reason': 'not_thermostat',
+    });
+  });
+
+  test('setThermostatTarget on an unbound thermostat sends nothing and says '
+      'so', () async {
+    final records = <LogRecord>[];
+    Log.sink = records.add;
+    addTearDown(() => Log.sink = Log.printRecord);
+
+    // A House whose thermostat has no `entity:` yet — ADR-0004 says it
+    // still renders, so its Popup's controls can still be tapped.
+    final unboundChannel = FakeChannel();
+    final unbound = HaHubClient(
+      house: loadHouse(houseYaml: '''
+name: "Unbound"
+floors:
+  - id: g
+    name: "Ground"
+    level: 0
+    rooms:
+      - id: den
+        name: "Den"
+        footprint: [[0, 0], [4, 0], [4, 3], [0, 3]]
+    walls:
+      - [[0, 0], [4, 0]]
+devices:
+  - key: thermostat
+    name: "Ecobee"
+    kind: thermostat
+    room: den
+    position: [2, 1.5]
+''', bindingsYaml: '''
+bindings:
+  thermostat:
+    connectivity: local
+'''),
+      url: Uri.parse('ws://test/api/websocket'),
+      token: 'test-token',
+      connect: (_) => unboundChannel,
+      retryFloor: const Duration(milliseconds: 1),
+      retryCeiling: const Duration(milliseconds: 2),
+    );
+    addTearDown(unbound.dispose);
+
+    await unbound.setThermostatTarget('thermostat', 22.0);
+
+    // A setpoint row that does nothing, silently, is the worst kind of bug
+    // to chase on a wall panel — toggle_unbound's argument, same seam.
+    expect(unboundChannel.sent.where((m) => m['type'] == 'call_service'),
+        isEmpty);
+    final line = records.singleWhere((r) => r.event == 'set_target_unbound');
+    expect(line.level, LogLevel.warn);
+    expect(line.fields, {'device': 'thermostat'});
   });
 
   test('reports how much of the House the snapshot actually covered',

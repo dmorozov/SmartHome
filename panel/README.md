@@ -33,7 +33,9 @@ that came out of it. What exists:
 - Rooms glow with light state; tapping a Room toggles its lights
 - Device pins with live readings (thermostat °C, Emporia watts); tapping a
   binary Device toggles it, cameras/doorbell open the Popup, everything else
-  shows its state
+  shows its state — and the thermostat's Popup carries −/+ setpoint controls
+  (dial, one debounced `climate.set_temperature`, the number confirmed by the
+  Hub's echo or visibly taken back)
 - The Popup asks go2rtc for that Device's `stream:` and drops it again on
   close; a doorbell press opens the same Popup unprompted and it closes
   itself after 30 s (and after 2 minutes however many dings extend it).
@@ -49,9 +51,8 @@ that came out of it. What exists:
 
 Still to come: the real house drawing (the pipeline below is built; the
 shipped House Plan is a placeholder resembling it), the actual design system,
-Popup controls beyond toggling (thermostat setpoint), and the spike-app
-migrations (multi-touch debug screen, fullscreen/cursor runner patches) once
-the spike passes.
+and the spike-app migrations (multi-touch debug screen, fullscreen/cursor
+runner patches) once the spike passes.
 
 ## Talking to the Hub
 
@@ -110,7 +111,9 @@ stale address and a Panel pointed at a dead Hub look identical on the badge.
 
 `HaHubClient` authenticates with a long-lived token, seeds from `get_states`,
 follows `state_changed`, and commands through `homeassistant.toggle` (which
-spans domains, so the Panel needs no per-domain knowledge). It reconnects
+spans domains, so the Panel needs no per-domain knowledge) plus
+`climate.set_temperature` for the thermostat's setpoint — sent as an absolute
+value in whatever unit the Hub speaks, never converted. It reconnects
 forever with backoff — a wall display has to recover from a Hub restart with
 nobody there to press anything.
 

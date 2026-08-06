@@ -58,6 +58,10 @@ void runHubContract(String adapter, Future<HubWorld> Function() build) {
     Iterable<LogRecord> refusals() =>
         records.where((r) => r.event == 'toggle_refused');
 
+    /// And every `hub.set_target_refused` line — the setpoint seam's own.
+    Iterable<LogRecord> targetRefusals() =>
+        records.where((r) => r.event == 'set_target_refused');
+
     test('togglable answers from Device kind, not from live state', () async {
       expect(world.hub.togglable('light-hall'), isTrue);
       expect(world.hub.togglable('thermostat'), isFalse);
@@ -106,6 +110,90 @@ void runHubContract(String adapter, Future<HubWorld> Function() build) {
       final refused = refusals().single;
       expect(refused.level, LogLevel.warn);
       expect(refused.fields, {'device': 'no-such-device', 'kind': null});
+    });
+
+    test('setThermostatTarget on a non-thermostat changes nothing, emits '
+        'nothing, and refuses observably', () async {
+      await world.seed();
+      final before = Map.of(world.hub.states);
+      final changes = <String>[];
+      final sub = world.hub.stateChanges.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      // `climate.set_temperature` on a light is a command the House never
+      // meant — the seam refuses it the way toggle refuses the thermostat.
+      await world.hub.setThermostatTarget('light-hall', 22.0);
+      await pumpEventQueue();
+
+      expect(world.hub.states, before);
+      expect(changes, isEmpty);
+      final refused = targetRefusals().single;
+      expect(refused.level, LogLevel.warn);
+      expect(refused.area, 'hub');
+      expect(refused.fields, {
+        'device': 'light-hall',
+        'kind': 'light',
+        'reason': 'not_thermostat',
+      });
+    });
+
+    test('setThermostatTarget on an id the House does not contain refuses '
+        'the same way', () async {
+      await world.seed();
+      final changes = <String>[];
+      final sub = world.hub.stateChanges.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      await world.hub.setThermostatTarget('no-such-device', 22.0);
+      await pumpEventQueue();
+
+      expect(changes, isEmpty);
+      final refused = targetRefusals().single;
+      expect(refused.level, LogLevel.warn);
+      expect(refused.fields, {
+        'device': 'no-such-device',
+        'kind': null,
+        'reason': 'not_thermostat',
+      });
+    });
+
+    test('setThermostatTarget refuses a non-finite value before it can '
+        'reach a JSON encoder', () async {
+      await world.seed();
+      final before = Map.of(world.hub.states);
+      final changes = <String>[];
+      final sub = world.hub.stateChanges.listen(changes.add);
+      addTearDown(sub.cancel);
+
+      // jsonEncode(nan) throws — as an uncaught async error, one layer too
+      // deep to be attributed. The seam owes a refusal instead.
+      await world.hub.setThermostatTarget('thermostat', double.nan);
+      await pumpEventQueue();
+
+      expect(world.hub.states, before);
+      expect(changes, isEmpty);
+      final refused = targetRefusals().single;
+      expect(refused.level, LogLevel.warn);
+      expect(refused.fields, {
+        'device': 'thermostat',
+        'kind': 'thermostat',
+        'reason': 'not_finite',
+        'target': 'NaN',
+      });
+    });
+
+    test('setThermostatTarget on the thermostat refuses nothing', () async {
+      await world.seed();
+
+      await world.hub.setThermostatTarget('thermostat', 22.5);
+      await pumpEventQueue();
+
+      // What *happens* differs per adapter — the fake's world answers
+      // immediately, production's answers when the Hub echoes — so the
+      // contract pins only what must not: a refusal for the one Device the
+      // command exists for. The adapters' own suites pin the rest.
+      expect(targetRefusals(), isEmpty);
+      expect(refusals(), isEmpty);
     });
 
     test('a state the world reports lands in states and emits its Device id',
@@ -212,7 +300,11 @@ Future<HubWorld> _haWorld() async {
 
   const entityOf = {
     'light-hall': 'input_boolean.light_hall',
-    'thermostat': 'climate.ecobee',
+    // The entity bindings.yaml actually binds — a stale id here does not
+    // fail anything, which is exactly the trap: the seed frame folds into
+    // *nothing*, and every states-map assertion about the thermostat then
+    // passes vacuously against the production adapter.
+    'thermostat': 'climate.main_floor',
   };
 
   /// The fixture's Device states, back in the entity shape the Hub reports.
@@ -232,7 +324,7 @@ Future<HubWorld> _haWorld() async {
     hub: hub,
     seed: () => connectAndSeed(channel, [
       entityFrame('input_boolean.light_hall', 'off'),
-      entityFrame('climate.ecobee', 'heat',
+      entityFrame('climate.main_floor', 'heat',
           {'current_temperature': 21.4, 'temperature': 21.0}),
     ]),
     push: (state) async {

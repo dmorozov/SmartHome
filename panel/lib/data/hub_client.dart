@@ -54,5 +54,25 @@ abstract interface class HubClient {
   /// thermostat: the Hub's own toggle service would flip the real HVAC.
   Future<void> toggle(String deviceId);
 
+  /// Command a thermostat's target temperature to the absolute value
+  /// [target], **in whatever unit the Hub speaks**. The Panel never
+  /// converts: the value a caller passes is stepped from a reading the Hub
+  /// itself denominated ([ThermostatState.target]), and it travels back
+  /// unconverted — so the command is unit-correct even while
+  /// [ThermostatState.unit] is still null.
+  ///
+  /// Refuses — observably, with one `hub.set_target_refused` warn line,
+  /// touching neither [states] nor the Hub — any Device that is not a
+  /// thermostat, any id the House does not contain, and a non-finite
+  /// [target] (which `jsonEncode` would throw on, one layer too late to be
+  /// anyone's fault but ours).
+  ///
+  /// Deliberately no Panel-side min/max clamp: the Hub owns the thermostat's
+  /// range, and a bound restated here is a bound that drifts. An
+  /// out-of-range value is the Hub's to reject; the rejection is observable
+  /// as `hub.command_failed`, and as the wall's dialled value reverting to
+  /// the live one (see ThermostatControls).
+  Future<void> setThermostatTarget(String deviceId, double target);
+
   void dispose();
 }

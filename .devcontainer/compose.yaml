@@ -1,0 +1,55 @@
+# Devcontainer overlay on hub/dev/compose.yaml — the SAME development Hub
+# stack described in hub/dev/README.md, with one more service: the
+# workspace the editor attaches to. devcontainer.json lists both files, so
+# opening the devcontainer brings up HA + Mosquitto + ring-mqtt + go2rtc as
+# siblings on one compose network, and `http://homeassistant:8123` resolves
+# from inside the workspace by service name.
+#
+# Three facts worth knowing before touching this:
+#
+#  - Relative paths in this file resolve against hub/dev/ — the FIRST file
+#    in devcontainer.json's dockerComposeFile list sets the project
+#    directory for every merged file. Hence `../..` for the repo root and
+#    `../../.devcontainer` for the build context two entries down.
+#
+#  - The editor derives its compose --project-name from the merged config's
+#    top-level `name:` — smarthome-dev-hub, from hub/dev/compose.yaml — so
+#    this stack and a `docker compose up` run by hand in hub/dev/ are the
+#    SAME compose project. Compose reconciles rather than collides on the
+#    pinned container_names, which is exactly why drivers must change hands
+#    explicitly: an `up` from either side silently adopts the other's
+#    containers, and the editor stops the whole project on window close
+#    (shutdownAction). initialize.sh refuses to take over a hand-started
+#    stack for that reason. Nothing is lost by switching drivers: all state
+#    lives in bind mounts under hub/dev/ (the HA account, the token, the
+#    Ring refresh token).
+#
+#  - Docker runs on the HOST (the docker-outside-of-docker feature mounts
+#    the socket), so bind paths resolve against the HOST checkout when the
+#    editor runs `up`. From INSIDE the workspace those same relative paths
+#    would resolve against /workspaces/SmartHome — a path the daemon does
+#    not have — so never run `docker compose up/down` from an in-container
+#    terminal. Restarting a service is safe by container name:
+#    `docker restart go2rtc-dev`.
+services:
+  workspace:
+    build:
+      # Relative to hub/dev/ (see the header), NOT to this file.
+      context: ../../.devcontainer
+      dockerfile: Dockerfile
+    volumes:
+      # The repo, at the canonical devcontainer path (devcontainer.json's
+      # workspaceFolder). :cached is a macOS bind-mount hint, inert on Linux.
+      - ../..:/workspaces/SmartHome:cached
+      # pub packages survive container rebuilds; the mountpoint is
+      # pre-created vscode-owned in the Dockerfile so the volume inherits
+      # that ownership on first use.
+      - pub-cache:/home/vscode/.pub-cache
+    environment:
+      TZ: ${TZ:-UTC}
+    # Compose-based devcontainers do not override the command: the service
+    # has to keep itself alive for the editor to attach to.
+    command: sleep infinity
+
+volumes:
+  pub-cache:

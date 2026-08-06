@@ -133,8 +133,12 @@ class _DollhouseViewState extends State<DollhouseView> {
       widget.controller.toggle(device.id);
     } else {
       // No `dismissAfter`: a person tapped this, so a person closes it.
+      // The controller rides along so the one body with hands — the
+      // thermostat's setpoint controls — has them.
       showDevicePopup(context,
-          presentation: presentation, video: widget.video);
+          presentation: presentation,
+          video: widget.video,
+          controller: widget.controller);
     }
   }
 }
