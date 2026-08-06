@@ -494,6 +494,16 @@ link-local IPv6 only (`fe80::…`) and `resolvectl mdns` is off on every link.
     or make the golden rig pin its own font stack. Leaving it is the one option
     that costs something — a permanently red suite stops being a signal.
 
+    ✅ **CLOSED 2026-08-06** — both options at once, in a form the item did
+    not name: the goldens were re-baked inside the devcontainer image
+    (Ubuntu 24.04, Flutter and the material fonts pinned in the image) — a
+    regeneration whose font stack is pinned by the image rather than by the
+    rig — and ADR-0009 makes that image the canonical golden host. The
+    in-container suite is 398 pass / 1 skip / 0 failures. Red on this 26.04
+    host is now the *expected* out-of-container state, not a defect: the
+    permanently-red cost above only applied while a host run was the signal,
+    and it no longer is.
+
 14. ✅ **Done — 2026-08-04. The Flutter Linux toolchain is installed and
     `flutter build linux --release` succeeds on this host.** `clang`, `clang++`,
     `cmake` and `ninja` are present (`/usr/bin/clang`, `/usr/bin/cmake`,
