@@ -35,11 +35,42 @@ script: !include scripts.yaml
 # makes the file load-bearing for HA startup.
 mqtt: !include mqtt.yaml
 
-# The web Panel (second-screen target) will fetch camera snapshots from
-# HA's REST camera_proxy cross-origin, which needs
-#   http:
-#     cors_allowed_origins:
-#       - "<the second-screen origin>"
-# No such origin exists yet, so the block is deliberately absent — add it
-# with the specific origin (never "*") when the second screen lands.
-# Phase-7 §B4 is the reasoning.
+# --- Cross-origin access for the web Panel ------------------------------------
+# The web Panel (second-screen target) fetches camera snapshots from HA's REST
+# camera_proxy cross-origin. The token travels as an `Authorization` header,
+# which makes the request non-simple, so the browser sends a preflight OPTIONS
+# first, and HA answers a preflight only for origins named here. Without this
+# block the Panel gets
+#   403 "CORS preflight request failed: origin '...' is not allowed"
+# and shows no camera still at all. The wall Panel — the Flutter/cage build —
+# uses dart:io, is not a browser, and is not subject to any of this; this block
+# exists solely for the browser-served second screen.
+#
+# This used to read "deliberately absent — add it with the specific origin
+# (never "*") when the second screen lands". The second screen is now a shipping
+# target (panel/README.md), and the owner's call is `"*"`: every service in this
+# stack is on the home LAN and the Panel's origin is not fixed. What that
+# actually buys and costs was measured against a live 2026.7.4 Hub on
+# 2026-08-06 — hub/dev/ha-config/configuration.yaml carries the long version.
+# The three facts worth repeating here:
+#
+#  - `"*"` is UNDOCUMENTED. HA passes each entry straight through to
+#    aiohttp-cors, which resolves `config.get(origin, config.get("*"))`. It is a
+#    property of a pinned dependency, not an HA contract — re-check on upgrade.
+#    (HA is also moving `http:` from YAML to UI config after 2026.7.)
+#  - It does NOT weaken authentication: every /api/ view still demands the
+#    token, measured — an unauthenticated foreign origin gets 401.
+#  - It DOES make HA's unauthenticated /auth/login_flow cross-origin readable,
+#    i.e. a password-guessing oracle usable by any site somebody in the house
+#    visits. `login_attempts_threshold` is what bounds that, and HA ships with
+#    no rate limit at all. That setting matters more than the CORS list does.
+#
+# To narrow it instead, name exact origins (exact-string match: scheme and
+# non-default port required, no trailing slash, no globbing) and re-list
+# `https://cast.home-assistant.io`, which naming this key otherwise replaces.
+#
+# Needs a FULL restart; the http integration has no reload service.
+http:
+  cors_allowed_origins:
+    - "*"
+  login_attempts_threshold: 5

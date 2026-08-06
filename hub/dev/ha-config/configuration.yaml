@@ -23,3 +23,60 @@ logger:
   default: info
   logs:
     homeassistant.components.websocket_api: debug
+
+# --- Cross-origin access for the web Panel ------------------------------------
+# The Panel's web build is served from a DIFFERENT origin than this Hub
+# (http://localhost:8080 under `flutter run -d web-server`) and fetches camera
+# stills from GET /api/camera_proxy/<entity>. The token travels as an
+# `Authorization` header, which makes the request non-simple, so the browser
+# sends a preflight OPTIONS first. HA answers a preflight only for origins named
+# here; anything else gets
+#   403 "CORS preflight request failed: origin '...' is not allowed"
+# which is exactly what the Panel hit before this block existed. The appliance's
+# own Flutter/cage build uses dart:io and is not subject to any of this.
+#
+# `"*"` rather than a list, by owner decision: every service in this stack is on
+# the home LAN and the Panel's origin is not fixed (dev port today, wall panel
+# and second screen later). Two things are worth knowing about that value:
+#
+#  - It is UNDOCUMENTED. HA does no special-casing — it passes each entry
+#    straight through as a dict key to aiohttp-cors, which resolves
+#    `config.get(origin, config.get("*"))`. It works as a property of a pinned
+#    dependency, not as an HA contract, so re-check it on upgrade. (HA is also
+#    migrating `http:` from YAML to UI config after 2026.7; this block moves.)
+#  - It is NOT the spec wildcard. HA never emits `Access-Control-Allow-Origin: *`
+#    — it echoes the caller's own Origin back. Measured 2026-08-06 against this
+#    Hub: Origin `http://localhost:8080` -> `Access-Control-Allow-Origin:
+#    http://localhost:8080`, `Access-Control-Allow-Headers: AUTHORIZATION`.
+#
+# What `"*"` does NOT weaken: every /api/ view still demands the token. Measured
+# the same day, /api/states and /api/config answer an unauthenticated foreign
+# origin with 401. CORS is a browser read-permission, not access control, and it
+# never applied to curl or to the appliance's native build.
+#
+# What it DOES open — and the whole reason `login_attempts_threshold` is below:
+# HA's UNAUTHENTICATED login views honour this same list. Measured 2026-08-06
+# with `"*"` set, a JSON POST to /auth/login_flow from
+# `Origin: https://evil.example.com` preflighted 200 and its response was
+# cross-origin READABLE. That makes the Hub a password-guessing oracle for any
+# website somebody in the house visits — the threat does not come from the LAN,
+# it arrives through a browser that can reach the LAN. Rate limiting is what
+# bounds it, and HA ships with none (`login_attempts_threshold` defaults to -1).
+#
+# Narrower alternative, if that oracle ever outweighs the convenience: replace
+# `- "*"` with the exact origins —
+#     - http://localhost:8080
+#     - https://cast.home-assistant.io   # naming the key REPLACES this default
+# Matching is exact string: scheme required, non-default port required, no
+# trailing slash, and there is NO globbing — `http://192.168.1.*` looks right
+# and silently matches nothing.
+#
+# Changing any of this needs a FULL restart; the http integration has no reload.
+http:
+  cors_allowed_origins:
+    - "*"
+  # Not decoration: this is the control that actually bounds the login oracle
+  # described above, and it holds whatever CORS is set to. The cost is that a
+  # device can be locked out of the Hub if something makes it fail five logins,
+  # which on a family LAN is the better of the two failures.
+  login_attempts_threshold: 5
