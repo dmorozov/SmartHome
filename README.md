@@ -1,6 +1,6 @@
 # Smart Home application
 
-This project is to build a Smart Home system: a custom neumorphic "dollhouse" touch panel backed by a headless open-source hub, both on one always-on box. That box is the Ubuntu 26.04 dev laptop today (`192.168.68.81`, ADR-0008); the AMD Ryzen AI mini PC is still unpurchased and blocks nothing.
+A Smart Home system: a custom neumorphic "dollhouse" touch panel — a 2.5D isometric model of the real house on a wall touchscreen, rooms glowing with light state, devices live under your finger — backed by a headless open-source hub (Home Assistant), both on one always-on box. The target box is an AMD Ryzen AI mini PC, not yet purchased; an interim host runs the real house meanwhile ([ADR-0008](docs/adr/0008-device-integrations-on-a-linux-host-never-macos.md)), and nothing is blocked on the purchase.
 
 ## Start here
 
