@@ -31,3 +31,50 @@ flutter:
   uses-material-design: true
   assets:
     - assets/house/
+
+  # Roboto, bundled — because the house has no internet and the wall must
+  # still draw text.
+  #
+  # Measured 2026-08-06 in Chromium with every non-LAN host blocked: the web
+  # build rendered a BLANK WHITE PAGE. Not degraded text — nothing at all. Two
+  # runtime fetches to the public internet are why, and this stanza is half the
+  # fix; `web/flutter_bootstrap.js` is the other half, for CanvasKit:
+  #
+  #     https://fonts.gstatic.com/s/roboto/v32/...woff2      <- this stanza
+  #     https://www.gstatic.com/flutter-canvaskit/.../*      <- the bootstrap
+  #
+  # Flutter's default Material typography asks for "Roboto" and nothing was
+  # registered under that name, so the web engine fetched it. Declaring the
+  # family here is what makes the engine use a local face instead — the name
+  # has to be exactly `Roboto`, because that is the family the framework's own
+  # TextTheme names.
+  #
+  # Four weights, chosen against what the app actually asks for (`grep -o
+  # 'FontWeight\.[a-z0-9]*' lib/`): the implicit w400, plus w600, w700 and
+  # w800. CSS font-matching resolves an unbundled weight to the nearest heavier
+  # face first, so w600 lands on Bold and w800 on Black. Medium (w500) is not
+  # used by this app's own styles but is used by Material's default TextTheme,
+  # and leaving it out would have that text silently resolve to Bold.
+  #
+  # Not web-only, and that is deliberate: this also pins what the appliance
+  # draws. A Flutter/cage build takes its default font from the OS, so a kiosk
+  # image without Roboto installed would render something else — or tofu. One
+  # stanza makes every target draw the same glyphs.
+  #
+  # Copied from the Flutter SDK's own `bin/cache/artifacts/material_fonts/`
+  # (Apache-2.0; `Roboto-LICENSE.txt` sits beside the faces, which is what the
+  # licence's redistribution clause asks for). The SDK cache is not a
+  # dependency this repo may rely on at build time — it is wiped by
+  # `flutter clean`-adjacent operations and differs per machine — so the faces
+  # are committed rather than copied by a script.
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Roboto-Black.ttf
+          weight: 900

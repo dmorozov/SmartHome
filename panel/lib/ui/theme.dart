@@ -30,6 +30,36 @@ abstract final class PanelTheme {
 
   static ThemeData data() => ThemeData(
         useMaterial3: true,
+        // Named, not left to Material's default — and the reason is the
+        // internet, not typography.
+        //
+        // Material's default typography picks its family from
+        // `defaultTargetPlatform`, which on web comes from the *browser's*
+        // platform: `Roboto` on Linux and Android, `.AppleSystemUIFont` on
+        // macOS, `Segoe UI` on Windows. Only the first is bundled
+        // (`pubspec.yaml`). The web engine's missing-glyph check asks whether
+        // the *requested* family covers a rune, so under an unregistered
+        // family every rune above ASCII counts as missing and the Noto
+        // fallback downloader goes to fonts.gstatic.com — for text Roboto
+        // covers perfectly well. `main.dart`'s subtitle alone is enough to
+        // trigger it: it separates its three hints with `·` (U+00B7).
+        //
+        // Measured 2026-08-06, same build, only `navigator.platform` spoofed,
+        // counting requests that left the LAN:
+        //
+        //     Linux x86_64   0        MacIntel   1        Win32   1
+        //
+        // and 0 on all three with this line. The wall is Chromium on Linux, so
+        // today this costs nothing and prevents nothing — it is here because
+        // "which OS is the browser on" is not a thing the house's ability to
+        // draw its own UI should depend on, and a second screen or a tablet is
+        // one decision away.
+        //
+        // Distinct from the engine's *own* Roboto fetch, which no Dart code can
+        // influence — that one is stopped by the `fonts:` stanza naming the
+        // family `Roboto`, and only by that. Two mechanisms, two fixes; see
+        // panel/README.md.
+        fontFamily: 'Roboto',
         colorSchemeSeed: accent,
         scaffoldBackgroundColor: surface,
       );

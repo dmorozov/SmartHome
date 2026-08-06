@@ -65,6 +65,10 @@ flutter run -d web-server --web-port 8080 --profile --dart-define=HUB=ha \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
 
+No offline flag is needed on these, deliberately — `web/flutter_bootstrap.js`
+carries it instead, so no command can forget it. See
+[The web build must not need the internet](#the-web-build-must-not-need-the-internet).
+
 Then open `localhost:8080` in the **host** browser. `localhost:18123` is
 right *because* of that: the dart-defines are dialled by the browser, which
 runs on the host, where the dev Hub's shifted ports live
@@ -149,6 +153,114 @@ a `StatusState`. Devices without an `entity:` render with unknown state.
 The Home Assistant to develop against comes up with the devcontainer
 automatically, as sibling containers — no appliance needed:
 [`../hub/dev/README.md`](../hub/dev/README.md).
+
+## The web build must not need the internet
+
+The house may have no internet, and the wall is not allowed to care. A stock
+Flutter web build does: **measured 2026-08-06 in Chromium with every non-LAN
+host blocked, the Panel rendered a blank white page.** Not degraded text —
+nothing at all. Two runtime fetches to the public internet were the cause, and
+each has its own fix:
+
+| Fetched from | What | Fix, and where it lives |
+|---|---|---|
+| `www.gstatic.com/flutter-canvaskit/…` | `canvaskit.wasm`, `canvaskit.js` | `canvasKitBaseUrl` in `web/flutter_bootstrap.js` |
+| `fonts.gstatic.com/s/roboto/…` | Roboto, the default Material face | the `fonts:` stanza in `pubspec.yaml` |
+| `fonts.gstatic.com/s/notosans…/…` | a Noto *fallback*, for glyphs the requested family does not cover | `fontFamily: 'Roboto'` in `ui/theme.dart` |
+
+**Both fixes are in the source, and neither is a command-line flag.** That is
+the point of them. `--no-web-resources-cdn` fixes the CanvasKit half too and is
+the officially-supported route — `flutter build web` and `flutter run -d
+web-server` both accept it on Flutter 3.44.8 — but a flag holds only for as
+long as every command anyone ever writes remembers it, and "the wall draws
+nothing" is too quiet a failure to leave to that. `web/flutter_bootstrap.js`
+sets `canvasKitBaseUrl` instead; it outranks both the flag and the
+`FLUTTER_WEB_CANVASKIT_URL` dart-define, and it is honoured by `flutter run`
+and `flutter build web` alike. Verified 2026-08-06 by running the dev loop with
+**no** flag and confirming zero external requests. The CanvasKit files were
+always in `build/web/canvaskit/`; only the base URL was ever wrong.
+
+Do not reach for `--dart-define=FLUTTER_WEB_CANVASKIT_URL=…` — it is still read
+in 3.44 but no longer chooses the base URL, and on its own it leaves
+`useLocalCanvasKit` unset, so the loader goes to gstatic while looking
+configured.
+
+**The fonts are two mechanisms, not one, and each needs its own fix.** Missing
+either leaves a request going out.
+
+*The engine's own Roboto.* Nothing was registered under the family name
+Flutter's default typography asks for, so the engine fetched it. The check is a
+literal string compare against `Roboto` in the built
+`assets/FontManifest.json`, so the family name in `pubspec.yaml` is
+load-bearing — the same faces under any other name silently reinstate the
+fetch, and no Dart code can influence this one. It pins what the appliance
+draws too: a Flutter/cage build otherwise takes its default face from whatever
+the kiosk image happens to have installed.
+
+*Noto fallbacks.* When a rune is not covered by the **requested** family, the
+engine downloads a Noto face at runtime. The trap is that the requested family
+is platform-dependent: Material's default typography resolves to `Roboto` on
+Linux and Android but `.AppleSystemUIFont` on macOS and `Segoe UI` on Windows,
+neither of which is bundled — so on those platforms *every* rune above ASCII
+counts as missing. The subtitle on the home screen is enough to trigger it; it
+separates its hints with `·` (U+00B7). Measured 2026-08-06, one build, only
+`navigator.platform` spoofed, counting requests that left the LAN:
+
+| `navigator.platform` | before | after `fontFamily: 'Roboto'` |
+|---|---|---|
+| `Linux x86_64` | 0 | 0 |
+| `MacIntel` | 1 | **0** |
+| `Win32` | 1 | **0** |
+
+The wall is Chromium on Linux, so today this prevents nothing — it is fixed
+because "which OS is the browser on" is not something the house's ability to
+draw its own UI should depend on, and a second screen or a tablet is one
+decision away. **This is also why the offline check must be run per platform,
+not once.** Testing only on the machine you happen to be on is how this was
+missed the first time.
+
+Corollary worth a lint if it ever recurs: a `TextStyle(fontFamily: …)` naming
+anything not in `pubspec.yaml` re-opens the hole on *every* platform.
+
+**What remains internet-dependent, honestly:** a glyph Roboto genuinely lacks —
+CJK, emoji — would still reach for Noto. It cannot fire for the shipped House
+Plan, which is Latin text plus Material Icons (Material Icons live in the
+Private Use Area, which has no fallback mapped at all, so a missing icon is
+tofu and *zero* requests). But the House Plan is family-authored: a room named
+in Chinese would reach for a font that is not there. The fix if that day comes
+is one more line beside `canvasKitBaseUrl` —
+`fontFallbackBaseUrl: "assets/fallback-fonts/"` — plus the relevant Noto face
+committed under that path. Not done now because shipping megabytes of Noto for
+glyphs nobody has typed is the wrong trade; recorded here so the symptom (tofu
+boxes in one room's name) is diagnosable.
+
+The check that proves it, and the one worth re-running after any Flutter
+upgrade, is a browser with every non-LAN host refused:
+
+```js
+// Playwright. Run the whole thing once per platform string — the fallback-font
+// hole above is invisible on Linux.
+for (const platform of ['Linux x86_64', 'MacIntel', 'Win32']) {
+  const page = await context.newPage();
+  await page.addInitScript((p) => {
+    Object.defineProperty(navigator, 'platform', { get: () => p });
+  }, platform);
+  await page.route('**/*', (route) => {
+    const url = route.request().url();
+    const lan = /^https?:\/\/(localhost:8080|homeassistant:8123|go2rtc-dev:1984)\//;
+    return (lan.test(url) || url.startsWith('data:') || url.startsWith('blob:'))
+        ? route.continue()
+        : route.abort();
+  });
+  await page.goto('http://localhost:8080/');
+  // assert: zero aborted requests, and the Dollhouse drew.
+}
+```
+
+Passing means zero aborted requests **and** a Dollhouse that still draws. The
+first without the second is how a font quietly becomes a blank rectangle — and
+it is not hypothetical: a build whose `HA_TOKEN` was missing passed the request
+half of this check while rendering nothing at all.
 
 ## Live video in the Popup
 
@@ -773,7 +885,7 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 
 | Target | Command | Works on |
 |---|---|---|
-| Web | `flutter run -d web-server --web-port 8080 --profile` | the devcontainer (host browser via forwarded 8080) — the dev loop. `--profile` is required: debug gates `main()` on the Dart Debug extension ([Talking to the Hub](#talking-to-the-hub)) |
+| Web | `flutter run -d web-server --web-port 8080 --profile` | the devcontainer (host browser via forwarded 8080) — the dev loop. `--profile` is required: debug gates `main()` on the Dart Debug extension ([Talking to the Hub](#talking-to-the-hub)). Nothing here keeps CanvasKit off the internet — `web/flutter_bootstrap.js` does ([The web build must not need the internet](#the-web-build-must-not-need-the-internet)) |
 | Linux desktop | `flutter run -d linux` | builds in the devcontainer; runs where there is a display — the appliance/kiosk path, not a dev loop |
 
 Screenshot the web build without a visible browser (handy for checking the
