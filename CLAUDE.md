@@ -1,5 +1,10 @@
 # SmartHome
 
+## Git discipline — review before anything lands
+
+**You MUST leave every change unstaged. Never `git add`, never `git commit` without confirmation.
+Staging, committing and pushing are the owner's actions or only when the owner directly asked for that.
+
 ## Agent skills
 
 ### Issue tracker
