@@ -222,10 +222,12 @@ This reads your real files and checks everything fits together: every device has
 Then look at it:
 
 ```sh
-flutter run -d web-server --web-port 8080
+flutter run -d web-server --web-port 8080 --profile
 ```
 
-— and open `localhost:8080` in the host browser.
+— and open `localhost:8080` in the host browser. (`--profile` is required
+— a debug web-server build renders nothing without the Dart Debug
+extension; `README.md` "Talking to the Hub" explains.)
 
 If the geometry looks wrong, fix the *drawing* and convert again. Never edit `house.yaml` — the next conversion would erase it.
 

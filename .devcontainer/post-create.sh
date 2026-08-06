@@ -83,12 +83,18 @@ cat <<'EOF'
 
  Panel against the dev Hub, in the HOST browser:
      cd panel
-     flutter run -d web-server --web-port 8080 \
+     flutter run -d web-server --web-port 8080 --profile \
        --dart-define=HUB=ha \
        --dart-define=HA_URL=http://localhost:18123 \
        --dart-define=HA_TOKEN="$(cat ../hub/dev/token)" \
        --dart-define=GO2RTC_URL=http://localhost:11984
      # then open http://localhost:8080 on the host (VS Code forwards it).
+     # --profile is load-bearing (learned 2026-08-06): a DEBUG web-server
+     # build loads all its modules and then waits for a debug connection
+     # before running main(), and the web-server device only gets one from
+     # the Dart Debug Chrome extension — no extension, no app: a blank
+     # page with an empty console. Profile skips that gate. For
+     # breakpoints/hot reload, install the extension and drop the flag.
      # localhost + shifted ports are correct in those dart-defines: the
      # BROWSER dials HA and go2rtc, and the browser is on the host, where
      # compose publishes the dev stack on 18123/11984.

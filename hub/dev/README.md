@@ -172,12 +172,18 @@ browser lives on the host (`post-create.sh` prints this same command):
 
 ```sh
 cd panel
-flutter run -d web-server --web-port 8080 \
+flutter run -d web-server --web-port 8080 --profile \
   --dart-define=HUB=ha \
   --dart-define=HA_URL=http://localhost:18123 \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)" \
   --dart-define=GO2RTC_URL=http://localhost:11984
 ```
+
+`--profile` is load-bearing, not an optimisation: a debug `-d web-server`
+build waits for a debug connection before running `main()`, and the
+web-server device only gets one from the Dart Debug Chrome extension —
+without it the page stays blank with an empty console
+(`panel/README.md` has the full story).
 
 Then open <http://localhost:8080> on the host (VS Code forwards the
 port). `localhost` + shifted ports are correct in those dart-defines

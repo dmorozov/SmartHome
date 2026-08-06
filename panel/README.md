@@ -59,8 +59,8 @@ runner patches) once the spike passes.
 `HubClient` has two implementations; `lib/main.dart` picks one at boot.
 
 ```sh
-flutter run -d web-server --web-port 8080   # FakeHub (default)
-flutter run -d web-server --web-port 8080 --dart-define=HUB=ha \
+flutter run -d web-server --web-port 8080 --profile   # FakeHub (default)
+flutter run -d web-server --web-port 8080 --profile --dart-define=HUB=ha \
   --dart-define=HA_URL=http://localhost:18123 \
   --dart-define=HA_TOKEN="$(cat ../hub/dev/token)"
 ```
@@ -69,6 +69,16 @@ Then open `localhost:8080` in the **host** browser. `localhost:18123` is
 right *because* of that: the dart-defines are dialled by the browser, which
 runs on the host, where the dev Hub's shifted ports live
 ([`.devcontainer/README.md`](../.devcontainer/README.md)'s addressing rule).
+
+`--profile` is load-bearing (measured 2026-08-06): a **debug** web-server
+build loads all 549 DDC modules and then waits for a debug connection
+before running `main()` — and the web-server device only gets one from the
+[Dart Debug Chrome extension](https://chromewebstore.google.com/detail/dart-debug-extension/eljbmlghnomdjgdjmbdekegdkbabckhm),
+which flutter itself names when it starts. Without the extension the page
+is blank and the console empty: nothing errors, because nothing runs.
+Profile mode skips the gate — and gives up hot reload and breakpoints
+with it; iterate by restarting the command. For a real debugging
+session, install the extension and drop the flag.
 
 `HUB`, `HA_URL`, `HA_TOKEN` and `GO2RTC_URL` are read from the **process
 environment first**, falling back to the build's `--dart-define`, then to the
@@ -156,7 +166,7 @@ Two settings feed it, deliberately at opposite ends of the House Plan:
 | Which stream a Device plays | `stream:` in `bindings.yaml`, per Device | `ring_doorbell` — a **name**, never a URL |
 
 ```sh
-flutter run -d web-server --web-port 8080 --dart-define=GO2RTC_URL=http://127.0.0.1:11984
+flutter run -d web-server --web-port 8080 --profile --dart-define=GO2RTC_URL=http://127.0.0.1:11984
 ```
 
 `GO2RTC_URL` has **no built-in default**, and `HA_URL` does. That asymmetry is
@@ -686,7 +696,7 @@ python3 tool/sh3d_to_yaml.py MyHouse.sh3d -o assets/house/house.yaml
 
 | Target | Command | Works on |
 |---|---|---|
-| Web | `flutter run -d web-server --web-port 8080` | the devcontainer (host browser via forwarded 8080) — the dev loop |
+| Web | `flutter run -d web-server --web-port 8080 --profile` | the devcontainer (host browser via forwarded 8080) — the dev loop. `--profile` is required: debug gates `main()` on the Dart Debug extension ([Talking to the Hub](#talking-to-the-hub)) |
 | Linux desktop | `flutter run -d linux` | builds in the devcontainer; runs where there is a display — the appliance/kiosk path, not a dev loop |
 
 Screenshot the web build without a visible browser (handy for checking the

@@ -68,7 +68,7 @@ display — are the only parts a terminal cannot confirm):
 | 2 | `cd panel && flutter test` | 398 / 1 / 0 |
 | 3 | `curl -s http://homeassistant:8123` | HTML back (service-name DNS) |
 | 4 | the live test (command printed by post-create) | connects + auths + snapshots; **currently fails later at the thermostat cast** — that is the dev-Hub parity drift (below), not a container bug. Failing to connect/auth IS a container bug |
-| 5 | `flutter run -d web-server --web-port 8080` + dart-defines post-create prints | Panel in the HOST browser at `localhost:8080`, HUB badge green |
+| 5 | `flutter run -d web-server --web-port 8080 --profile` + dart-defines post-create prints | Panel in the HOST browser at `localhost:8080`, HUB badge green. `--profile` is required — see triage |
 | 6 | `docker ps` in-container | the four `*-dev` siblings |
 | 7 | `ls -ld ~/.pub-cache` | owned by `vscode` |
 | 8 | `flutter build linux --release` | bundle builds; its glibc ceiling (measured `GLIBC_2.34`) runs on the 24.04 mini PC and the 26.04 interim host both |
@@ -80,6 +80,7 @@ display — are the only parts a terminal cannot confirm):
 | Symptom | Likely cause | Fix direction |
 |---------|--------------|---------------|
 | `Address already in use` on 8080 | an earlier `flutter run` still alive (often an agent session's background run) | `ss -tlnp \| grep 8080`, stop that pid — never a missing dependency |
+| Page at `:8080` blank, console empty | `flutter run -d web-server` in **debug** mode: all modules load, then `main()` waits for a debug connection only the Dart Debug Chrome extension can provide (measured 2026-08-06) | add `--profile` (the documented command carries it), or install the extension for a debugging session |
 | initialize.sh refuses on reopen | the guard no longer recognises the running stack | `docker inspect homeassistant-dev --format '{{ index .Config.Labels "com.docker.compose.project.config_files" }}'` must list `.devcontainer/compose.yaml`; adjust the `case` pattern |
 | Port collision on a shifted port (18123/11883/11984/65123/28554/28555) | something new claimed it on the host | `ss -tlnp \| grep <port>`; pick another, update `hub/dev/compose.yaml`'s table + both READMEs + post-create.sh |
 | `pub get` fails on cache permissions | pub-cache volume owned by root | `sudo chown -R vscode /home/vscode/.pub-cache`, then fix the Dockerfile ordering |
