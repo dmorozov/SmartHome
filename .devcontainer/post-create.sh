@@ -78,6 +78,10 @@ cat <<'EOF'
     (compose-network hostname and container port — NOT localhost).
  4. Ring (optional): http://localhost:65123 — Ring login + 2FA; the
     refresh token lands in hub/dev/ring-mqtt-data/ (gitignored).
+ 5. GitHub CLI: `gh auth login` — the issue tracker
+    (docs/agents/issue-tracker.md) runs on gh, so filing or reading
+    issues from in here needs it. Once per container; a "Rebuild
+    Container" starts a fresh home directory and loses it.
 
 == Daily commands (terminal in this container) ==
 
