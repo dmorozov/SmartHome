@@ -12,6 +12,15 @@
 # (Host ports are the SHIFTED dev set — compose.yaml's header says why the
 # canonical ones belong to the production stack on this same machine.)
 
+# Same E8 decision as production (../../go2rtc/go2rtc.example.yaml, root
+# README E8): go2rtc 403s any cross-origin WebSocket upgrade unless
+# api.origin says otherwise, and 1.9.10 has no allowlist — it is "*" or no
+# video in a browser. Without this, the web Panel at localhost:8080 can
+# never open MSE against this instance, however correct its streams are.
+# LAN exposure is not widened here: the dev ports bind 127.0.0.1.
+api:
+  origin: "*"
+
 streams:
   # Wyze v3 / Pan v3 after the official RTSP firmware flash
   # (docs/research/hub-and-device-integrations.md §3.2):
