@@ -6,6 +6,7 @@ import 'package:panel/domain/house.dart';
 import 'package:panel/ui/device_popup.dart';
 import 'package:panel/ui/device_presentation.dart';
 import 'package:panel/ui/video/live_video.dart';
+import 'package:panel/ui/video/live_video_keepalive.dart';
 
 import 'support/fake_go2rtc.dart';
 
@@ -573,5 +574,108 @@ void main() {
 
     expect(go2rtc.only.closes, 1);
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
+  });
+
+  group('through the keep-alive', () {
+    // Issue #1: the Popup's open→teardown→reopen lifecycle is deliberately
+    // aggressive (it protects the doorbell — #177014), and that is exactly
+    // the cadence that relaunches ring-mqtt's producer 1.1 s after killing
+    // it and joins the new stream mid-GOP, with no later keyframe to heal
+    // with. The keep-alive is what `main()` puts between this Popup and the
+    // player; these two cases are the proof that this Popup's lifecycle
+    // actually reaches it, which the pool's own suite cannot show.
+    //
+    // Not the default `VideoConfig`: every other case in this file asserts
+    // one session per Popup, which is still the contract the *Popup* keeps.
+    // What changes is what the opener behind it does with the session after
+    // the Popup has let go.
+    testWidgets('reopening a Popup within the grace window re-attaches to the '
+        'stream that is still running', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+      final video =
+          VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open);
+
+      await openPopup(tester, video: video);
+      // The keep-alive is invisible to the three honest bodies: with a
+      // go2rtc address and a stream name it dials, exactly as the bare
+      // opener did. Asserted because "Live view placeholder — go2rtc stream"
+      // is the `unconfigured` body, decided in `_openVideo` *before* any
+      // opener is called — so if it ever shows up on a configured Panel, the
+      // cause is the address or the binding and never this pool.
+      expect(find.textContaining('Live view placeholder'), findsNothing);
+      expect(go2rtc.only.url.toString(), 'ws://hub:1984/api/ws?src=porch');
+
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      // The Popup still closes its own session — its half of the contract is
+      // unchanged, and `popup.stream_closed` is still honest about it.
+      expect(go2rtc.only.closes, 0, reason: 'kept, not killed');
+
+      await tester.tap(find.text('tap the pin'));
+      await tester.pumpAndSettle();
+
+      expect(go2rtc.opened, hasLength(1),
+          reason: 'a second dial is the relaunch that loses the IDR race');
+      expect(find.text('Close'), findsOneWidget);
+
+      // Inside the body, not `addTearDown`: the tree is disposed — and its
+      // "no Timer left pending" invariant checked — before tear-downs run,
+      // and this pool is still counting a two-minute age cap over the
+      // session the Popup on screen is holding. `main()` never calls it,
+      // because there the pool is meant to outlive everything.
+      keepAlive.dispose();
+    });
+
+    testWidgets('a Popup that dies at its ceiling does not buy the stream a '
+        'further grace window', (tester) async {
+      // The one place the pool's age cap and the Popup's ceiling are the same
+      // two minutes, and the order they fire in decides whether #177014's
+      // "no session outlives the ceiling" survives. It holds because
+      // `initState` opens the video (arming the pool's cap) *before* it arms
+      // the ceiling, so the cap fires first and the session is retired rather
+      // than kept. That is a real dependency on statement order in another
+      // file — asserted here so reordering those two lines fails a test
+      // instead of silently granting every ceiling-closed Ring session
+      // another 20 s.
+      final go2rtc = FakeGo2rtc();
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+
+      await openPopup(tester,
+          video:
+              VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open),
+          dismissAfter: const Duration(seconds: 30),
+          dismissCeiling: kLiveVideoMaxHeld);
+
+      // Held open past its deadline by a stream of dings, all the way to the
+      // ceiling — the `kDoorbellPopupCeiling` scenario.
+      for (var i = 0; i < 8; i++) {
+        await tester.pump(const Duration(seconds: 15));
+        extendDevicePopup('cam-porch');
+      }
+      await tester.pumpAndSettle();
+
+      expect(find.text('Close'), findsNothing, reason: 'the ceiling popped it');
+      expect(go2rtc.only.closes, 1,
+          reason: 'retired at the cap, not kept for another 20 s');
+      keepAlive.dispose();
+    });
+
+    testWidgets('a Popup nobody reopens still lets the stream go', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+
+      await openPopup(tester,
+          video:
+              VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open));
+      await tester.tap(find.text('Close'));
+      await tester.pumpAndSettle();
+      await tester.pump(kLiveVideoLinger + const Duration(seconds: 1));
+
+      // The #177014 half: a Ring session held for nobody has to end without
+      // anyone asking it to.
+      expect(go2rtc.only.closes, 1);
+      keepAlive.dispose();
+    });
   });
 }

@@ -74,7 +74,8 @@
                 "ms-python.python"
             ],
             "settings": {
-                "dart.flutterSdkPath": "/opt/flutter"
+                "dart.flutterSdkPath": "/opt/flutter",
+                "remote.autoForwardPortsSource": "process"
             }
         }
     }

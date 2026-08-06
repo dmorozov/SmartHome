@@ -15,6 +15,7 @@ import 'ui/doorbell_popup_host.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
 import 'ui/video/live_video.dart';
+import 'ui/video/live_video_keepalive.dart';
 import 'ui/video/snapshot.dart';
 
 Future<void> main() async {
@@ -97,6 +98,14 @@ Future<void> main() async {
     houseYaml: await rootBundle.loadString('assets/house/house.yaml'),
     bindingsYaml: await rootBundle.loadString('assets/house/bindings.yaml'),
   );
+  // One pool for the whole process, never disposed — issue #1; the file says
+  // what it is for. Here and not inside `VideoConfig`, whose `open` this
+  // becomes: that class is `@immutable` and every hermetic test builds one,
+  // while this holds live sessions and running Timers. Composed at the root
+  // instead, so the widget tree is unchanged, both video surfaces get it
+  // through the seam they already use, and `test/fixtures.dart` still
+  // defaults to the raw opener.
+  final keepAlive = LiveVideoKeepAlive();
   // `video` travels beside `controller`/`hubLabel` and deliberately not
   // through `bootPanel`: boot's contract is that it fails "in exactly three
   // ways" and brings up two things, the House and the Hub adapter. go2rtc is
@@ -105,7 +114,8 @@ Future<void> main() async {
   runApp(PanelApp(
     controller: boot.controller,
     hubLabel: boot.hubLabel,
-    video: VideoConfig(go2rtcUrl: config.go2rtcUrl),
+    video:
+        VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
     // The Hub's own address and token, reused: a camera snapshot is an HA
     // REST fetch authenticated exactly like the socket. The token travels
     // in this object to become a header — never a URL part (snapshot.dart).

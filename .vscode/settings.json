@@ -1,0 +1,49 @@
+{
+  // Excludes folders from the File Explorer (and thus search by default)
+  "files.exclude": {
+    "**/.git/**": true,
+    "**/build/**": true,
+    "**/target/**": true,
+    "**/bin/**": true,
+    "**/.gradle/**": true
+  },
+  // Specific exclusions for search only
+  "search.exclude": {
+    "**/.git/**": true,
+    "**/cache": true,
+    "**/*.log": true,
+    "**/build/**": true,
+    "**/target/**": true,
+    "**/bin/**": true,
+    "**/.gradle/**": true
+  },
+  // Core settings
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.detectIndentation": false,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.bracketPairColorization.enabled": true,
+  "editor.guides.bracketPairs": "active",
+
+  // Editors
+  "[xml]": {
+    "editor.defaultFormatter": "redhat.vscode-xml",
+    "editor.tabSize": 2
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "rvest.vs-code-prettier-eslint"
+  },
+  "[yaml]": {
+    "editor.tabSize": 2
+  },
+  "[properties]": {
+    "editor.tabSize": 2
+  },
+
+  "terminal.integrated.defaultProfile.linux": "zsh"
+}

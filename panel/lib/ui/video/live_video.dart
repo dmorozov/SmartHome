@@ -105,6 +105,16 @@ abstract interface class LiveVideoSession {
   /// connection, because go2rtc keeps the on-demand ffmpeg transcode running
   /// for as long as a consumer is attached.
   ///
+  /// That is the contract a *player* keeps. It is not what the caller
+  /// observes on the wall: `main()` composes `VideoConfig.open` out of
+  /// `live_video_keepalive.dart`, whose sessions answer this by handing the
+  /// running one back to the pool for `kLiveVideoLinger` before the player's
+  /// own `close` is reached. Issue #1 — a reopen 1.1 s after a teardown
+  /// relaunches ring-mqtt's producer and joins the new stream mid-GOP, with
+  /// no later keyframe to heal with. Both callers are unchanged and both
+  /// still owe this call by every route out; what changed is only how soon
+  /// the socket behind it goes.
+  ///
   /// Measured, and the earlier "returns `consumers` to `[]` immediately" was
   /// only half of it: from [LiveVideoPhase.playing] the count is back to `[]`
   /// inside a second, but a session closed during [LiveVideoPhase.connecting]

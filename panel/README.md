@@ -309,6 +309,83 @@ the Hub host 2026-08-04 (**G4**, done — [TODO.md](../TODO.md)) and in the devc
 server, but its `HtmlElementView` was never *mounted* in a widget tree. Both
 gaps are stated again in the code, at the class that carries them.
 
+### The grace window: a reopen must not relaunch the producer
+
+`lib/ui/video/live_video_keepalive.dart` sits between both video surfaces and
+whichever player this build has. It is the fix for **issue #1**, and the fault
+it exists for was found by a finger on a real doorbell, not by a test.
+
+Tapping the doorbell pin three times in a row gave a good picture, then a frame
+whose bottom half was green, then nothing at all — and a fourth session left
+open for 2 m 22 s never healed. Three plain `ffmpeg -frames:v 1` pulls a second
+apart, with no Panel in the loop, **all decoded corrupt frames** (one ~90 %
+smear, two half-frame), with `error while decoding MB 45 45` and `mmco: unref
+short failure` in the output. So the corruption was in the elementary stream
+ring-mqtt's restream delivers; the Panel painted what arrived, and painted
+nothing rather than something invented.
+
+**Measured** is the correlation with the gap between teardown and relaunch:
+minutes gave a good picture, ~40 s gave half a frame, 1.0–1.1 s gave nothing —
+and 1.1 s is exactly the cadence the Popup's deliberately aggressive
+open→teardown→reopen lifecycle produces.
+
+**Inferred** — the issue files it under "Mechanism hypothesis", and so does the
+code — is *why*: ring-mqtt transcodes Ring's **WebRTC** stream, and over WebRTC
+keyframes are not periodic. An IDR arrives at session start and afterwards only
+on a PLI request, which nothing in this chain can send, so a consumer attaching
+a hair late would join mid-GOP with no later keyframe to heal with. Nobody has
+read the bytes to confirm it. The fix is sized on the timings, not on the story;
+if the story is wrong but restarting the producer is still the trigger, the fix
+holds, and if it is wrong altogether the fix simply will not work.
+
+So the Panel stops relaunching. When a Popup or a camera tile lets go, its
+go2rtc session is **kept** for `kLiveVideoLinger` (20 s) instead of closed; a
+consumer asking for the same endpoint inside that window re-attaches to the
+producer that is still running. Nothing inspects a picture — a corrupt frame is
+a delivered frame and the Panel cannot tell the difference.
+
+| Bound | Value | Why |
+|---|---|---|
+| `kLiveVideoLinger` | 20 s | Must cover the Popup's reopen cadence (seconds) without exceeding `kDoorbellPopupDeadline` (30 s) — a kept session is a Ring session with **nobody watching**, and #177014 says one of those can suppress the next real ding. A test asserts the inequality rather than trusting two files to stay in order. It does **not** cover the issue's ~40 s reopen, which came back half corrupt: buying that would mean holding a doorbell's stream longer than the Panel is willing to show it, trading a green half-frame for a missed ding. |
+| `kLiveVideoMaxHeld` | 2 min | The same figure as `kDoorbellPopupCeiling` and for its argument: without a cap one session could serve an unbounded chain of reopens. It governs keeping and re-attaching only — a session somebody **is** watching is never closed under them, because the Cameras view holds a tile live for up to five minutes on purpose, and closing a player under a live consumer leaves the phase reading `playing` over an empty box (the stale picture ADR-0007 is about). |
+
+**What that costs, stated as sums rather than comparisons.** A doorbell Popup
+that runs its full 30 s deadline and is not reopened now holds its Ring session
+**50 s**, not 30. And the cap is not the bound it looks like: a reopen arriving
+just under it re-attaches, and that consumer then runs its own full lifetime, so
+the real worst case is `maxHeld` **plus one consumer's own bound** — ~4 min
+through a doorbell Popup's ceiling, ~7 min through a Cameras tile's five-minute
+idle return. Refusing reuse near the cap buys nothing (the last consumer through
+still runs its own lifetime); the only route to a hard 2 min is not to
+re-attach at all, i.e. not to fix issue #1. Tests pin both numbers.
+
+A session is not kept if it failed, if it is `unsupported` (nothing was dialled,
+so there is no producer to hold), or if it is already past the age cap. One kept
+session per endpoint, so a stream can never accumulate held Ring sessions. And
+the wrapper keeps `LiveVideoOpener`'s contract whole — **it may not throw**:
+`device_popup.dart` catches, but `cameras_view.dart` calls `video.open` bare, so
+an exception let out would take the whole Cameras view down for one tile.
+
+It is composed in `main()` — one pool per process, `VideoConfig(open:)` — and
+not inside `VideoConfig`, which is `@immutable` and built by every hermetic
+test. So both surfaces get it through the seam they already use, no widget
+changed, and the suites still drive the raw opener.
+
+| Log line | Means |
+|---|---|
+| `I video.stream_kept name=… phase=… for_s=20` | a consumer let go; the producer is being held |
+| `I video.stream_reused name=… reuse=N phase=…` | somebody came back inside the window — **the line that separates "the picture was good because the producer never stopped" from "the first open of the day was lucky"** |
+| `D video.stream_dropped name=… reason=… reuses=N` | really closed. `linger_expired` is the ordinary case; `too_old` is the two-minute guarantee firing; `failed_while_kept` is a producer that died while it was being held |
+
+**What is not proven.** Everything above is hermetic — the pool against a fake
+go2rtc, and both surfaces' lifecycles against it. That a re-attached MSE session
+survives its `<video>` element being re-parented into a fresh platform view is
+argued from the DOM (the element is owned by the session, detached, and moved in
+by `onElementCreated`) and, like the rest of that player's view, **never
+mounted**. The green half-frame itself needs a real camera and a human finger to
+confirm gone; that is [TODO.md](../TODO.md)'s doorbell work, not a test this
+repo can run.
+
 ### Five answers, because one grey rectangle would be a lie
 
 | Phase | On the wall | In the log |

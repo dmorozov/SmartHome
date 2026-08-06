@@ -4,6 +4,7 @@ import 'package:panel/diagnostics/log.dart';
 import 'package:panel/ui/cameras/cameras_view.dart';
 import 'package:panel/ui/dollhouse/dollhouse_view.dart';
 import 'package:panel/ui/video/live_video.dart';
+import 'package:panel/ui/video/live_video_keepalive.dart';
 import 'package:panel/ui/video/snapshot.dart';
 
 import 'fixtures.dart';
@@ -36,7 +37,11 @@ void main() {
     Log.sink = Log.printRecord;
   });
 
-  Future<void> pumpPanel(WidgetTester tester, {String? autoLiveStream}) async {
+  /// [opener] replaces the raw fake for the one case that needs something
+  /// *between* the tiles and it — the keep-alive. Everything else drives
+  /// [go2rtc] directly, because what it asserts is the tile's own lifecycle.
+  Future<void> pumpPanel(WidgetTester tester,
+      {String? autoLiveStream, LiveVideoOpener? opener}) async {
     var house = loadTestHouse();
     if (autoLiveStream != null) {
       house = houseWithStream(house, 'cam-living', autoLiveStream);
@@ -44,7 +49,8 @@ void main() {
     final (controller, _) = fakeHubRig(house: house);
     await tester.pumpWidget(panelApp(
       controller,
-      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      video: VideoConfig(
+          go2rtcUrl: 'http://hub:1984', open: opener ?? go2rtc.open),
       snapshots: SnapshotConfig(
           haUrl: 'http://hub:8123', token: 'tok', fetch: snapshots.fetch),
     ));
@@ -314,5 +320,63 @@ void main() {
     expect(find.byType(CamerasView), findsOneWidget);
     expect(find.textContaining('Still watching?'), findsOneWidget);
     await unmount(tester);
+  });
+
+  group('through the keep-alive', () {
+    // Issue #1 was reported against the doorbell Popup, but the Cameras
+    // view's tiles toggle their own sessions on tap and drop all of them
+    // when the view closes — the same open→teardown→reopen cadence, on the
+    // same ring-mqtt restream, with the same mid-GOP join waiting at the end
+    // of it. `main()` puts one keep-alive in front of both surfaces; these
+    // cases are the proof that a tile's lifecycle reaches it.
+    testWidgets('a tile toggled off and straight back on re-attaches to the '
+        'stream that is still running', (tester) async {
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+      await pumpPanel(tester, opener: keepAlive.open);
+      await openCameras(tester);
+
+      await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
+      await tester.pump();
+      go2rtc.only.plays();
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
+      await tester.pump();
+      expect(go2rtc.only.closes, 0, reason: 'kept, not killed');
+      expect(find.text('LIVE'), findsNothing,
+          reason: 'the tile is off however the stream is held');
+
+      await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
+      await tester.pump();
+
+      expect(go2rtc.opened, hasLength(1),
+          reason: 'a second dial is the relaunch that loses the IDR race');
+      expect(find.text('LIVE'), findsOneWidget);
+      // Already playing, so the picture is there on the first frame rather
+      // than after another go2rtc spin-up.
+      expect(find.text('a moving picture'), findsOneWidget);
+
+      await unmount(tester);
+      keepAlive.dispose();
+    });
+
+    testWidgets('closing the view still lets every stream go once nobody '
+        'comes back', (tester) async {
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+      await pumpPanel(tester, opener: keepAlive.open);
+      await openCameras(tester);
+      await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      await tester.pump(kLiveVideoLinger + const Duration(seconds: 1));
+
+      // #177014 again: the view's promise is that its streams die with it,
+      // and a grace period may delay that, never repeal it.
+      expect(go2rtc.only.closes, 1);
+      await unmount(tester);
+      keepAlive.dispose();
+    });
   });
 }
