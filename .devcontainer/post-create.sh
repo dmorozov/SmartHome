@@ -87,6 +87,10 @@ cat <<'EOF'
      # localhost + shifted ports are correct in those dart-defines: the
      # BROWSER dials HA and go2rtc, and the browser is on the host, where
      # compose publishes the dev stack on 18123/11984.
+     # "Address already in use" on 8080 is not a missing dependency —
+     # it is an earlier `flutter run` still alive (an agent session's
+     # background run, a forgotten terminal). Find and stop it:
+     #     ss -tlnp | grep 8080     # the dart pid holding the port
 
  Tests (hermetic):        cd panel && flutter test
  The live end-to-end test (in-container, so service-name DNS):
