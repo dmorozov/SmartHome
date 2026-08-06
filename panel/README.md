@@ -302,7 +302,7 @@ house's configuration and make every camera two entries that can drift apart.
 **What is not proven.** The MJPEG player has been driven against the live
 go2rtc and through the whole suite, but **never in the cage kiosk it ships
 to** — no longer for want of a build: `flutter build linux --release` ran on
-the Hub host 2026-08-04 (**G4**, done — root README) and in the devcontainer
+the Hub host 2026-08-04 (**G4**, done — [TODO.md](../TODO.md)) and in the devcontainer
 2026-08-06, whose bundle's measured glibc ceiling (`GLIBC_2.34`) runs on the
 24.04 mini PC; what is still missing is cage itself and a touchscreen
 (**A7**/**G6**). The MSE player was driven in real Chrome against the live
@@ -439,7 +439,7 @@ and is what every check in this README was run against.
 **1. No camera to point at.** Both players are built, and both have been
 driven against the live go2rtc's synthetic `selftest` pattern — never against
 a real camera, because there is not one yet: Ring is at **B2** and the Wyze
-fleet at **B3** in the root [README's TODO](../README.md#todo--needs-you).
+fleet at **B3** in the repo [TODO list](../TODO.md).
 What that leaves untested is the part with the most measured risk in it: a
 real Ring stream takes 2–5 s to *start*, because ring-mqtt only opens the
 cloud session when an RTSP client connects, and that is on top of the 2.1 s
@@ -447,7 +447,7 @@ MJPEG transcode spin-up.
 
 **2. The appliance build has never run in the cage.** Compiling it stopped
 being the gap on 2026-08-04: `flutter build linux --release` succeeded on the
-Hub host (**G4**, done — the root README records the release binary running
+Hub host (**G4**, done — [TODO.md](../TODO.md) records the release binary running
 headless under Xvfb against the real Hub and go2rtc, MJPEG test pattern
 rendering in the Popup), and the devcontainer ships the full Linux toolchain
 — the same build verified in-container 2026-08-06, the bundle's measured

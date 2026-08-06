@@ -152,7 +152,7 @@ redaction is a net rather than a wall.
 
 **Setting this now is enough to get a picture, which it was not before.** Two
 things that used to stand in the way are done: `api: origin: "*"` landed in
-`hub/go2rtc/go2rtc.yaml` on 2026-08-04 (`E8` in the root README's TODO,
+`hub/go2rtc/go2rtc.yaml` on 2026-08-04 (`E8` in the repo's TODO.md,
 **decided** — the reasoning is that access to this system is LAN-only or over
 the VPN, so the network boundary is the control), and the Panel has a real
 player on **both** targets — MJPEG over HTTP on this appliance, MSE over a

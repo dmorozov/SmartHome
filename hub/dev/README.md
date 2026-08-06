@@ -83,7 +83,10 @@ them yourself:
    every host port here is the SHIFTED dev set, because the production Hub
    stack runs on this same machine and owns the canonical ports
    (compose.yaml's header has the full table; canonical = the real house,
-   shifted = this sandbox).
+   shifted = this sandbox). HA's own docs, if the onboarding UI has moved:
+   <https://www.home-assistant.io/getting-started/onboarding/> — and
+   <https://demo.home-assistant.io/> is a click-around demo needing no
+   install at all.
 2. Create the Panel's long-lived token: click your user (bottom left) →
    **Security** → *Long-lived access tokens* → **Create token**. Copy it —
    HA shows it once. Save it to `token` in this directory (gitignored) —

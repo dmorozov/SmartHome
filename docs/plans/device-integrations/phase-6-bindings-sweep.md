@@ -142,7 +142,7 @@ never rubber-stamp.
   naming one stream is legal, so nothing else will notice a copy-paste.
 - This plan directory: each phase file's "Done when" boxes checked with
   dates; A1 camera inventory and §2's Key-mapping table filled in.
-- Calendar items (root README) re-checked: the oven decision (Oct 2026)
+- Calendar items (root README then; TODO.md now) re-checked: the oven decision (Oct 2026)
   and Samsung TV `turn_on` item stand; add "Emporia reflash bench day"
   and "Wyze RTSP firmware security-lag review" if D1 flashed anything.
 
