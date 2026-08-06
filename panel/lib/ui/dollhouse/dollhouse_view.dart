@@ -6,6 +6,7 @@ import '../device_popup.dart';
 import '../device_presentation.dart';
 import '../hub_controller.dart';
 import '../video/live_video.dart';
+import '../video/snapshot.dart';
 import 'floor_arrangement.dart';
 import 'floor_view.dart';
 
@@ -21,6 +22,7 @@ class DollhouseView extends StatefulWidget {
     super.key,
     required this.controller,
     required this.video,
+    this.snapshots,
   });
 
   final HubController controller;
@@ -30,6 +32,12 @@ class DollhouseView extends StatefulWidget {
   /// about video, and [FloorView] is not on the path at all — it forwards
   /// [_onDeviceTap] and never learns what a tap turns into.
   final VideoConfig video;
+
+  /// Where the Hub is, for the still the Popup falls back to while live video
+  /// has no picture (issue #1). Carried for exactly the reason [video] is, and
+  /// optional for the reason `showDevicePopup`'s copy is: a suite that stages
+  /// a tap on a camera pin should not have to stage a Hub REST endpoint too.
+  final SnapshotConfig? snapshots;
 
   @override
   State<DollhouseView> createState() => _DollhouseViewState();
@@ -138,7 +146,8 @@ class _DollhouseViewState extends State<DollhouseView> {
       showDevicePopup(context,
           presentation: presentation,
           video: widget.video,
-          controller: widget.controller);
+          controller: widget.controller,
+          snapshots: widget.snapshots);
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
@@ -9,6 +10,7 @@ import 'hub_controller.dart';
 import 'theme.dart';
 import 'thermostat_controls.dart';
 import 'video/live_video.dart';
+import 'video/snapshot.dart';
 
 /// Popup — a transient overlay on the Panel (CONTEXT.md). Cameras and the
 /// doorbell show a live view from go2rtc; other Devices show their current
@@ -39,11 +41,19 @@ import 'video/live_video.dart';
 /// [presentation] snapshot. Who omits it is not only tests: the doorbell
 /// host holds a controller and deliberately passes none, because the only
 /// Popups it pushes are video bodies, which never grow hands.
+/// [snapshots] is the still face this Popup falls back to while live video has
+/// not produced a picture — issue #1's third fix direction, and the only one
+/// of the three that does not depend on winning a race the Panel cannot see.
+/// Optional for the same reason [controller] is: a Device with no
+/// `snapshot:` binding, and every hermetic test that stages a video body,
+/// simply has none, and the Popup then says what it said before — see
+/// [_LiveVideoBox].
 Future<void> showDevicePopup(
   BuildContext context, {
   required DevicePresentation presentation,
   required VideoConfig video,
   HubController? controller,
+  SnapshotConfig? snapshots,
   Duration? dismissAfter,
   Duration? dismissCeiling,
   VoidCallback? onGone,
@@ -55,6 +65,7 @@ Future<void> showDevicePopup(
       presentation: presentation,
       video: video,
       controller: controller,
+      snapshots: snapshots,
       dismissAfter: dismissAfter,
       dismissCeiling: dismissCeiling,
       onGone: onGone,
@@ -178,6 +189,7 @@ class _DevicePopupBody extends StatefulWidget {
     required this.presentation,
     required this.video,
     required this.controller,
+    required this.snapshots,
     required this.dismissAfter,
     required this.dismissCeiling,
     required this.onGone,
@@ -186,6 +198,7 @@ class _DevicePopupBody extends StatefulWidget {
   final DevicePresentation presentation;
   final VideoConfig video;
   final HubController? controller;
+  final SnapshotConfig? snapshots;
   final Duration? dismissAfter;
   final Duration? dismissCeiling;
   final VoidCallback? onGone;
@@ -223,10 +236,22 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
   var _announcedOpen = false;
   var _reportedFailure = false;
 
+  /// The last still this Popup managed to fetch, or null if it never did.
+  ///
+  /// One fetch, at open, and deliberately **no refresh timer**. A Popup lives
+  /// for seconds — `kDoorbellPopupDeadline` puts an unprompted one at 30 s —
+  /// so a second still would be a second picture of the same moment; and a
+  /// periodic Timer inside a Dialog is the thing that hangs `pumpAndSettle` in
+  /// every widget test that opens a camera, which is the same argument
+  /// [_VideoNotice] makes about spinners. The Cameras view refreshes on a
+  /// timer because its tiles sit there for minutes; this does not.
+  Uint8List? _still;
+
   @override
   void initState() {
     super.initState();
     _session = _openVideo();
+    _fetchStill();
     // Checked immediately as well as on change: an opener can answer
     // `failed` before it returns — the not-yet-written web shim does — and a
     // listener would never fire for it.
@@ -366,6 +391,41 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
     return session;
   }
 
+  /// Fetches the Device's still, if it has one and anybody said where the Hub
+  /// is.
+  ///
+  /// **Costs no Ring session**, which is the whole reason this is allowed to
+  /// exist beside a doorbell that HA #177014 says must not be kept open: it is
+  /// an HA `camera_proxy` GET for the JPEG the Hub already holds, never a
+  /// frame-grab through go2rtc — [SnapshotConfig.urlFor] states that property
+  /// and the Cameras view's off state is built on it.
+  ///
+  /// Fired from `initState` regardless of the live session's phase, and not
+  /// only once the stream has failed. A still that starts loading when the
+  /// picture is already known to be broken arrives after the moment somebody
+  /// wanted it; the point is to have it in hand *before* the 6 s decode
+  /// deadline is up.
+  Future<void> _fetchStill() async {
+    final snapshots = widget.snapshots;
+    final entity = widget.presentation.device.snapshotEntityId;
+    if (snapshots == null || entity == null) return;
+    final url = snapshots.urlFor(entity);
+    if (url == null) return;
+    final result = await snapshots.fetch(url, token: snapshots.token);
+    // A Popup can be dismissed by three routes and the deadline can fire
+    // during the fourth, and this await outlives all of them.
+    if (!mounted) return;
+    if (result.bytes == null) {
+      // `status` is an HTTP code or an exception's bare type name — never
+      // exception text, which embeds the request URL, and this request carries
+      // the Hub token in its headers (`snapshot.dart`).
+      Log.warn('popup', 'snapshot_failed',
+          {'entity': entity, 'status': result.status});
+      return;
+    }
+    setState(() => _still = result.bytes);
+  }
+
   /// Debug, not warn: a camera nobody has wired a feed to yet is a normal
   /// stage of commissioning, and a Panel with no `GO2RTC_URL` is the
   /// documented hermetic default. Neither is a fault worth a `W` line —
@@ -495,7 +555,9 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
   /// lapses routinely and must not reshape a Popup somebody is looking at.
   Widget _body() {
     final presentation = widget.presentation;
-    if (presentation.isVideo) return _LiveVideoBox(session: _session);
+    if (presentation.isVideo) {
+      return _LiveVideoBox(session: _session, still: _still);
+    }
     final controller = widget.controller;
     if (controller != null &&
         specOf(presentation.device.kind).family == StateFamily.thermostat) {
@@ -593,39 +655,108 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
 /// on purpose — in the devcontainer only, the canonical golden host
 /// (ADR-0009) — not as a side effect of a video change.
 class _LiveVideoBox extends StatelessWidget {
-  const _LiveVideoBox({required this.session});
+  const _LiveVideoBox({required this.session, this.still});
 
   final LiveVideoSession? session;
+
+  /// The Device's last still, or null when it has no `snapshot:` binding, no
+  /// Hub address, or the fetch has not landed yet.
+  final Uint8List? still;
 
   @override
   Widget build(BuildContext context) {
     final session = this.session;
-    if (session == null) return const _VideoFrame(child: _unconfigured);
+    if (session == null) {
+      return _VideoFrame(child: _body(LiveVideoPhase.unconfigured, null));
+    }
     return ValueListenableBuilder<LiveVideoPhase>(
       valueListenable: session.phase,
-      builder: (context, phase, _) => _VideoFrame(
-        child: switch (phase) {
-          LiveVideoPhase.unconfigured => _unconfigured,
-          LiveVideoPhase.connecting => const _VideoNotice(
-              icon: Icons.videocam, text: 'Connecting to the camera…'),
-          LiveVideoPhase.playing => session.view,
-          // `failed` and `unsupported` read the same on the wall on
-          // purpose. What differs is who has to fix it — an operator with a
-          // go2rtc problem, or nobody at all on a build that cannot play
-          // video — and that person is reading journald, not standing in
-          // the hall. What the wall owes them is that there is no picture,
-          // said plainly instead of shown as a black rectangle they would
-          // stand there waiting on.
-          LiveVideoPhase.failed || LiveVideoPhase.unsupported =>
-            const _VideoNotice(
-                icon: Icons.videocam_off, text: 'Live view unavailable'),
-        },
-      ),
+      builder: (context, phase, _) =>
+          _VideoFrame(child: _body(phase, session)),
     );
   }
 
-  static const _unconfigured = _VideoNotice(
-      icon: Icons.videocam, text: 'Live view placeholder — go2rtc stream');
+  Widget _body(LiveVideoPhase phase, LiveVideoSession? session) {
+    if (phase == LiveVideoPhase.playing && session != null) {
+      return session.view;
+    }
+    final text = switch (phase) {
+      LiveVideoPhase.unconfigured => 'Live view placeholder — go2rtc stream',
+      LiveVideoPhase.connecting => 'Connecting to the camera…',
+      LiveVideoPhase.playing => 'Connecting to the camera…',
+      // `failed` and `unsupported` read the same on the wall on purpose.
+      // What differs is who has to fix it — an operator with a go2rtc
+      // problem, or nobody at all on a build that cannot play video — and
+      // that person is reading journald, not standing in the hall. What the
+      // wall owes them is that there is no picture, said plainly instead of
+      // shown as a black rectangle they would stand there waiting on.
+      LiveVideoPhase.failed || LiveVideoPhase.unsupported =>
+        'Live view unavailable',
+    };
+    final icon = switch (phase) {
+      LiveVideoPhase.failed || LiveVideoPhase.unsupported => Icons.videocam_off,
+      _ => Icons.videocam,
+    };
+    final still = this.still;
+    if (still == null) return _VideoNotice(icon: icon, text: text);
+    // **The still is shown, and it is never shown silently.** This is issue
+    // #1's honest fallback: when ring-mqtt's restream is relaunching, the
+    // browser decodes no frame and there is nothing live to draw — but the Hub
+    // is holding a real photograph of the front door from a minute ago, and on
+    // a doorbell that is most of what somebody standing at the Panel wanted.
+    //
+    // The caption is not decoration. ADR-0007's rule is that a reading which
+    // is not live may not be dressed as one, and a still of a porch is
+    // indistinguishable from a live view of the same porch — that is exactly
+    // what makes it useful and exactly what makes it a lie unlabelled. So the
+    // phase's own sentence stays on screen, over the picture rather than
+    // instead of it, and "Still" names what is being looked at.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.memory(still, fit: BoxFit.contain, gaplessPlayback: true),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: _StillCaption(text: text),
+        ),
+      ],
+    );
+  }
+}
+
+/// The band that says a picture is a still and why there is no live one.
+///
+/// Bottom edge and full width, over a scrim: the Popup's box letterboxes a
+/// 1:1 doorbell frame inside 16:9, so a floating badge would sometimes land on
+/// the picture and sometimes on the black, and the one thing this may not do
+/// is become hard to read over the wrong porch.
+class _StillCaption extends StatelessWidget {
+  const _StillCaption({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: Colors.black54,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.photo_camera_back, color: Colors.white70, size: 14),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              'Still · $text',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// The 16:9 rounded box every video body renders inside. Frozen geometry —

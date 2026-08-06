@@ -96,6 +96,17 @@ abstract interface class LiveVideoSession {
   /// every phase change, and the MSE one hands out a platform view that owns
   /// a `<video>` element — building a fresh one per rebuild would tear the
   /// picture down and put it back.
+  ///
+  /// **And since `live_video_keepalive.dart`, one of these is mounted more
+  /// than once per session** — a Popup closes, the pool keeps the session, and
+  /// the next Popup mounts this same widget again. A player holding platform
+  /// state behind it owes that state a second start: issue #1's reused stream
+  /// came back frozen because the MSE branch's `<video>` is paused by the HTML
+  /// spec when the closing Popup takes it out of the document, and only
+  /// `sourceopen` — which fires once per session — had ever called `play()`.
+  /// See `MseLiveVideoSession._resume`. The appliance branch owes nothing here:
+  /// its view is a `ValueListenableBuilder` over a frame notifier, and
+  /// remounting it just rebuilds.
   Widget get view;
 
   /// Idempotent: the Popup can be dismissed by three routes and the timer

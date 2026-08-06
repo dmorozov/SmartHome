@@ -195,6 +195,7 @@ class PanelApp extends StatelessWidget {
         body: DoorbellPopupHost(
           controller: controller,
           video: video,
+          snapshots: snapshots,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
@@ -233,7 +234,9 @@ class PanelApp extends StatelessWidget {
                           child: ListenableBuilder(
                             listenable: controller,
                             builder: (context, _) => DollhouseView(
-                                controller: controller, video: video),
+                                controller: controller,
+                                video: video,
+                                snapshots: snapshots),
                           ),
                         ),
                         // The right-edge tab (phase-7 §B2). Outside the

@@ -7,6 +7,7 @@ import '../domain/house.dart';
 import 'device_popup.dart';
 import 'hub_controller.dart';
 import 'video/live_video.dart';
+import 'video/snapshot.dart';
 
 /// How long an unprompted doorbell Popup stays up after the last ding.
 ///
@@ -80,6 +81,7 @@ class DoorbellPopupHost extends StatefulWidget {
     super.key,
     required this.controller,
     required this.video,
+    this.snapshots,
     required this.child,
     this.dismissAfter = kDoorbellPopupDeadline,
     this.dismissCeiling = kDoorbellPopupCeiling,
@@ -92,6 +94,14 @@ class DoorbellPopupHost extends StatefulWidget {
   /// minted its own [VideoConfig] would open a Popup guaranteed to show the
   /// unconfigured placeholder.
   final VideoConfig video;
+
+  /// Where the Hub is, for the still the Popup shows while the live view has
+  /// no decodable picture. **This is the path that matters most for issue #1**:
+  /// the Popups this host pushes are the unprompted ones, opened by a ding, so
+  /// they are the ones where the Ring restream has just been relaunched and is
+  /// likeliest to arrive mid-GOP — and the ones where somebody wants to see
+  /// the porch right now rather than read why they cannot.
+  final SnapshotConfig? snapshots;
 
   final Widget child;
 
@@ -265,6 +275,7 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
       context,
       presentation: widget.controller.presentationOf(doorbell),
       video: widget.video,
+      snapshots: widget.snapshots,
       dismissAfter: widget.dismissAfter,
       dismissCeiling: widget.dismissCeiling,
       onGone: () => _onPopupGone(doorbell),

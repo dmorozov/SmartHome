@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/diagnostics/log.dart';
@@ -7,6 +9,7 @@ import 'package:panel/ui/device_popup.dart';
 import 'package:panel/ui/device_presentation.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/live_video_keepalive.dart';
+import 'package:panel/ui/video/snapshot.dart';
 
 import 'support/fake_go2rtc.dart';
 
@@ -69,6 +72,7 @@ void main() {
     WidgetTester tester, {
     Device device = camera,
     required VideoConfig video,
+    SnapshotConfig? snapshots,
     Duration? dismissAfter,
     Duration? dismissCeiling,
   }) async {
@@ -79,6 +83,7 @@ void main() {
             context,
             presentation: DevicePresentation(device, null),
             video: video,
+            snapshots: snapshots,
             dismissAfter: dismissAfter,
             dismissCeiling: dismissCeiling,
           ),
@@ -676,6 +681,156 @@ void main() {
       // anyone asking it to.
       expect(go2rtc.only.closes, 1);
       keepAlive.dispose();
+    });
+  });
+
+  /// Issue #1's third fix direction, and the only one that does not depend on
+  /// winning a race the Panel cannot see.
+  ///
+  /// The other two were tried and are recorded as rejected in
+  /// `live_video_keepalive.dart` and `live_video_mse.dart`: keeping the
+  /// producer alive (`kLiveVideoLinger`) cures the reopens it covers and leaves
+  /// a window it does not, and no timing rule can cure the rest — measured
+  /// 2026-08-06, a producer gap of 2.8 s decoded 2 frames and 4.8 s decoded
+  /// none, while 25 s was clean six times out of six, so the settle a fresh
+  /// dial would have to wait out is longer than the Popup is allowed to live.
+  ///
+  /// What is testable, and tested here, is the promise the fallback makes:
+  /// when there is no live picture, show the real one the Hub is already
+  /// holding — and never let it pass for live.
+  group('the still the Popup falls back to', () {
+    /// A 1×1 red PNG. Real bytes rather than a sentinel: `Image.memory` runs
+    /// them through the codec, and garbage would fail the test as a decode
+    /// error rather than as the assertion it is standing in for.
+    final onePixelPng = Uint8List.fromList(const [
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, //
+      0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 144, 119, 83, 222, //
+      0, 0, 0, 12, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 0, //
+      3, 1, 1, 0, 201, 254, 146, 239, 0, 0, 0, 0, 73, 69, 78, 68, //
+      174, 66, 96, 130,
+    ]);
+
+    const doorbell = Device(
+      id: 'doorbell',
+      name: 'Ring Doorbell',
+      kind: DeviceKind.doorbell,
+      connectivity: Connectivity.cloud,
+      position: Offset.zero,
+      streamName: 'ring_doorbell',
+      snapshotEntityId: 'camera.front_door_snapshot',
+    );
+
+    /// Records what was asked for, so the token-in-a-header rule and the
+    /// costs-no-Ring-session rule are both checkable.
+    final asked = <Uri>[];
+
+    SnapshotConfig snapshotsThat(SnapshotResult Function() answer) =>
+        SnapshotConfig(
+          haUrl: 'http://hub:8123',
+          token: 'shhh',
+          fetch: (url, {required token}) async {
+            asked.add(url);
+            return answer();
+          },
+        );
+
+    setUp(asked.clear);
+
+    testWidgets('while the live view has no picture, the Popup shows the '
+        'Hub\'s still — captioned, so it cannot pass for live', (tester) async {
+      final go2rtc = FakeGo2rtc();
+
+      await openPopup(tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+
+      // Fetched from HA's camera-proxy, which serves the JPEG the Hub already
+      // holds — no go2rtc frame-grab, so no Ring session (#177014).
+      expect(asked.single.toString(),
+          'http://hub:8123/api/camera_proxy/camera.front_door_snapshot');
+      expect(find.byType(Image), findsOneWidget);
+      // ADR-0007: a picture that is not live may not be dressed as one. The
+      // phase's own sentence stays on screen, over the still.
+      expect(find.textContaining('Still'), findsOneWidget);
+      expect(find.textContaining('Connecting to the camera'), findsOneWidget);
+    });
+
+    testWidgets('a stream that failed keeps the still up rather than trading '
+        'a real picture of the porch for a sentence', (tester) async {
+      final go2rtc = FakeGo2rtc();
+
+      await openPopup(tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+      go2rtc.only.fails('go2rtc sent 6s of video the browser could not decode');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.textContaining('Live view unavailable'), findsOneWidget);
+      expect(find.textContaining('Still'), findsOneWidget);
+    });
+
+    testWidgets('the moment live video really is playing, the still gets out '
+        'of the way', (tester) async {
+      final go2rtc = FakeGo2rtc();
+
+      await openPopup(tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+      go2rtc.only.plays();
+      await tester.pumpAndSettle();
+
+      expect(find.text('a moving picture'), findsOneWidget);
+      expect(find.byType(Image), findsNothing);
+      expect(find.textContaining('Still'), findsNothing);
+    });
+
+    testWidgets('a Hub that will not serve the still leaves the Popup saying '
+        'exactly what it said before, and logs a status, never a message',
+        (tester) async {
+      final go2rtc = FakeGo2rtc();
+
+      await openPopup(tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          snapshots: snapshotsThat(() => const SnapshotResult.refused('404')));
+
+      expect(find.byType(Image), findsNothing);
+      expect(find.textContaining('Still'), findsNothing);
+      expect(find.textContaining('Connecting to the camera'), findsOneWidget);
+      // An HTTP code or a bare exception type — never exception text, which
+      // embeds the request URL, and this request carries the Hub token.
+      expect(popupLines('snapshot_failed').single.fields,
+          {'entity': 'camera.front_door_snapshot', 'status': '404'});
+    });
+
+    testWidgets('a Device with no snapshot bound never asks, and a Popup given '
+        'no Hub never asks either', (tester) async {
+      for (final scene in {
+        'no snapshot binding': (Device d, SnapshotConfig? s) => (camera, s),
+        'no snapshots config': (Device d, SnapshotConfig? s) => (doorbell, null),
+      }.entries) {
+        final go2rtc = FakeGo2rtc();
+        final (device, snapshots) = scene.value(
+            doorbell, snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+        asked.clear();
+
+        await openPopup(tester,
+            device: device,
+            video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+            snapshots: snapshots);
+
+        expect(asked, isEmpty, reason: scene.key);
+        expect(find.byType(Image), findsNothing, reason: scene.key);
+        expect(find.textContaining('Connecting to the camera'), findsOneWidget,
+            reason: scene.key);
+
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+      }
     });
   });
 }

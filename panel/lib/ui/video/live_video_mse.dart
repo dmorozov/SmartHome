@@ -34,6 +34,19 @@ const kMseOpenTimeout = Duration(seconds: 15);
 /// sends nothing at all.
 const kMseStallTimeout = Duration(seconds: 15);
 
+/// How long a stream that is *arriving* has to produce a frame the browser can
+/// actually decode.
+///
+/// Separate from [kMseOpenTimeout] because it answers a different question.
+/// That one covers go2rtc starting a producer, which is why it is fifteen
+/// seconds; by the time bytes are on the wire the producer is up, and the only
+/// thing still outstanding is whether they decode. Six seconds is generous
+/// against a first frame that arrives ~100 ms after the first media segment
+/// (measured on the live server, 2026-08-04), and it is the deadline that
+/// stops issue #1's mid-GOP join from sitting on the wall as an empty box
+/// claiming to play.
+const kMseDecodeTimeout = Duration(seconds: 6);
+
 /// The staging buffer for segments that arrive while the [web.SourceBuffer]
 /// is still busy with the previous append.
 ///
@@ -120,17 +133,27 @@ bool get _mediaSourceExists => web.window.has('MediaSource');
 /// `failed / "go2rtc refused: mse: stream not found"` — the error-frame path,
 /// parsed, redacted and with the socket closed from this side.
 ///
-/// **What has not**: [view]. Those runs never mounted a widget tree, so the
-/// `HtmlElementView` and the reparenting of the `<video>` element into it are
-/// argued for below and unproven. Nor have [kMseStallTimeout] or [_trim] ever
-/// fired. Those runs were throwaway probes and are deliberately not in the
-/// suite: they need a go2rtc listening on 127.0.0.1:1984, and a test that
-/// fails on every machine but one is a test nobody trusts.
+/// **[view] and [_trim] were the unproven half, and on 2026-08-06 they were
+/// driven** — google-chrome through the Playwright MCP, against the dev
+/// sandbox's real `ring_doorbell`, mounting the real Popup. Both were wrong,
+/// and both are fixed here: the re-parented `<video>` came back paused and was
+/// never restarted ([_resume]), and [_trim] parked `currentTime` in the hole
+/// its own `remove` had just made ([_seekNearLiveEdge]). The same session
+/// showed [LiveVideoPhase.playing] standing over a box the browser had decoded
+/// zero frames into, which is what [_onLoadedData] now answers.
+///
+/// **What still has not**: [kMseStallTimeout] has never fired. And none of this
+/// is in the suite — the probes need a go2rtc, and a test that fails on every
+/// machine but one is a test nobody trusts. `live_video_keepalive_live_test.dart`
+/// is the opt-in that covers what can be covered, and it is a VM binary, so it
+/// exercises the appliance branch; everything above was verified by driving a
+/// browser and is recorded here because that is the only place it lives.
 class MseLiveVideoSession implements LiveVideoSession {
   MseLiveVideoSession(
     Uri url, {
     this.openTimeout = kMseOpenTimeout,
     this.stallTimeout = kMseStallTimeout,
+    this.decodeTimeout = kMseDecodeTimeout,
   }) : _socket = web.WebSocket(url.toString()) {
     // First, before any DOM object exists, so that a constructor that throws
     // leaves nothing behind to leak. `binaryType` is set before the socket
@@ -150,6 +173,11 @@ class MseLiveVideoSession implements LiveVideoSession {
       ..autoplay = true
       ..controls = false;
     _video.setAttribute('playsinline', '');
+    // The one event that says a frame exists. `readyState` reaching
+    // HAVE_CURRENT_DATA is a statement about the decoder having produced a
+    // picture for the current position, and it is what [LiveVideoPhase.playing]
+    // now means — see [_onLoadedData].
+    _video.addEventListener('loadeddata', _onLoadedData.toJS);
     _video.style
       ..width = '100%'
       ..height = '100%'
@@ -161,6 +189,7 @@ class MseLiveVideoSession implements LiveVideoSession {
 
   final Duration openTimeout;
   final Duration stallTimeout;
+  final Duration decodeTimeout;
 
   final web.WebSocket _socket;
   late final web.HTMLVideoElement _video;
@@ -179,6 +208,11 @@ class MseLiveVideoSession implements LiveVideoSession {
   final _phase = ValueNotifier(LiveVideoPhase.connecting);
   Timer? _watchdog;
   var _closed = false;
+
+  /// Whether [decodeTimeout] is already running. See [_noteBytesArrived]:
+  /// the deadline is armed by the first segment and never restarted, so a
+  /// stream of undecodable bytes cannot hold it open.
+  var _awaitingDecode = false;
 
   @override
   ValueListenable<LiveVideoPhase> get phase => _phase;
@@ -199,6 +233,11 @@ class MseLiveVideoSession implements LiveVideoSession {
   /// `fromTagName` rather than `registerViewFactory`, which needs a
   /// globally-unique view type and offers no way to unregister one — on a
   /// panel that opens a Popup per ding, that is an unbounded registry.
+  ///
+  /// Built once, but `onElementCreated` runs **every time this widget is
+  /// mounted**, which since `live_video_keepalive.dart` is more than once per
+  /// session — and that is why it now resumes as well as re-parents. See
+  /// [_resume].
   @override
   late final Widget view = HtmlElementView.fromTagName(
     tagName: 'div',
@@ -208,8 +247,63 @@ class MseLiveVideoSession implements LiveVideoSession {
         ..width = '100%'
         ..height = '100%';
       host.appendChild(_video);
+      // Post-frame, and not inline here. `onElementCreated` runs while `host`
+      // is still detached, and the removing steps this very `appendChild`
+      // queues — it moves `_video` out of the platform view that is going away
+      // — run at the next stable state, which is *after* this callback and
+      // still before `host` reaches the document. They pause any element that
+      // is not in a document by then, so a `play()` from here is undone
+      // milliseconds later: measured 2026-08-06, the element was found paused
+      // at `readyState` 4 with `currentTime` marching forward only in the jumps
+      // [_trim] gave it. A post-frame callback lands after Flutter has put the
+      // platform view into the DOM, which is after that checkpoint.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _resume());
     },
   );
+
+  /// Puts a re-parented `<video>` back on the live edge and starts it again.
+  ///
+  /// **The bug this exists for**, measured in google-chrome through the
+  /// Playwright MCP on 2026-08-06, driving the real Popup against the dev
+  /// sandbox's `ring_doorbell`:
+  ///
+  /// | moment | in document | `paused` | `readyState` |
+  /// |---|---|---|---|
+  /// | Popup open | yes | false | 4 |
+  /// | Popup closed, session kept | **element gone** | — | — |
+  /// | Popup reopened, session reused | yes | **true** | **1** |
+  ///
+  /// Closing the Popup destroys the platform view, which takes `_video` out of
+  /// the document with it, and the HTML spec's media-element *removing steps*
+  /// run the internal pause steps on an element that leaves its document. That
+  /// was harmless while every open dialled a fresh session — `_onSourceOpen`
+  /// called `play()` each time — and stopped being harmless the moment
+  /// `live_video_keepalive.dart` began handing the same session to a second
+  /// consumer, because `sourceopen` fires **once per session** and nothing else
+  /// ever started the element again. The reused stream showed a frozen frame
+  /// and then, once [_trim] had moved the window past where it was parked, an
+  /// empty box.
+  ///
+  /// So the seam did not need a new method: re-parenting *is* the signal, it is
+  /// already delivered here, and the appliance branch — whose `view` is a
+  /// `ValueListenableBuilder` over a frame notifier, with no element and no
+  /// autoplay state — needs nothing at all.
+  ///
+  /// Both halves are load-bearing. `play()` alone leaves `currentTime` where
+  /// the element was paused, which by now is behind everything [_trim] has
+  /// kept; the seek alone leaves it paused. Confirmed by hand in the same
+  /// session: seeking to the live edge *and* calling `play()` took a stuck
+  /// element from `readyState` 1 back to 4 and live.
+  void _resume() {
+    if (_closed) return;
+    final buffer = _buffer;
+    // Null on the very first mount, where there is nothing to seek to and
+    // `_onSourceOpen` is the one that will call `play()`.
+    if (buffer != null) _seekNearLiveEdge(buffer);
+    if (_video.paused) {
+      _video.play().toDart.catchError((Object _) => null);
+    }
+  }
 
   void _onOpen(web.Event _) {
     if (_closed) return;
@@ -320,9 +414,6 @@ class MseLiveVideoSession implements LiveVideoSession {
   }
 
   void _onSegment(JSArrayBuffer segment) {
-    // Binary arrival is the liveness signal — there is nothing else.
-    _restartWatchdog(
-        stallTimeout, 'go2rtc went quiet for ${stallTimeout.inSeconds}s');
     final buffer = _buffer;
     if (buffer == null) return;
     final bytes = segment.toDart.asUint8List();
@@ -339,9 +430,54 @@ class MseLiveVideoSession implements LiveVideoSession {
     } else {
       _append(buffer, bytes);
     }
-    if (_phase.value == LiveVideoPhase.connecting) {
-      _phase.value = LiveVideoPhase.playing;
+    _noteBytesArrived();
+  }
+
+  /// Bytes are the liveness signal — there is nothing else — but they are
+  /// **not** the picture signal, and the difference is issue #1.
+  ///
+  /// This used to promote the phase to [LiveVideoPhase.playing] right here, on
+  /// the first segment. Measured on 2026-08-06 against the dev sandbox, that is
+  /// a lie the wall can be shown: a reopen that lands while ring-mqtt's
+  /// restream is relaunching delivers a steady stream of segments the browser
+  /// decodes **zero** frames from — `totalVideoFrames: 0`, `readyState: 1` —
+  /// and the Popup rendered an empty box under a phase that read `playing`.
+  /// That is ADR-0007's stale reading at Device scale: the one thing the Panel
+  /// may not do is claim a picture it does not have.
+  ///
+  /// So arrival now only ever *arms a deadline*, and [_onLoadedData] is what
+  /// promotes. Deliberately armed once and never restarted while no frame has
+  /// decoded: more bytes the decoder cannot use are not progress, and
+  /// restarting on each one is what would let a mid-GOP join hold the box
+  /// forever.
+  void _noteBytesArrived() {
+    if (_phase.value != LiveVideoPhase.connecting) {
+      _restartWatchdog(
+          stallTimeout, 'go2rtc went quiet for ${stallTimeout.inSeconds}s');
+      return;
     }
+    if (_awaitingDecode) return;
+    _awaitingDecode = true;
+    _restartWatchdog(
+        decodeTimeout,
+        'go2rtc sent ${decodeTimeout.inSeconds}s of video the browser '
+        'could not decode');
+  }
+
+  /// `readyState` reached HAVE_CURRENT_DATA: there is a decoded frame at the
+  /// current position, so there is something honest to draw.
+  ///
+  /// The promotion to [LiveVideoPhase.playing], and the reason it is this event
+  /// rather than a frame counter: `loadeddata` is a statement about the media
+  /// pipeline, which runs whether or not the element is in the document — and
+  /// it is not, at this point. The Popup renders [view] only once the phase is
+  /// `playing`, so a signal that needed the element on screen first could never
+  /// arrive.
+  void _onLoadedData(web.Event _) {
+    if (_closed || _phase.value != LiveVideoPhase.connecting) return;
+    _phase.value = LiveVideoPhase.playing;
+    _restartWatchdog(
+        stallTimeout, 'go2rtc went quiet for ${stallTimeout.inSeconds}s');
   }
 
   void _onUpdateEnd(web.Event _) {
@@ -385,13 +521,42 @@ class MseLiveVideoSession implements LiveVideoSession {
     if (start > first) {
       buffer.remove(first, start);
       _media?.setLiveSeekableRange(start, end);
+      // Nothing is seeked on this pass, and that is the fix rather than an
+      // omission. `remove` is asynchronous and rounds *outwards* to a segment
+      // boundary, so the ranges it leaves behind are not the ones computed
+      // above — seeking to `start` here lands in the hole it is about to make.
+      // Measured on a reused session, 2026-08-06: `currentTime 83.54` against
+      // `buffered [[84.07, 88.54]]`, a third of a second past the edge, with
+      // `readyState` stuck at HAVE_METADATA and nothing on the glass. The
+      // removal fires its own `updateend`, which brings this method straight
+      // back with ranges that are real.
+      return;
     }
-    if (_video.currentTime < start) _video.currentTime = start;
+    if (_video.currentTime < first || _video.currentTime > end) {
+      _seekNearLiveEdge(buffer);
+    }
     final gap = end - _video.currentTime;
     _video.playbackRate = gap > 0.1 ? gap : 0.1;
   }
 
+  /// Puts playback just behind the newest thing in the buffer.
+  ///
+  /// [_resyncBehindLiveSeconds] rather than the live edge itself: landing
+  /// exactly on `end` leaves nothing to play and stalls at once. One second is
+  /// also where [_trim]'s playback-rate nudge settles — it sets the rate to the
+  /// gap in seconds, so a gap of one is the fixed point that loop converges on,
+  /// and resyncing anywhere else just makes it work to get back here.
+  void _seekNearLiveEdge(web.SourceBuffer buffer) {
+    final buffered = buffer.buffered;
+    if (buffered.length == 0) return;
+    final end = buffered.end(buffered.length - 1);
+    final first = buffered.start(0);
+    final target = end - _resyncBehindLiveSeconds;
+    _video.currentTime = target > first ? target : first;
+  }
+
   static const _liveWindowSeconds = 5.0;
+  static const _resyncBehindLiveSeconds = 1.0;
 
   void _onSocketError(web.Event _) =>
       // No detail is available: the browser deliberately withholds why a
