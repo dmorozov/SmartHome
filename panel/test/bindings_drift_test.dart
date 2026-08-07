@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
+import 'support/integrated_bindings.dart';
+
 /// Every `entity:` in `bindings.yaml` must name something the dev Hub
 /// actually serves — a hermetic check for a failure that is otherwise
 /// completely silent.
@@ -16,29 +18,10 @@ import 'package:yaml/yaml.dart';
 /// `hub.missing_entities` line in a log nobody is reading — on a wall
 /// display with nobody standing in front of it (ADR-0001).
 ///
-/// [_integrated] is the ledger of Devices whose bindings have moved to real
-/// hardware and are therefore *expected* not to resolve against the dev
-/// Hub. Adding a Device to it is the deliberate act of saying "this one is
-/// real now".
-const _integrated = <String>{
-  // Phase 2, 2026-08-04 — real hardware on the laptop Hub.
-  'outlet-outdoor-a', // Kasa EP40 outdoor socket A -> switch.outdoor_outlet_a
-  'outlet-outdoor-b', // Kasa EP40 outdoor socket B -> switch.outdoor_outlet_b
-  'thermostat', // ecobee "Main Floor" -> climate.main_floor (HomeKit, local)
-  // 2026-08-05 — two Kasa HS103s repurposed from a fridge and an aquarium to
-  // house lights, which is what made them bindable at all (Ch. 4 §4.1.1,
-  // ADR-0006). The Key names are placeholder-house fictions: the entry light
-  // is NOT in the living room and the stairs light is NOT on the landing.
-  // `light-hall` would have been right for the entry and is deliberately not
-  // used — it is this suite's own togglable fixture; see bindings.yaml.
-  'light-living', // -> switch.entry_light  (was switch.old_fridge)
-  'light-landing', // -> switch.stairs_light (was switch.aquarium)
-  // 2026-08-05 — ring-mqtt authenticated; the doorbell is real hardware now.
-  // Later the same day (phase 7 §A) the binding moved to the minted event
-  // entity; the stream and snapshot ride along.
-  'doorbell', // -> event.front_door_ding
-  //            (+ stream: ring_doorbell, snapshot: camera.front_door_snapshot)
-};
+/// [integratedBindings] is the ledger of Devices whose bindings have moved to
+/// real hardware and are therefore *expected* not to resolve against the dev
+/// Hub. It lives in `support/` because `ha_hub_live_test.dart` needs the same
+/// list for the opposite reason — see the file for both.
 
 void main() {
   test('every binding resolves against the dev Hub stand-ins', () {
@@ -55,7 +38,7 @@ void main() {
     for (final entry in (bindings['bindings'] as YamlMap).entries) {
       final key = entry.key as String;
       final entity = entry.value?['entity'] as String?;
-      if (entity == null || _integrated.contains(key)) continue;
+      if (entity == null || integratedBindings.contains(key)) continue;
       if (!standIns.contains(entity)) unresolved[key] = entity;
     }
 
@@ -63,7 +46,8 @@ void main() {
         reason: 'binding(s) point at entities the dev Hub does not serve — '
             'renamed a Device in the drawing without re-running '
             'tool/gen_dev_entities.dart and updating bindings.yaml? Or move '
-            'the key into _integrated if it now binds real hardware.');
+            'the key into `integratedBindings` (test/support/) if it now '
+            'binds real hardware.');
   });
 
   test('every Placement has exactly one binding', () {
