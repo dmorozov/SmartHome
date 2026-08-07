@@ -48,7 +48,10 @@
       "Bash(python3 -c ' *)",
       "Bash(curl *)",
       "Bash(echo \"tracked: $?\")",
-      "Bash(docker port *)"
+      "Bash(docker port *)",
+      "Bash(docker restart *)",
+      "Bash(python3 -m json.tool)",
+      "Bash(echo \"--- exit code: $? \\(0=found something\\) ---\")"
     ]
   },
   "enabledMcpjsonServers": [

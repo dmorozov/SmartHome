@@ -30,7 +30,7 @@ cannot be automated from an agent session.
 |---|---|---|---|---|
 | Ring doorbell (ring-mqtt) | **yes** — container Up | **yes** — authenticated 2026-08-05, 15 entities, bound, video proven (§1.3) | 3 | cloud, permanently (§3.1) |
 | Wyze cameras | no | n/a | 4 | mixed, per unit (D1) |
-| HACS | no — `/config/custom_components` holds only `README.md` | n/a | 5 | cloud at install time only |
+| HACS | **yes** — installed and authenticated 2026-08-07 (§3.1–3.2) | **yes** — entry `01KZDDD6TH4CKTE9FZT1XH102B`, `state: loaded`, `update.hacs_update` entity confirms a healthy startup | 5 | cloud at install time only |
 | LG washer + dryer (`lg_thinq`) | no | n/a | 5 | cloud |
 | Litter-Robot 5 Pro (`litterrobot`) | no | n/a | 5 | cloud |
 | Petlibro One + Granary (HACS) | no | n/a | 5 | cloud |
@@ -362,37 +362,117 @@ that two cameras stay off the Panel.
 
 ## 3. HACS — prerequisite for the phase-5 group
 
-Three integrations in this chapter come from HACS rather than HA core:
-`petlibro` (covers both feeders), `ha-emporia-vue`, and — optionally, if
-Wyze *device* control is ever wanted beyond video — `ha-wyzeapi`.
+### 3.0 Why this house needs it at all
 
-Install on HA Container by running the upstream script inside the
-container. The redirect resolves and returns 200 as of 2026-08-04
-(`get.hacs.xyz` → `raw.githubusercontent.com/hacs/get/main/get`); `bash`
-and `wget` are both present in the image:
+HACS (Home Assistant Community Store) is a distribution channel for
+integrations that aren't in HA core — not a marketplace HA runs, just a
+package manager pointed at GitHub repos, with no vetting bar beyond what a
+maintainer chooses to publish. Nothing in this house *needs* HACS as a
+concept; three specific devices need it because their only HA integration
+happens to live outside core, each for a different reason (verified against
+[`../../docs/research/hub-and-device-integrations.md`](../../docs/research/hub-and-device-integrations.md),
+this repo's own vendor-by-vendor survey):
+
+| Device | Why it isn't in HA core | HACS integration |
+|---|---|---|
+| Petlibro One + Granary feeders | A small, recent vendor with no official HA relationship — the integration is community-written, explicitly "Alpha/WIP but active" | `jjjonesjr33/petlibro` |
+| Emporia Vue 3 (cloud path) | **Emporia has no public API at all.** Their own support article acknowledges community projects exist but states they are unsupported — there is no vendor-sanctioned interface for HA core to build against, so this can only ever be a reverse-engineered community project, in HACS, forever, regardless of how well-maintained it gets | `magico13/ha-emporia-vue` (not even in HACS's default store — added as a custom repository, §7) |
+| Wyze cameras, *device control only* — optional, not camera video | Wyze issues no official device-control API for third parties; `ha-wyzeapi` reverse-engineers the Wyze app's own cloud API. (Wyze camera **video** does not need this at all — the official RTSP firmware feeds go2rtc directly, no HACS, no Wyze account touches HA) | `SecKatie/ha-wyzeapi` |
+
+Contrast with the Ecobee and Rachio (§4.2, §4.3): both have official,
+HA-core-maintained integrations because both vendors publish something HA's
+maintainers can build against and keep working. HACS exists for the devices
+where that vendor-side prerequisite is simply absent.
+
+### 3.1 Install — DONE 2026-08-07, agent work, no owner needed
+
+The install itself needs no credentials and no sudo — `docker` runs
+unprivileged for the repo user on this host. Run the upstream script inside
+the container (the redirect resolves and returns 200:
+`get.hacs.xyz` → `raw.githubusercontent.com/hacs/get/main/get`; `bash` and
+`wget` are both present in the image), then restart:
 
 ```sh
-docker exec -it homeassistant bash -c "wget -O - https://get.hacs.xyz | bash -"
-docker compose -f /home/dmorozov/Work/SmartHome/hub/compose.yaml restart homeassistant
+docker exec homeassistant bash -c "wget -O - https://get.hacs.xyz | bash -"
+docker restart homeassistant
 ```
 
-Then add the HACS integration in HA and complete **GitHub device-code
-auth** (HA shows a code; you enter it on GitHub in a browser). Exact HA
-menu wording is **UNVERIFIED** — it is the normal "add an integration"
-flow, searching for HACS.
+**Use `docker restart`, not `docker compose restart`, if you're doing this
+from inside the devcontainer.** `docker compose` needs to resolve
+`hub/compose.yaml`'s path, which is where ADR-0010's devcontainer-vs-host
+hazard lives (see `COMMISSIONING.md`, "Two Home Assistants on one box," for
+the related trap); a plain `docker restart <container>` sidesteps that
+entirely for a simple restart. Verified: HA came back with `We found a
+custom integration hacs which has not been tested by Home Assistant` in the
+log (expected — that warning fires for every custom component, not a
+problem) and `/config/custom_components/hacs/config_flow.py` present.
 
 **Watch where it lands.** `compose.yaml` bind-mounts
 `hub/custom_components` to `/config/custom_components`, and that
 directory **is tracked in git** (it holds our own extensions slot — see
 `hub/custom_components/README.md`). The installer writes a full
-`hacs/` tree there, so it will show up in `git status` as several
-thousand untracked files. Decide before committing anything: either
-gitignore `custom_components/hacs/` or accept vendoring it. Right now the
-directory contains only `README.md` (verified inside the container),
-so the diff is unambiguous.
+`hacs/` tree there — it now shows up in `git status` as several thousand
+untracked files. **Decide before committing anything:** either gitignore
+`custom_components/hacs/` or accept vendoring it. Nothing in this repo
+policy decides that for you, and nothing has been staged either way.
 
 HACS's own updates are manual. That suits the Hub's pinned-and-deliberate
 version policy — it is not a defect to work around.
+
+### 3.2 Complete the setup — GitHub device-code auth, owner action — DONE 2026-08-07
+
+This is the part that needs you: a GitHub account and a browser. Quoted
+verbatim from the installed `hacs/translations/en.json` and
+`hacs/config_flow.py` — not from memory, and re-verified against this
+Hub's actual install, not HACS's public docs.
+
+1. Settings → Devices & services → Add integration → search **"HACS"**.
+   (`single_instance_allowed` is enforced — if a HACS entry already exists,
+   this card won't offer itself again; that's not a bug, use Reconfigure
+   on the existing entry instead.)
+2. **Four checkboxes, all required** — the form's own description reads
+   *"Before you can setup HACS you need to acknowledge the following"*:
+   - "I know how to access Home Assistant logs"
+   - "I know that there are no add-ons in HACS"
+   - "I know that everything inside HACS including HACS itself is custom
+     and untested by Home Assistant"
+   - "I know that if I get issues with Home Assistant I should disable all
+     my custom_components"
+
+   Leaving any one unchecked shows *"You need to acknowledge all the
+   statements before continuing"* and re-shows the same form — there's no
+   partial credit. Check all four, submit.
+3. HA immediately contacts GitHub's device-registration API and shows a
+   progress screen, titled **"Waiting for device activation"**, with this
+   exact template filled in: *"1. Open {url} — 2. Paste the following key
+   to authorize HACS: `{code}`"*, where `{url}` is
+   **`https://github.com/login/device`** and `{code}` is a short code
+   generated fresh for this attempt (different every time — don't reuse
+   one from a doc example or a previous try).
+4. On your phone or another tab, open `https://github.com/login/device`,
+   sign in to GitHub if needed, and paste the code shown on the HA screen.
+   GitHub will ask you to authorize the app.
+5. Back on the HA screen: it's polling in the background, no further
+   action needed there. Once GitHub confirms the authorization, the flow
+   completes on its own and creates the HACS entry — no explicit "submit"
+   step after pasting the code on GitHub's side.
+6. If something goes wrong contacting GitHub at step 3 (network, GitHub
+   outage), HA aborts with *"Could not authenticate with GitHub, try again
+   later"* — retry by starting the Add Integration flow again, not by
+   waiting on the same stuck screen.
+
+No password ever touches Home Assistant in this flow — the device-code
+exchange is GitHub's own OAuth mechanism; HA only ever sees the resulting
+access token, stored in the config entry.
+
+**Verified against the running Hub, not just "the form closed without an
+error":** config entry `01KZDDD6TH4CKTE9FZT1XH102B`, domain `hacs`,
+`state: loaded`, on **production** (port 8123 — not `hub/dev`'s 18123, see
+`COMMISSIONING.md`'s "Two Home Assistants"). The `update.hacs_update` entity
+exists, which only gets created once HACS's coordinator actually
+initializes — a stub or failed entry wouldn't produce it. No errors in the
+log after restart, just the one expected "untested custom integration"
+warning every custom component logs once at load.
 
 ---
 
