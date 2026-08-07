@@ -372,10 +372,20 @@ rule, and battery-cam courtesy generally).
 
 **Not landed, and this is the honest list.**
 
-1. **No camera.** Every measurement above is against go2rtc's synthetic
-   `selftest` pattern. Ring is **B2**, the Wyze fleet **B3**, and the risk
-   they carry is stated in §B: a real Ring stream takes 2–5 s to start,
-   *on top of* the MJPEG transcode's 2.1 s.
+1. ~~**No camera.**~~ **Half closed 2026-08-05/06.** B2 landed, so there is a
+   real camera: `ring_doorbell`. The **web/MSE** player has since played it
+   through the real Popup in Chromium (2026-08-06 — cold open plus three
+   reopens, decoded frames 103 → 405, `currentTime` tracking wall-clock). The
+   **appliance/MJPEG** player has still only rendered `selftest`; the 54 real
+   JPEG frames in TODO **B2** were pulled from `/api/stream.mjpeg` by hand, not
+   through `MjpegLiveVideoSession`. The Wyze fleet (**B3**) is untouched.
+   The start-up risk §B states is now measured, and it is worse and more
+   specific than "2–5 s": ring-mqtt relaunches its cloud session per connect,
+   and a relaunch following a quick close/reopen can deliver an elementary
+   stream with no keyframe — a producer gap of 2.8 s decoded **2 frames**,
+   4.8 s decoded **none**, 25 s was clean six times out of six. That is
+   [issue #1](https://github.com/dmorozov/SmartHome/issues/1); it is bounded by
+   a keep-alive and an honest snapshot fallback, not cured.
 2. ~~**The appliance build has never been compiled.**~~ **Closed
    2026-08-04 (README G4, phase-0 item 14).** `flutter build linux --release`
    now succeeds on this host and the resulting **Linux release binary** has
@@ -452,12 +462,15 @@ case — it is.
 
 ## Done when
 
-Status re-read 2026-08-04, after the origin decision, both players landing,
-and the first end-to-end appliance run. **E8 is closed. G4 is closed** — the
-Linux release binary builds, runs, and has rendered live video from go2rtc in
-the doorbell Popup under Xvfb (phase-0 item 14 has the full evidence and the
-four things it does not prove). What is left is **entirely owner-blocked on
-hardware**: **B3** for the Wyze inventory, **B2** for Ring — i.e. a camera to
+Status re-read **2026-08-07**. **E8 is closed. G4 is closed** — the Linux
+release binary builds, runs, and has rendered live video from go2rtc in the
+doorbell Popup under Xvfb (phase-0 item 14 has the full evidence and the four
+things it does not prove). **B2 is closed too** (2026-08-05), so the "entirely
+owner-blocked on hardware" reading below is overtaken: there is a real camera,
+the web player has played it, and doing so surfaced
+[issue #1](https://github.com/dmorozov/SmartHome/issues/1) — a producer-side
+mid-GOP race that no synthetic pattern could have shown. What is left that is
+owner-blocked is **B3** for the Wyze inventory — i.e. a camera to
 point at. Separately, the *kiosk* claim is still unproven: that needs `cage`
 installed (**G6**) and the **A7** spike day, neither of which phase 4 gates on.
 

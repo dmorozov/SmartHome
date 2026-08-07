@@ -247,9 +247,18 @@ is the sum to keep an eye on if the deadline is ever shortened.
 
 ## Done when
 
-Status re-read 2026-08-04, after §4's Panel work landed. Everything still
-open is behind **one** owner action — B2, the Ring login. Nothing here is
-waiting on an agent.
+Status re-read **2026-08-07**. The previous reading said "everything still open
+is behind **one** owner action — B2, the Ring login". **B2 landed 2026-08-05**:
+ring-mqtt is authenticated, 15 MQTT entities exist on a device named "Front
+Door", and `doorbell` binds `event.front_door_ding` — an MQTT-event entity
+minted over ring-mqtt's own ding topic, because this ring-mqtt publishes no
+`event.*` of its own (phase-7 §A). The stream and snapshot bindings ride along,
+and the browser Panel has played the real doorbell.
+
+The remaining owner action is a different one: **A8**, four physical presses of
+the button, two of them staged around an HA restart. Until it runs, the ding
+classifier is correct by construction and not by observation — which is the
+distinction the list below keeps. Nothing here is waiting on an agent.
 
 - Physical button press → Panel doorbell pin reacts (entity round-trip
   verified) and the Popup opens unprompted (FakeHub-tested behavior, then

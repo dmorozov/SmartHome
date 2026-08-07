@@ -667,3 +667,72 @@ house can run water, belong to
   `hub/.broker-passwords.env` (0600, gitignored). Panel token: `hub/token`
   (0600, gitignored). Neither value belongs in this repo, in a shell history,
   or in an as-built table.
+
+## 3.10 CORS — the web Panel's cross-origin access, and the restart it is waiting on
+
+**Decided and committed 2026-08-06. Live on the dev Hub. NOT live on this one.**
+
+`hub/ha-config/configuration.yaml` gained an `http:` block:
+
+```yaml
+http:
+  cors_allowed_origins:
+    - "*"
+  login_attempts_threshold: 5
+```
+
+**Why it exists.** The Panel's *web* build is served from a different origin
+than Home Assistant and fetches camera stills from
+`GET /api/camera_proxy/<entity>` with the token in an `Authorization` header.
+That makes the request non-simple, so the browser preflights, and HA answers a
+preflight only for origins named here. Without the block the Panel gets
+`403 CORS preflight request failed` and shows no still at all. The wall
+Panel — the Flutter/cage build — uses `dart:io`, is not a browser, and is not
+subject to any of this; the block exists solely for the browser-served second
+screen. Measured against a live 2026.7.4: preflight `200` with
+`Access-Control-Allow-Origin` echoing the caller and
+`Access-Control-Allow-Headers: AUTHORIZATION`, and `/api/camera_proxy/` is
+genuinely covered by the setting.
+
+**Why `"*"` and not a list.** Owner's call: every service is on the home LAN
+and the Panel's origin is not fixed. Two properties worth knowing — it is
+**undocumented** (HA passes each entry straight to `aiohttp-cors`, which
+resolves `config.get(origin, config.get("*"))`, so it is a property of a
+pinned dependency and not an HA contract), and it is **not** the spec
+wildcard: HA echoes the caller's `Origin` back rather than emitting `*`.
+
+**Why `login_attempts_threshold` is in the same block.** "It is all LAN" is
+the wrong threat model — the risk arrives through a browser that can reach the
+LAN, i.e. any website somebody in the house visits. Authentication is
+untouched (measured: `/api/states` and `/api/config` still answer an
+unauthenticated foreign origin `401`), but HA's *unauthenticated* login views
+honour this same list, and measured with `"*"` set, a JSON POST to
+`/auth/login_flow` from a foreign origin preflighted `200` and its response
+was cross-origin **readable**. That is a password-guessing oracle, and HA
+ships with no rate limit at all (`login_attempts_threshold` defaults to `-1`).
+Five bounds it. This is the stronger of the two settings.
+
+**The part that is not done, and it is not a documentation gap.** Home
+Assistant reads `configuration.yaml` only at boot, and this container has been
+running since **2026-08-05 16:42 UTC** — about a day before the commit.
+Verified 2026-08-07 from the devcontainer:
+
+```
+$ curl -s -o /dev/null -D - -X OPTIONS http://172.17.0.1:8123/api/camera_proxy/... \
+    -H 'Origin: http://localhost:8080' -H 'Access-Control-Request-Method: GET'
+HTTP/1.1 403 Forbidden
+CORS preflight request failed: origin 'http://localhost:8080' is not allowed
+```
+
+So the file is right and has not been read. It takes effect at the next HA
+restart — an owner action, because it briefly takes the house's Hub down. Until
+then a web Panel cannot fetch a still from **this** Hub; the dev Hub, which was
+restarted on 2026-08-06, serves it. Re-run the probe above after the restart;
+a `200` with an `Access-Control-Allow-Origin` header is the confirmation.
+
+**To narrow it later** — replace `- "*"` with the exact origins. Matching is
+exact-string (scheme required, non-default port required, no trailing slash)
+and there is **no globbing**: `http://192.168.1.*` looks right and matches
+nothing. Naming the key also *replaces* HA's built-in default of
+`https://cast.home-assistant.io`, so re-list that if anyone uses HA Cast. The
+long version of all of this is in the config file's own comment block.

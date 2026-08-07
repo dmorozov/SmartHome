@@ -41,7 +41,7 @@ that came out of it. What exists:
   itself after 30 s (and after 2 minutes however many dings extend it).
   Both targets have a real player behind that seam — MJPEG over HTTP on the
   appliance, MSE over a WebSocket in a browser — each verified against a live
-  go2rtc; what neither has met is a real camera
+  go2rtc, and the browser one against the **real Ring doorbell**
   ([Live video in the Popup](#live-video-in-the-popup))
 - Two Hubs behind one interface: `FakeHub` (in-memory, seeded from the real
   fleet, drifts readings so the UI visibly lives) and `HaHubClient` (the real
@@ -489,14 +489,24 @@ changed, and the suites still drive the raw opener.
 | `I video.stream_reused name=… reuse=N phase=…` | somebody came back inside the window — **the line that separates "the picture was good because the producer never stopped" from "the first open of the day was lucky"** |
 | `D video.stream_dropped name=… reason=… reuses=N` | really closed. `linger_expired` is the ordinary case; `too_old` is the two-minute guarantee firing; `failed_while_kept` is a producer that died while it was being held |
 
-**What is not proven.** Everything above is hermetic — the pool against a fake
-go2rtc, and both surfaces' lifecycles against it. That a re-attached MSE session
-survives its `<video>` element being re-parented into a fresh platform view is
-argued from the DOM (the element is owned by the session, detached, and moved in
-by `onElementCreated`) and, like the rest of that player's view, **never
-mounted**. The green half-frame itself needs a real camera and a human finger to
-confirm gone; that is [TODO.md](../TODO.md)'s doorbell work, not a test this
-repo can run.
+**What is and is not proven.** Everything above is hermetic — the pool against
+a fake go2rtc, and both surfaces' lifecycles against it. Whether a re-attached
+MSE session survives its `<video>` element being re-parented into a fresh
+platform view used to be argued from the DOM and never mounted. **It was
+mounted on 2026-08-06, in Chromium against the real Ring doorbell, and the
+argument was wrong**: the element came back *paused*, because the HTML spec
+pauses a media element that leaves its document and only `sourceopen` — which
+fires once per session — had ever called `play()`. `_resume` is the fix and
+the re-attach now runs live across three reopens. The other half of that
+session, `_trim`, was wrong too. Both are recorded in
+`live_video_mse.dart`'s class docstring with the measurements.
+
+Still not proven, and it is a narrower thing than it was: no *automated* test
+mounts that view. `flutter test --platform chrome` cannot — measured, the
+platform-view registry is stubbed there and `onElementCreated` never fires, so
+such a test would pass while exercising nothing
+([Tests](#the-web-half-runs-nowhere-unless-you-ask-for-it)). The guard is the
+browser procedure, not a suite.
 
 ### Five answers, because one grey rectangle would be a lie
 
@@ -625,14 +635,31 @@ and is what every check in this README was run against.
 
 ### Not finished: what stands between this and a picture
 
-**1. No camera to point at.** Both players are built, and both have been
-driven against the live go2rtc's synthetic `selftest` pattern — never against
-a real camera, because there is not one yet: Ring is at **B2** and the Wyze
-fleet at **B3** in the repo [TODO list](../TODO.md).
-What that leaves untested is the part with the most measured risk in it: a
-real Ring stream takes 2–5 s to *start*, because ring-mqtt only opens the
-cloud session when an RTSP client connects, and that is on top of the 2.1 s
-MJPEG transcode spin-up.
+**1. One player has met a real camera; the other has not.** This item used to
+read "no camera to point at" — that was true until **B2** landed on
+2026-08-05, and both halves of it have moved since.
+
+The **web/MSE** player has been driven against the real Ring doorbell, in
+Chromium, through the real Popup: 2026-08-06, cold open then three reopens two
+seconds apart, `paused false` and `readyState 4` throughout, decoded frames
+climbing 103 → 405 with `currentTime` tracking wall-clock. It is also where
+[issue #1](https://github.com/dmorozov/SmartHome/issues/1) was found and two
+bugs in it fixed, which no synthetic pattern would have surfaced.
+
+The **appliance/MJPEG** player has still only rendered `selftest`. Careful
+about what the TODO list's **B2** entry proves here: the 54 real JPEG frames it
+records were pulled from `/api/stream.mjpeg` by hand, not through
+`MjpegLiveVideoSession` — the endpoint served real Ring, the *player* has not
+consumed it. **B3**, the Wyze fleet, is untouched.
+
+What that leaves genuinely open is narrower than it was, and it is now
+producer-side rather than player-side: ring-mqtt opens its cloud session only
+when a client connects, and the relaunch that follows a quick close/reopen can
+deliver an elementary stream with no keyframe to decode from. Measured
+2026-08-06: a producer gap of 2.8 s decoded 2 frames, 4.8 s decoded none, 25 s
+was clean six times out of six. That is issue #1, it is bounded rather than
+cured, and the Popup now shows the Hub's still instead of a green rectangle
+when it loses.
 
 **2. The appliance build has never run in the cage.** Compiling it stopped
 being the gap on 2026-08-04: `flutter build linux --release` succeeded on the
@@ -643,10 +670,13 @@ rendering in the Popup), and the devcontainer ships the full Linux toolchain
 glibc ceiling (`GLIBC_2.34`) fine on the 24.04 mini PC. What still stands is
 cage and touch (**A7**/**G6**): Xvfb with software GL is not the kiosk
 compositor, so the cage the Panel actually ships into has still never drawn a
-frame of it, and saying otherwise would be inventing evidence. Same class of
-gap on the other side: `MseLiveVideoSession.view` was proven in Chrome with
-no widget tree around it, so `HtmlElementView.fromTagName` and the reparenting
-of the `<video>` element into it are argued for and untested.
+frame of it, and saying otherwise would be inventing evidence. **Not** the same
+class of gap on the other side any more: `MseLiveVideoSession.view` used to be
+proven in Chrome with no widget tree around it, so the reparenting of the
+`<video>` element was argued for and untested. It has since been mounted in a
+real browser against the real doorbell, which found two bugs in it — what
+remains missing there is an *automated* mount, and that one is measured
+impossible under `flutter test --platform chrome` rather than merely not done.
 
 **Settled 2026-08-04, and no longer on this list: go2rtc's cross-origin
 refusal (E8).** It used to 403 any WebSocket upgrade carrying an `Origin`
@@ -821,13 +851,22 @@ saying nothing.
 `popup.deadline_ceiling` is the one dismissal that *does* name itself, because
 `device_popup.dart` is where that decision is taken and it knows.
 
-**None of this has met a real Ring doorbell.** `bindings.yaml` still points
-`doorbell` at a dev-Hub stand-in, ring-mqtt is at its auth gate (**B2** in the
-root TODO), and which entity shape it will produce is unknown — the classifier
-is built to be honest under both documented shapes and to warn rather than
-guess under a third, but it cannot be pronounced correct until real Ring data
-exists. `event.*_ding` is the shape to prefer when ring-mqtt offers both; see
-[phase-3 §2](../docs/plans/device-integrations/phase-3-ring.md).
+**The binding is real; the press is not.** This paragraph used to say none of
+it had met a real Ring doorbell, with `bindings.yaml` pointing at a dev-Hub
+stand-in and ring-mqtt sitting at its auth gate. Both were overtaken on
+2026-08-05: ring-mqtt is authenticated (**B2**, done), and `doorbell` binds
+`event.front_door_ding` — a real MQTT-event entity minted over ring-mqtt's own
+ding topic, because this ring-mqtt publishes no `event.*` of its own
+(phase-7 §A). So the question "which entity shape will it produce" is settled,
+and it is the timestamp shape the classifier prefers.
+
+**What has still never happened is a finger on the button.** The entity has
+seen no real press, so the two press-loss bugs the timestamp shape fixes are
+corrected by construction rather than by observation. That is **A8** in the
+root [TODO list](../TODO.md) — a four-press protocol, two of them staged around
+an HA restart, and it is owner work at the door. Until it runs, treat the
+classifier as argued-for and not observed. See
+[phase-7 §A4](../docs/plans/device-integrations/phase-7-doorbell-events-and-cameras.md).
 
 ## House Plan pipeline (ADR-0004)
 
@@ -1034,6 +1073,44 @@ cannot drift apart; it skips where `python3` is absent.
 deterministic tests. `test/flutter_test_config.dart` quiets logging to
 warnings for the whole suite.
 
+### The web half runs nowhere unless you ask for it
+
+`flutter test` is a **VM** build, so every `if (dart.library.js_interop)`
+branch in the tree is not skipped by it — it is absent from it. That includes
+the whole MSE player and the web sides of `runtimeEnvironment` and the
+snapshot fetcher. Until 2026-08-07 none of it executed on any machine.
+
+```sh
+flutter test --platform chrome \
+  test/bindings_parser_test.dart test/boot_test.dart test/device_popup_test.dart \
+  test/device_presentation_test.dart test/device_traits_test.dart \
+  test/device_vocabulary_test.dart test/doorbell_test.dart test/floor_scene_test.dart \
+  test/floor_view_test.dart test/house_loader_test.dart test/hub_config_test.dart \
+  test/live_video_keepalive_test.dart test/live_video_mse_web_test.dart \
+  test/log_test.dart test/url_redaction_test.dart
+```
+
+**237 pass** in the devcontainer (Chrome 151, `CHROME_EXECUTABLE` already set
+by the image). The list is explicit rather than `flutter test --platform
+chrome` over `test/` because most files reach `dart:io` — directly, or through
+`test_house.dart`, which reads the House Plan off disk — and a browser build
+cannot compile them. That is a property of the fixtures, not a gap: those
+suites are VM suites and the VM runs them.
+
+`test/live_video_mse_web_test.dart` is `@TestOn('browser')`, so it is the one
+file that runs *only* here, and it is the first automated coverage the MSE
+player has ever had.
+
+**What it deliberately does not cover, measured rather than assumed:**
+mounting `MseLiveVideoSession.view` in a `testWidgets` pump never fires
+`onElementCreated` under `--platform chrome` — the platform-view registry is
+stubbed in the harness, so no DOM element is created and nothing is
+re-parented. A test asserting the view there would pass while exercising none
+of it. So phase 4's open item 3 stays open on purpose, and the `view` /
+`_resume` path is guarded by the browser procedure in
+[The web build must not need the internet](#the-web-build-must-not-need-the-internet)
+instead — which is what found its two bugs on 2026-08-06.
+
 `test/golden/` renders the whole Panel to PNGs — headlessly, no browser and
 no server — for four scenes: ground floor, upstairs selected, a Device
 Popup, and an unreachable Hub. They catch unintended changes to the
@@ -1042,8 +1119,10 @@ showing exactly what moved.
 
 **The devcontainer is the canonical golden host**
 ([ADR-0009](../docs/adr/0009-development-in-the-devcontainer-on-the-target-os.md)):
-the goldens were baked in it 2026-08-06, where the whole suite runs **398
-pass / 1 skip / 0 failures**. Green is promised there and nowhere else — a
+the goldens were baked in it 2026-08-06. The VM suite there runs **431 pass /
+2 skip / 0 failures** (re-measured 2026-08-07; it was 398/1 when the goldens
+were baked, and the goldens themselves have not moved since — the growth is
+new tests, not new scenes). Green is promised there and nowhere else — a
 host renders with its own font stack, so red on any non-container host is the
 expected state, and the host's problem rather than the goldens'. Red
 *in-container* is the signal that matters: a real rendering change, or a
