@@ -91,9 +91,61 @@ hostname handle to attach it to. Get the MAC from the host itself:
 ip -br link show wlp164s0    # or enp162s0 when wired
 ```
 
-The exact Deco-app menu wording for address reservation is **UNVERIFIED** — it
-is an operator-side mobile app, not something in this repo. What matters is that
-the entry is keyed on the MAC printed above.
+`wlp164s0` (active) — `ac:45:ef:d2:e5:47`; `enp162s0` (cabled-down,
+`NO-CARRIER`) — `fc:5c:ee:5d:4b:99`. Reserve the Wi-Fi MAC; the wired one
+only matters once someone plugs the cable in. Confirmed the permanent
+hardware address, not something MAC-randomization could have substituted:
+`ethtool -P wlp164s0` reports the same `ac:45:ef:d2:e5:47`, and neither the
+per-connection nor the global NetworkManager config has a
+`cloned-mac-address` override — nothing here reassigns it.
+
+### Address Reservation — DONE 2026-08-07
+
+**The path, found by elimination, is `More → Advanced → Address Reservation
+→ Add Address Reservation`.** Deco's app has no fewer than three
+networking-adjacent screens; this specific one is the only one that does
+per-MAC reservation. Two dead ends worth knowing about **so the next person
+doesn't retrace them**:
+
+| Screen tried | What's actually there | Verdict |
+|---|---|---|
+| **Online Clients → tap a device** — its own detail/settings view | Name/icon, **High Priority** (toggle), **Device Isolation** (toggle), **Specified Connection** (assign to one mesh node), **Mesh Technology** (toggle) | No reservation option anywhere on this screen |
+| **More → DHCP Server** (its own top-level button, not nested under Advanced) | Start IP `192.168.68.50`, End IP `192.168.68.250`, Default Gateway `192.168.68.1`, Primary/Secondary DNS (both Optional) | DHCP *pool range* config only, no per-device list |
+| **More → Advanced → Static Routing** | Custom routes between subnets | Different feature entirely — easy to reach for by name, not it |
+| **More → Advanced → Address Reservation** | **The one.** A dedicated reservation list with an "Add Address Reservation" entry point, sitting alongside (not inside) Static Routing | ✅ |
+
+**All six MACs this house currently needs pinned, added 2026-08-07:**
+
+| Device | MAC | Reserved IP | Name shown in the Deco app |
+|---|---|---|---|
+| Hub host (`wlp164s0`) | `ac:45:ef:d2:e5:47` | 192.168.68.81 | **`dmorozov-Legion-9-16IRX8`** — the laptop's real hostname; left as-is rather than renamed to a house-style label |
+| Garage Door Cam (Wyze) | `d0:3f:27:53:25:72` | 192.168.68.54 | Garage Door Cam |
+| Living Room Cam (Wyze) | `d0:3f:27:49:b2:f6` | 192.168.68.69 | Living Room Cam |
+| Family Room Cam (Wyze) | `d0:3f:27:8d:cc:54` | 192.168.68.57 | Family Room Cam |
+| Back Yard Cam (Wyze) | `d0:3f:27:4a:95:76` | 192.168.68.62 | Back Yard Cam |
+| Back Yard Door Cam (Wyze) | `d0:3f:27:8e:4f:b1` | 192.168.68.63 | Back Yard Door Cam |
+
+The five cameras were also renamed in the Deco app to these exact names,
+matching the Wyze app and `docs/plans/device-integrations/phase-4-cameras.md`'s
+A1 inventory — naming isn't the reservation, but it's what makes the device
+list self-documenting for the next lookup, and it's the same MAC-keyed join
+this LAN otherwise has no hostname for.
+
+**Why the Wyze five specifically mattered, not just hygiene:** two of them
+had already swapped IP addresses between two measurements taken three days
+apart (§2.1 of [Ch. 5](05-devices-cloud.md)) — observed drift, not a
+theoretical risk. Without a reservation, whatever address ends up in
+`hub/go2rtc/go2rtc.yaml`'s stream URLs or a `bindings.yaml` entry could
+silently go stale.
+
+**Verify by watching the lease survive a renewal, not by trusting the app's
+own "reserved" label** — the app can show a reservation that hasn't
+actually taken effect server-side. Spot-checked immediately after adding
+(2026-08-07): all five camera MACs still answering at their reserved IPs
+via `ip neigh` — expected either way, since nothing forces an immediate
+renewal. The Hub host's own lease was separately measured at 2 h,
+renewing hourly, so a few hours of `ip neigh`/re-ping (§2.1 of Ch. 5)
+without any of the six moving is the real confirmation.
 
 Verify the DNS claims yourself before believing any hostname:
 
@@ -121,7 +173,9 @@ rebuilds, nothing re-pairs. See
 stack is designed to move machines unchanged.
 
 The genuine re-pairing cliff is losing `hub/ha-config/.storage` or
-`hub/ring-mqtt-data/`. No phase has a backup step for those yet.
+`~/.sh_keys/ring-mqtt/` (was `hub/ring-mqtt-data/` — ADR-0010, 2026-08-07).
+No phase has an *automated* backup step for those — the interim manual
+mitigation (now two archives, one per location) is [Ch. 2 §8](02-hub-stack.md).
 
 Record the address where the tooling reads it —
 [`../ansible/inventory.yml`](../ansible/inventory.yml), `ansible_host:` under
@@ -516,13 +570,16 @@ Sync between the controller and the Hub host goes through the git remote — pus
 from the Mac, pull on the Hub host. **No rsync side-channels**, or the two
 checkouts drift and the phase records stop describing either of them.
 
-Two files the clone will never bring, both gitignored, both mode 0600, both
-created in later chapters on the host itself:
+Every secret this stack owns the path for lives outside the clone entirely
+as of **ADR-0010** (2026-08-07) — `~/.sh_keys` on the host, not inside
+`hub/` at all, so there's nothing here for a fresh clone to be missing in
+the first place. Representative two, both mode 0600, both created in later
+chapters:
 
 | Path | What it holds | Created by |
 |---|---|---|
-| [`../../hub/.broker-passwords.env`](../../hub/) | Mosquitto users `ha` / `ring` / `z2m` | Hub-stack chapter |
-| [`../../hub/token`](../../hub/) | HA long-lived access token for the Panel | after HA onboarding |
+| `~/.sh_keys/broker-passwords.env` | Mosquitto users `ha` / `ring` / `z2m` | Hub-stack chapter |
+| `~/.sh_keys/token` | HA long-lived access token for the Panel | after HA onboarding |
 
 Never paste either value into a doc, a commit, an ansible extra-var, or a
 `systemctl show`-visible `Environment=` line — see
