@@ -238,13 +238,21 @@ grep -i D03F27 /usr/share/ieee-data/oui.txt
 # D0-3F-27   (hex)		Wyze Labs Inc
 ```
 
-| IP | MAC |
-|---|---|
-| 192.168.68.54 | d0:3f:27:53:25:72 |
-| 192.168.68.57 | d0:3f:27:8d:cc:54 |
-| 192.168.68.62 | d0:3f:27:8e:4f:b1 |
-| 192.168.68.63 | d0:3f:27:4a:95:76 |
-| 192.168.68.69 | d0:3f:27:49:b2:f6 |
+| IP (2026-08-04) | IP (re-measured 2026-08-07) | MAC |
+|---|---|---|
+| 192.168.68.54 | 192.168.68.54 | d0:3f:27:53:25:72 |
+| 192.168.68.57 | 192.168.68.57 | d0:3f:27:8d:cc:54 |
+| 192.168.68.62 | **192.168.68.63** | d0:3f:27:8e:4f:b1 |
+| 192.168.68.63 | **192.168.68.62** | d0:3f:27:4a:95:76 |
+| 192.168.68.69 | 192.168.68.69 | d0:3f:27:49:b2:f6 |
+
+**Two of the five already drifted IPs in three days** — `.8e:4f:b1` and
+`.4a:95:76` swapped between `.62` and `.63`. This is the live proof for why
+identification and later binding must key on **MAC**, never IP: no DHCP
+reservation exists yet for any of these (that's **C1**), so the address any
+one of them holds today is not the address it holds next week. Match by MAC
+in both the Deco app and the Wyze app; don't write an IP into anything that
+has to stay true.
 
 To re-list them at any time (unprivileged; the pings are only there to
 populate the neighbour cache):
@@ -339,10 +347,14 @@ apply them before pasting it:
   rather than guessing; getting it wrong means go2rtc or the bridge
   silently loses its listener.
 
-Credentials go in a gitignored `hub/*.env` (the `*.env` rule in
-`hub/.gitignore` already covers it), never in `compose.yaml`: Wyze email,
-password, and the API Key ID / API Key pair from the Wyze developer
-console.
+Credentials go in `~/.sh_keys/wyze.env`, outside the repo entirely (ADR-0010
+— superseded the earlier plan of a gitignored `hub/*.env`), never in
+`compose.yaml`: Wyze email, password, and the API Key ID / API Key pair from
+the Wyze developer console. **The API Key ID / API Key half is done,
+2026-08-07** — obtained from `developer-api-console.wyze.com` and stored at
+`~/.sh_keys/wyze.env`. The Wyze *account* email/password for the bridge's own
+login still needs adding alongside it once the bridge path (rather than the
+RTSP-flash path) is actually chosen for a given unit.
 
 Pin camera firmware and **disable auto-update** on every bridge-dependent
 unit. Wyze's firmware churn broke every bridge fork for months in 2025;
