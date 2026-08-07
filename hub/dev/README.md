@@ -1,5 +1,15 @@
 # Development Hub
 
+> **Port 18123 is this file. Port 8123 is the real house.** Two independent
+> Home Assistant instances, two independent config-entry lists, two
+> independent everything — nothing done on one is visible on the other, even
+> though both can run on the same physical machine at the same time (this
+> box, right now, usually does). Before you add an integration, check the
+> port in the address bar. Confirmed the hard way, 2026-08-07: a real
+> ecobee.com login — username, password, a live MFA code, all correct — was
+> completed here, on this disposable sandbox, when it was meant for the real
+> house. It had to be redone from scratch against `:8123`.
+
 A real Home Assistant for the Panel to talk to, brought up automatically
 as the devcontainer's sibling containers (ADR-0009) on whatever machine
 hosts the devcontainer — Apple-silicon Macs included, because the HA

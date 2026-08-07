@@ -13,15 +13,17 @@ a local-looking name** if you click the wrong card. §4.2.1 is the loudest
 warning in this document for that reason.
 
 Every measurement below was taken on the Hub host on **2026-08-04** against
-Home Assistant **2026.7.4**. Where a fact is not measured it says UNVERIFIED.
+Home Assistant **2026.7.4**, except the Ecobee cloud row, re-measured
+**2026-08-07** against the same HA version. Where a fact is not measured it
+says UNVERIFIED.
 
-**Where this chapter stands on that date**, so the sections below are read as
-record or as instruction correctly:
+**Where this chapter stands as of the latest measurement**, so the sections
+below are read as record or as instruction correctly:
 
 | Device | Local path | Cloud path |
 |---|---|---|
 | Kasa ×3 | **DONE** — 3 entries loaded (§4.1) | n/a, and no account is involved |
-| Ecobee "Main Floor" | **DONE** — paired 2026-08-04 (§4.2.4) | pending, needs credentials + MFA (§4.2.3) |
+| Ecobee "Main Floor" | **DONE** — paired 2026-08-04 (§4.2.4) | **DONE** — added 2026-08-07 (§4.2.3) |
 | Rachio `Rachio-BFF806` | pending, needs the HomeKit code (§4.3.3) | **DONE** — 5 zones loaded (§4.3.2) |
 | Tesla Wall Connector | **BLOCKED** at the hardware — full commissioning procedure in §4.4 | n/a |
 
@@ -105,10 +107,12 @@ Rachio's branded cloud card became a loaded `rachio` entry, and the Ecobee's
 `homekit_controller` card became a loaded local pairing. What is left is each
 device's other half, and both are still wanted:
 
-| Still pending | Is | Why it is still open |
+Still pending, as of that 2026-08-04 snapshot:
+
+| Was pending | Is | Status now |
 |---|---|---|
-| `homekit_controller` / `Rachio-BFF806` | the Rachio's **local** path | Not yet paired. Needs a HomeKit code (§4.3.3) |
-| `ecobee` / source `homekit` | the Ecobee's **cloud** path | Not yet added. Needs ecobee.com credentials + MFA (§4.2.3) |
+| `homekit_controller` / `Rachio-BFF806` | the Rachio's **local** path | Still open — not yet paired. Needs a HomeKit code (§4.3.3) |
+| `ecobee` / source `homekit` | the Ecobee's **cloud** path | **DONE 2026-08-07** — no longer a pending flow, now config entry `01KZDCDZV2F5Q1GMZFWSSWNJVC` (§4.2.3) |
 | `upnp` / `XE75Pro` | the Deco router | Nothing in this house needs it. Harmless; ignore it |
 
 Run this before and after every flow in this chapter. It is the only view that
@@ -479,17 +483,25 @@ Local-first is the house rule
 entities exist for a future schedules UI and for the outage drill's control
 case.
 
-### Status as of 2026-08-04
+### Status as of 2026-08-07
 
 | Path | State |
 |---|---|
 | **Local — `homekit_controller`** | **DONE.** Paired locally 2026-08-04. Config entry `homekit_controller` / title **"Main Floor"** / source `zeroconf` / `state: loaded`. Entities in §4.2.6 |
-| **Cloud — `ecobee`** | **Not done.** Its branded discovery card is still pending (`handler: ecobee`, source `homekit`, step `user`). Needs ecobee.com user + password + MFA, which is a human at a keyboard — §4.2.3 |
+| **Cloud — `ecobee`** | **DONE.** Added 2026-08-07 on the **production** Hub. Config entry `01KZDCDZV2F5Q1GMZFWSSWNJVC` / title **"ecobee"** / source `homekit` / `state: loaded`. Entities: `climate.main_floor_2`, `weather.main_floor`, `notify.main_floor`, `number.main_floor_fan_minimum_on_time`, `sensor.main_floor_temperature`, `sensor.main_floor_humidity`, plus `_2`-suffixed collisions on the bridged sensor's occupancy/temperature (§4.2.5) |
 
-So §4.2.4 below is a **record of what was done**, and remains the instruction
-for a *fresh* unit — including the touchscreen-enable path, which a new
-thermostat still needs and which nothing in HA can do for you. §4.2.3 is still
-pending work.
+So §4.2.4 and §4.2.3 below are now both a **record of what was done**, and
+both remain the instruction for a *fresh* unit — §4.2.4 including the
+touchscreen-enable path a new thermostat still needs, which nothing in HA can
+do for you.
+
+**How §4.2.3 actually went, worth keeping for the next credential flow:** the
+first attempt succeeded — correct username, password, MFA — but landed on
+`hub/dev`'s Home Assistant (port **18123**, the disposable Panel-development
+sandbox) rather than production (port **8123**). Same card, same steps, wrong
+HA instance; the two are independent and this box runs both. See "Two Home
+Assistants" in [`../COMMISSIONING.md`](../COMMISSIONING.md) before you start
+any credential flow in this guide.
 
 ### 4.2.1 THE DOUBLE-DISCOVERY TRAP — read this before you click anything
 
@@ -593,10 +605,19 @@ WebSocket API.
 If that prints an accessory at `sf=1` and HA still shows no card, the problem is
 in HA's discovery state (dismiss and restart), not in the network.
 
-### 4.2.3 Path A — cloud (`ecobee`)
+### 4.2.3 Path A — cloud (`ecobee`) — DONE 2026-08-07
+
+> **Check the port before you start.** This procedure is for the
+> **production** Hub, `http://<hub-host>:8123`. A second, independent Home
+> Assistant runs on this same machine at port **18123** (`hub/dev/`, the
+> Panel-development sandbox) — same integration, same steps, but a login
+> completed there does not count and does not migrate. It happened here on
+> the first attempt. See "Two Home Assistants" in
+> [`../COMMISSIONING.md`](../COMMISSIONING.md).
 
 Keyless since HA 2026.3; this Hub runs 2026.7.4. `single_config_entry: true`,
-so there is exactly one `ecobee` entry for the whole house, ever.
+so there is exactly one `ecobee` entry for the whole house, ever — **per HA
+instance**, which is exactly the fact the box above is about.
 
 The `user` step's form shows **three optional fields**: `api_key`, `username`,
 `password`. That is one form serving two mutually exclusive paths, and the code
@@ -617,7 +638,52 @@ time-boxed** — have the authenticator app open before you submit the password,
 because a TOTP that expires mid-flow returns `invalid_mfa_code` and you restart
 the login.
 
-Headless — the MFA step is the one place a human is unavoidable:
+**UI path.** Quoted verbatim from the running container's own
+`ecobee/strings.json` and HA's common `strings.json` — not from memory, and not
+from the ecobee.com app, which this integration never touches. Field labels and
+screen text will match what you see; navigation menu wording is the one part
+that moves between HA releases and is not re-verified here.
+
+1. Settings → Devices & services → Add integration → search **"ecobee"**.
+2. **Two cards can appear for this thermostat.** Pick the one branded with the
+   ecobee logo — `handler: ecobee`. The other, "HomeKit Device"
+   (`handler: homekit_controller`), is the local integration and is already
+   done (§4.2.4). This is the §4.2.1 double-discovery trap; if only one card
+   shows, it may simply mean HA's discovery for the other one already fired
+   and was dismissed — that is not a problem to chase.
+3. The form's own description reads: *"Please enter the API key obtained from
+   ecobee.com."* **Ignore that instruction.** It is leftover from the
+   integration's older key-only path and does not describe the keyless path
+   this account uses — there is no API key to obtain, and entering one (with
+   username/password also filled) is exactly the three-fields-filled case that
+   fails. The form has three fields regardless of what the description says:
+   **API key**, **Username**, **Password**. Leave **API key** blank. Enter the
+   ecobee.com email in **Username** and the account password in **Password**.
+4. **Before you click Submit, have your authenticator app open.** The next
+   screen is timed.
+5. Submit. HA's MFA screen reads: *"ecobee requires multi-factor
+   authentication. Enter the {mfa_type} code from your authenticator app."*
+   (`{mfa_type}` is filled in with whatever challenge type your account uses)
+   — one field, labelled **MFA code**. Enter it and submit immediately: a code
+   that expires mid-flow shows *"The MFA code was not accepted by ecobee;
+   please try again"* and restarts the whole flow from step 3, not just the
+   code screen.
+6. Success lands you back on Devices & services with a new **ecobee** entry.
+   `single_config_entry: true` means this card cannot appear again afterward —
+   if you ever need it back (credentials changed, reauth), HA raises it as a
+   **reauth** flow on the existing entry instead of a fresh Add Integration
+   card; its screen asks for **Password** only, captioned *"Reauthenticate the
+   ecobee account for {username}"*, verbatim from the same strings file.
+
+If it fails: *"Error authenticating with ecobee; please verify your
+credentials are correct"* means the username/password pair was rejected, not
+necessarily that either one is literally wrong — an account-level issue
+(locked out, forced password reset on ecobee.com) reads the same. *"Invalid
+authentication"* with no other detail is the three-fields-filled case in
+step 3.
+
+**Headless.** Same flow, same field names, same MFA timing constraint — the
+MFA step is the one place a human is unavoidable either way:
 
 ```bash
 FLOW=$(curl -sX POST "$HA/api/config/config_entries/flow" \

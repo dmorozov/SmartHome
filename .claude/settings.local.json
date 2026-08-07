@@ -43,7 +43,12 @@
       "Bash(git -C /workspaces/SmartHome check-ignore -v hub/.env)",
       "Bash(docker rm *)",
       "Read(//home/**)",
-      "Read(//home/dmorozov/**)"
+      "Read(//home/dmorozov/**)",
+      "Bash(./hactl '[{\"type\":\"config_entries/get\"}]')",
+      "Bash(python3 -c ' *)",
+      "Bash(curl *)",
+      "Bash(echo \"tracked: $?\")",
+      "Bash(docker port *)"
     ]
   },
   "enabledMcpjsonServers": [

@@ -33,14 +33,35 @@ Deco client list — the chapter says so instead of inventing a path.
 
 ---
 
+## Two Home Assistants on one box — 8123 is real, 18123 is not
+
+Everything in this guide targets the **production** Hub — `hub/compose.yaml`,
+port **8123**, host networking, the real house. A second, independent Home
+Assistant also runs on this same machine: `hub/dev/`, port **18123**, brought
+up automatically alongside the devcontainer for Panel development and testing
+(ADR-0009). It is not a view onto the same data — it is a **separate**
+instance with its own onboarding, its own config entries, its own everything.
+Nothing done on one is visible on the other.
+
+**Confirmed the hard way, 2026-08-07:** a real ecobee.com cloud login —
+correct username, password, live MFA code — was completed against `:18123`
+by mistake, believed to be the production entry, and had to be redone from
+scratch against `:8123` once the mix-up was caught. Before adding any
+integration from this guide, check the port in the address bar. `hub/dev/`
+also cannot do anything this guide's local-device chapter (4) depends on —
+no mDNS, no HomeKit pairing, no Zigbee — so a card or entity that behaves
+correctly there is not evidence of anything about the real house.
+
+---
+
 ## The ordered path
 
 | # | Chapter | Delivers | State |
 |---|---|---|---|
 | 1 | [01-host-and-network.md](commissioning/01-host-and-network.md) | An SSH-reachable Linux box that survives a closed lid, with Docker on a live apt source and the repo checked out. No container yet | **AS-BUILT** |
 | 2 | [02-hub-stack.md](commissioning/02-hub-stack.md) | `hub/compose.yaml` up: HA, Mosquitto (auth on), ring-mqtt, go2rtc; Zigbee parked. Nothing onboarded | **AS-BUILT** |
-| 3 | [03-home-assistant.md](commissioning/03-home-assistant.md) | Owner account, the long-lived token in `hub/token`, the MQTT integration — then the headless REST/WebSocket path everything after this uses | **AS-BUILT**, except the headless onboarding and MQTT-flow variants (marked) |
-| 4 | [04-devices-local.md](commissioning/04-devices-local.md) | Kasa ×3, Ecobee, Rachio, and the Tesla Wall Connector recorded as blocked rather than pretended into existence | **AS-BUILT** for the Kasa fleet, the Ecobee's local pairing, the Rachio's cloud entry and the Tesla-blocked finding. **INSTRUCTIONS** for the two halves still open — the Rachio's local HomeKit pairing (§4.3.3) and the ecobee cloud entry (§4.2.3). The chapter's own status table is §4.0 |
+| 3 | [03-home-assistant.md](commissioning/03-home-assistant.md) | Owner account, the long-lived token in `~/.sh_keys/token` (was `hub/token` — ADR-0010), the MQTT integration — then the headless REST/WebSocket path everything after this uses | **AS-BUILT**, except the headless onboarding and MQTT-flow variants (marked) |
+| 4 | [04-devices-local.md](commissioning/04-devices-local.md) | Kasa ×3, Ecobee, Rachio, and the Tesla Wall Connector recorded as blocked rather than pretended into existence | **AS-BUILT** for the Kasa fleet, both Ecobee integrations (local **and** cloud, the latter done 2026-08-07), the Rachio's cloud entry and the Tesla-blocked finding. **INSTRUCTIONS** for the one half still open — the Rachio's local HomeKit pairing (§4.3.3). The chapter's own status table is §4.0 |
 | 5 | [05-devices-cloud.md](commissioning/05-devices-cloud.md) | Ring, Wyze, HACS, LG, Whisker, Petlibro, Emporia — every vendor-account device | **INSTRUCTIONS.** None of it is set up |
 | 6 | [06-panel-and-bindings.md](commissioning/06-panel-and-bindings.md) | The Panel pointed at the real Hub, and each pin bound to a real entity | **INSTRUCTIONS** for the binding work — all 33 bindings still point at dev stand-ins. **§6.9a is AS-BUILT**: the Linux release build ran against this Hub and rendered live video, under Xvfb and against synthetic inputs. Read its caveat table before repeating the claim |
 | 7 | [07-device-lifecycle.md](commissioning/07-device-lifecycle.md) | Everything that happens to a device *after* the first time: a fourth plug, a rename, a repurpose, a sale — and the five-step chain from a registry write to a green `flutter test` | **INSTRUCTIONS**, built on **AS-BUILT** measurement. Every id, registry row and API schema was read off this Hub on 2026-08-04; no rename, repurpose or removal has been performed here |
@@ -115,6 +136,7 @@ the procedure:
 | HA owner account name + password — the identity every long-lived token is minted against, and it migrates to the mini PC with `hub/ha-config` | [3 §3.1](commissioning/03-home-assistant.md) |
 | **Rachio API key** — `https://app.rach.io/` → Settings → **"GET API KEY"** (wording quoted from HA's own `rachio/strings.json`). The `rachio` entry is loaded | [4 §4.3.2](commissioning/04-devices-local.md) |
 | **Ecobee HomeKit setup code** — 8 digits, `XXX-XX-XXX`, read off the thermostat's touchscreen. Paired locally 2026-08-04 | [4 §4.2.4](commissioning/04-devices-local.md) |
+| **ecobee.com email + password + a live MFA code** — the cloud entry. Entered on production (port **8123**, not 18123 — see "Two Home Assistants" above) 2026-08-07; entry `01KZDCDZV2F5Q1GMZFWSSWNJVC`, `state: loaded`, `climate.main_floor_2` and five others | [4 §4.2.3](commissioning/04-devices-local.md) |
 
 Gather what you can before starting; the rest are marked *live* and must be
 done with the flow open.
@@ -129,7 +151,6 @@ done with the flow open.
 
 | What | Where from | Needed by |
 |---|---|---|
-| **ecobee.com email + password, then a *live* MFA code** | The ecobee account the thermostat is registered to. This is the Ecobee's **outstanding half** — the local pairing is done, the cloud entry is not. The MFA code is time-boxed: have the authenticator open *before* submitting the password, because a code that expires mid-flow returns `invalid_mfa_code` and you restart the login. Fill in username **and** password and leave `api_key` **empty** — all three filled fails as a generic `invalid_auth` | Ch. 4 (cloud path), [§4.2.3](commissioning/04-devices-local.md) |
 | Ring email + password, then a **live 2FA code** | Ring's own 2FA channel for that account. Cannot be scripted or pre-fetched | Ch. 5 |
 | Wyze email + password **and** API Key ID + API Key | `https://developer-api-console.wyze.com/#/apikey/view` | Ch. 5 (bridge path) |
 | A GitHub account | HACS install completes over GitHub's device-code flow | Ch. 5 |
@@ -172,15 +193,32 @@ done with the flow open.
 | GNOME battery auto-suspend | Still `suspend` at 900 s. Unplug the laptop and the house goes dark 15 minutes later. Closing it removes the only thing stopping a flat battery | Ch. 1 |
 | `unit_system`: `metric` or `us_customary` | **No longer a Panel trap** — the Panel now reads the Hub's own unit and renders it (trap #10). So this is a genuine house preference again: pick the one the household reads, knowing every other HA surface follows it too | Ch. 3 |
 | D1 / D2 / D3 in the plan D-log | Wyze flashing scope, Emporia reflash timing, SmartThings subscription | Ch. 5 |
-| A **repeatable** backup step for `hub/ha-config/.storage` and `hub/ring-mqtt-data/` | **No phase 0–6 has one, and that is unchanged.** A one-off encrypted copy was taken 2026-08-04 and is the only copy in existence — it is not on this disk, so nothing here can verify or refresh it, and the next change to the registries makes it stale. Losing both means re-pairing by hand, including a physical re-pair at the thermostat. Chapter 2 §8 gives the manual tarball as the honest interim | Ch. 2 §8 |
+| A **repeatable** backup step for `hub/ha-config/.storage` and `~/.sh_keys/ring-mqtt/` (was `hub/ring-mqtt-data/` — ADR-0010, 2026-08-07) | **No phase 0–6 has one, and that is unchanged.** A one-off encrypted copy was taken 2026-08-04 and is the only copy in existence — it is not on this disk, so nothing here can verify or refresh it, and the next change to the registries makes it stale. Losing both means re-pairing by hand, including a physical re-pair at the thermostat. Chapter 2 §8 gives the manual tarball as the honest interim — now **two** archives, one for `.storage`, one for `~/.sh_keys`, since ADR-0010 moved the latter outside `hub/` entirely | Ch. 2 §8 |
 | Whether this Hub should have Bluetooth at all | The `bluetooth` entry sits in `setup_retry` forever. The remedy (`-v /run/dbus:/run/dbus:ro`) is written down and **UNVERIFIED**; nothing in phases 1–6 needs BLE and the adapter will not exist on the mini PC. Disabling the entry is the honest alternative | Ch. 3 §3.7 |
 
-Secrets land in exactly two files on the Hub host, both gitignored, both 0600:
-[`../hub/.broker-passwords.env`](../hub/) (the three broker passwords) and
-[`../hub/token`](../hub/) (the Panel's long-lived HA token). Everything else a
-vendor issues is typed into HA and lives in `hub/ha-config/.storage`. No
-credential value belongs in this repo, in a shell history, or in an
+**As of ADR-0010 (2026-08-07), secrets don't land in the repo at all.** Every
+credential this stack owns the path for — the three broker passwords,
+mosquitto's hashed `passwd`, ring-mqtt's config and Ring refresh token, go2rtc's
+stream credentials, and the Panel's long-lived HA token — lives under
+`~/.sh_keys` on the Hub host, outside `hub/` entirely, bind-mounted back onto
+the same in-container paths each service always used. `rm -rf ~/.sh_keys` is
+the whole "forget every credential" mechanism. Everything else a vendor issues
+is typed into HA and lives in `hub/ha-config/.storage` — deliberately **not**
+under `~/.sh_keys`, since HA owns that storage format internally and it mixes
+credentials with the rest of HA's configuration; see
+[ADR-0010](../docs/adr/0010-secrets-consolidated-outside-the-repo.md) for why.
+No credential value belongs in this repo, in a shell history, or in an
 `Environment=` line.
+
+**One hazard specific to this repo's devcontainer**, discovered standing this
+up: `~/.sh_keys` means whichever shell is actually running the command. Inside
+this devcontainer, `~` is not the same filesystem the host's Docker daemon (and
+`~/.sh_keys`) lives on — a command that reads or writes there needs to run on
+the Hub host's own terminal, or pass the real path explicitly
+(`/home/dmorozov/.sh_keys` today). Recreating (not just restarting) a
+`hub/compose.yaml` service from inside the devcontainer needs
+`--project-directory`/`--env-file` for the same reason — ADR-0010's
+"Consequences" section has the full incident.
 
 ---
 
@@ -200,8 +238,8 @@ cd <repo>/appliance/commissioning
 |---|---|---|
 | Host | Ubuntu 26.04, SSH up, lid ignored (verified live), docker-ce 29.7.1 + compose v5.4.0 on a live apt source, repo cloned. **Flutter Linux toolchain present and proven** — `flutter build linux --release` succeeds (**G4**) | Wi-Fi lease at `192.168.68.81` is **unreserved**; wired `enp162s0` cabled-down; GNOME battery auto-suspend still `suspend`/900 s. The toolchain was installed **by hand**, so `flutter_toolchain_packages` does not yet describe the host that builds ([1 §1.7a](commissioning/01-host-and-network.md)) — do not assume a fresh converge reproduces this box |
 | Hub stack | 4 containers Up. Broker `allow_anonymous false`, users `ha`/`ring`/`z2m`, `passwd` `1883:1883 0600` | Zigbee2MQTT parked (no coordinator, ADR-0003); `/run/dbus` volume not added; **still no repeatable backup step** — a one-off encrypted copy was taken 2026-08-04 and is the only one, and it lives off this disk, so a restore depends entirely on it |
-| Home Assistant | Onboarded, token minted at `hub/token`. **`mqtt` entry loaded** — `127.0.0.1:1883`, user `ha`, protocol 5, zero devices, which is its correct end state. **`script: !include scripts.yaml` added** and `hub/ha-config/scripts.yaml` created, un-ignored by a `hub/.gitignore` negation the way `automations.yaml` is ([3 §3.8](commissioning/03-home-assistant.md)); two script entities live, neither ever executed. `hactl` is **in the repo** at [`commissioning/hactl`](commissioning/hactl) and is the single WebSocket mechanism for the whole guide | `bluetooth` entry in `setup_retry` (DBus not mounted) — expected, not your mistake. `scripts.yaml` is un-ignored but **still untracked** (`??`) — `git add` it, or the wall is the only copy |
-| Local devices | **3 × `tplink` entries loaded** — `switch.entry_light`, `switch.stairs_light` (both **repurposed from fridge/aquarium 2026-08-05** and renamed, Ch. 4 §4.1.1), and the EP40 parent + 2 children, all added headlessly, no cloud account involved. **`homekit_controller` "Main Floor" loaded** — the Ecobee's LOCAL entry, paired 2026-08-04, and it won the race for `climate.main_floor`; 16 entities over two devices, including a bridged SmartSensor. **`rachio` entry loaded** — the CLOUD one, 10 entities: 5 zone switches, standby, rain delay, a schedule switch, rain + connectivity sensors | **Rachio local HomeKit** — card open at step `pair`, bridge still `sf=1`, needs the setup code. **Ecobee cloud** — branded card open at step `user`, needs ecobee.com credentials + MFA. **Tesla Wall Connector — blocked at the hardware**: every TCP port RSTs, still advertising `PROV_*._smartenergy._tcp`, so nothing HA can do unblocks it. **Two Kasa wall switches — not installed**, no such device is on the LAN, out of phase |
+| Home Assistant | Onboarded, token minted at `~/.sh_keys/token` (was `hub/token` — ADR-0010). **`mqtt` entry loaded** — `127.0.0.1:1883`, user `ha`, protocol 5, zero devices, which is its correct end state. **`script: !include scripts.yaml` added** and `hub/ha-config/scripts.yaml` created, un-ignored by a `hub/.gitignore` negation the way `automations.yaml` is ([3 §3.8](commissioning/03-home-assistant.md)); two script entities live, neither ever executed, and the file is now **tracked** in git (re-verified 2026-08-07). `hactl` is **in the repo** at [`commissioning/hactl`](commissioning/hactl) and is the single WebSocket mechanism for the whole guide — its default `HUB_DIR` is `~/.sh_keys`, with the same devcontainer caveat as above | `bluetooth` entry in `setup_retry` (DBus not mounted) — expected, not your mistake. **CORS still not in effect** — `configuration.yaml` has carried `cors_allowed_origins: ["*"]` since commit `61961e9` (2026-08-06), but this container has run continuously since 2026-08-05 16:42 UTC and HA only reads that file at boot; re-verified 2026-08-07, a preflight from `localhost:8080` still gets **403**. Needs the owner-gated restart, TODO item **G7** |
+| Local devices | **3 × `tplink` entries loaded** — `switch.entry_light`, `switch.stairs_light` (both **repurposed from fridge/aquarium 2026-08-05** and renamed, Ch. 4 §4.1.1), and the EP40 parent + 2 children, all added headlessly, no cloud account involved. **`homekit_controller` "Main Floor" loaded** — the Ecobee's LOCAL entry, paired 2026-08-04, and it won the race for `climate.main_floor`; 16 entities over two devices, including a bridged SmartSensor. **`rachio` entry loaded** — the CLOUD one, 10 entities: 5 zone switches, standby, rain delay, a schedule switch, rain + connectivity sensors. **`ecobee` entry loaded** — the Ecobee's CLOUD half, added 2026-08-07 (entry `01KZDCDZV2F5Q1GMZFWSSWNJVC`, `source: homekit`); `climate.main_floor_2` plus `weather.main_floor`, `notify.main_floor`, `number.main_floor_fan_minimum_on_time`, `sensor.main_floor_temperature`, `sensor.main_floor_humidity`, and `_2`-suffixed collisions on the bridged sensor's occupancy/temperature entities — both Ecobee integrations are now up, matching the Rachio's dual-path pattern | **Rachio local HomeKit** — card open at step `pair`, bridge still `sf=1`, needs the setup code. **Tesla Wall Connector — blocked at the hardware**: every TCP port RSTs, still advertising `PROV_*._smartenergy._tcp`, so nothing HA can do unblocks it. **Two Kasa wall switches — not installed**, no such device is on the LAN, out of phase |
 | Cloud fleet | Nothing. ring-mqtt is Up and sitting at the auth gate, which is its correct state | **Every phase 3–5 device**: Ring 2FA, Wyze identification + flashing + streams, HACS, LG ThinQ, Whisker, Petlibro, Emporia. SmartThings is a decision (D3), not a task |
 | Panel | The °F/°C rendering defect is **fixed** (trap #10). **First light, 2026-08-04:** the `flutter build linux --release` bundle connected to this Hub, opened a doorbell Popup unprompted on a state change, **rendered live MJPEG** from go2rtc, and tore the stream down cleanly ([6 §6.9a](commissioning/06-panel-and-bindings.md)) | Nothing bound to real hardware. All 33 Placements are bound, every one to a `hub/dev/` stand-in, so all 33 read `missing` against the real Hub; `_integrated` is still `{}`; `kiosk_app` still points at the spike bundle. **First light was Xvfb, not `cage`; no touch; a synthetic pattern, not a camera; an injected state, not a real Ring** — and the `stream: selftest` line that fed it was reverted, so a Panel built from the repo today shows no video. The five open items are §6.9a's table |
 
