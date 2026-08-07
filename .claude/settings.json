@@ -1,4 +1,8 @@
 {
+  "enabledPlugins": {
+    "dart-flutter@dart-flutter": true,
+    "mattpocock-skills@claude-plugins-official": true
+  },
   "extraKnownMarketplaces": {
     "dart-flutter": {
       "source": {
@@ -6,8 +10,5 @@
         "repo": "flutter/agent-plugins"
       }
     }
-  },
-  "enabledPlugins": {
-    "dart-flutter@dart-flutter": true
   }
 }

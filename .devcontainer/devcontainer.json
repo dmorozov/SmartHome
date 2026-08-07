@@ -70,6 +70,7 @@
         "vscode": {
             "extensions": [
                 "Dart-Code.flutter",
+                "Dart-Code.dart-code",
                 "ms-azuretools.vscode-docker",
                 "ms-python.python"
             ],

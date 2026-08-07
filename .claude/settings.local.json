@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter --version)",
+      "Read(//home/vscode/.pub-cache/**)",
+      "Bash(curl -s -o /dev/null -w 'homeassistant:8123 -> %{http_code}\\\\n' http://homeassistant:8123)",
+      "Bash(curl -s -o /dev/null -w 'go2rtc:1984 -> %{http_code}\\\\n' http://go2rtc:1984)",
+      "WebFetch(domain:containers.dev)",
+      "Bash(ps -p 1955 -o pid,ppid,lstart,args)",
+      "Bash(ps -eo pid,ppid,lstart,args)",
+      "WebFetch(domain:code.visualstudio.com)",
+      "WebSearch",
+      "Bash(gh issue *)",
+      "Bash(npx --version)",
+      "Read(//home/vscode/.cache/**)",
+      "Bash(timeout 60 pnpm exec @playwright/mcp@latest --help)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(curl -s -m 5 http://go2rtc-dev:1984/api/streams)",
+      "Bash(curl -s -m 5 -o /dev/null -w '%{http_code}\\\\n' http://homeassistant:8123/)"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "playwright",
+    "context7"
+  ]
+}
