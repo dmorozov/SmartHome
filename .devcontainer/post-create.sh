@@ -21,6 +21,53 @@ git config --global --add safe.directory /workspaces/SmartHome 2>/dev/null || tr
 # ---- 1. Panel packages ------------------------------------------------------
 (cd panel && flutter pub get)
 
+# ---- 1b. Playwright MCP + its browser ---------------------------------------
+# The agent's browser (.mcp.json's `playwright` server). Installed HERE and
+# not in the Dockerfile for a hard reason: devcontainer FEATURES — including
+# the Node one that provides npm — are layered on top of the image *after*
+# it is built, so there is no npm during the image build to install this
+# with.
+#
+# Pinned, and pinned in one place, because the two halves must agree: the
+# server bundles its own `playwright`, and a browser fetched by any other
+# version lands under a different revision directory that this one will not
+# look in ("Executable doesn't exist"). Installing the browser with the CLI
+# out of the server's OWN dependency tree is what keeps them matched — never
+# a stray `npx playwright install`.
+#
+# `.mcp.json` runs the resulting `playwright-mcp` binary off PATH with no
+# version in the command, so this file is the only place the version lives.
+# It also passes --headless, which is NOT the default and cannot be omitted:
+# this container has no display.
+PLAYWRIGHT_MCP_VERSION=0.0.79
+
+echo
+echo "-- playwright mcp --"
+npm_root="$(npm root -g)"
+# The package manifest, not `playwright-mcp --version`: that prints
+# "Version 0.0.79" and a string compare against it silently never matches,
+# so the guard reinstalls on every run (found the hard way).
+installed_mcp="$(node -p \
+  "require('$npm_root/@playwright/mcp/package.json').version" 2>/dev/null || true)"
+if [ "$installed_mcp" != "$PLAYWRIGHT_MCP_VERSION" ]; then
+  npm install -g "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}"
+  npm_root="$(npm root -g)"
+else
+  echo "server: already $PLAYWRIGHT_MCP_VERSION"
+fi
+playwright_cli="$npm_root/@playwright/mcp/node_modules/playwright/cli.js"
+# The browser cache is a named volume (compose.yaml), so this ~170 MB
+# download happens on first create and is skipped by every rebuild after.
+if [ -z "$(ls -A "$HOME/.cache/ms-playwright" 2>/dev/null)" ]; then
+  node "$playwright_cli" install chromium
+else
+  echo "chromium: already in $HOME/.cache/ms-playwright (named volume)"
+fi
+# Root-only, and separate from the download above so the browser stays owned
+# by this user: `install --with-deps` would need sudo for the whole thing and
+# leave a root-owned cache in a volume that outlives the container.
+sudo "$(command -v node)" "$playwright_cli" install-deps chromium
+
 # ---- 2. Verify, don't assume ------------------------------------------------
 echo
 echo "-- toolchain --"
@@ -108,6 +155,15 @@ cat <<'EOF'
      #     ss -tlnp | grep 8080     # the dart pid holding the port
 
  Tests (hermetic):        cd panel && flutter test
+
+ The agent's browser (.mcp.json `playwright`) is pre-installed here —
+ headless Chromium, matched to the pinned server. Nothing to do by hand;
+ to check it yourself:
+     playwright-mcp --version     # expect the pinned version
+     ls ~/.cache/ms-playwright    # expect chromium-<rev>
+ It is HEADLESS by force: this container has no display, and headed is
+ @playwright/mcp's default, so the flag in .mcp.json is load-bearing.
+ Point it at the Panel with http://localhost:8080 once `flutter run` is up.
  The live end-to-end test (in-container, so service-name DNS):
      cd panel && PANEL_LIVE_HUB=1 HA_URL=http://homeassistant:8123 \
        HA_TOKEN="$(cat ../hub/dev/token)" flutter test test/ha_hub_live_test.dart

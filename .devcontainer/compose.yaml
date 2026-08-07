@@ -45,6 +45,10 @@ services:
       # pre-created vscode-owned in the Dockerfile so the volume inherits
       # that ownership on first use.
       - pub-cache:/home/vscode/.pub-cache
+      # Same pattern, same reason, for the agent's browser: ~170 MB of
+      # Chromium that post-create.sh would otherwise re-download on every
+      # rebuild. Mountpoint pre-created vscode-owned in the Dockerfile.
+      - playwright-cache:/home/vscode/.cache/ms-playwright
     environment:
       TZ: ${TZ:-UTC}
     # Compose-based devcontainers do not override the command: the service
@@ -53,3 +57,4 @@ services:
 
 volumes:
   pub-cache:
+  playwright-cache:

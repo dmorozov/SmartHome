@@ -62,9 +62,13 @@ ENV CHROME_EXECUTABLE=/usr/bin/google-chrome-stable \
 RUN git clone --depth 1 --branch "${FLUTTER_VERSION}" \
         https://github.com/flutter/flutter.git /opt/flutter \
     && chown -R vscode:vscode /opt/flutter \
-    # Pre-created so the named pub-cache volume (compose.yaml) inherits
-    # vscode ownership on first mount instead of arriving root-owned.
-    && mkdir -p /home/vscode/.pub-cache && chown vscode:vscode /home/vscode/.pub-cache
+    # Pre-created so the named volumes (compose.yaml) inherit vscode
+    # ownership on first mount instead of arriving root-owned. The second is
+    # Playwright's browser cache — post-create.sh fills it, because npm
+    # arrives with a devcontainer FEATURE and features are layered on top of
+    # this image after it is built.
+    && mkdir -p /home/vscode/.pub-cache /home/vscode/.cache/ms-playwright \
+    && chown -R vscode:vscode /home/vscode/.pub-cache /home/vscode/.cache
 
 # FLUTTER_ROOT is golden_setup.dart's first route to material_fonts; when
 # unset it falls back to walking up from the test-runner binary, and its

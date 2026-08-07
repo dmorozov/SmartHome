@@ -28,5 +28,10 @@ replay_pid*
 # the archives are re-downloadable. See docs/examples/README.md.
 panel/tool/fixtures/*.sh3d
 
+# Playwright MCP's scratch output — page snapshots, console logs and traces
+# it writes beside the cwd on every navigation (.mcp.json's `playwright`).
+# Agent working notes, not artefacts anyone reads twice.
+.playwright-mcp/
+
 # macOS
 .DS_Store
