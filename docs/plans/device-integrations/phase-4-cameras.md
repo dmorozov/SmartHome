@@ -12,6 +12,66 @@ generation), firmware version, mounting location → which `cam-*` Key it
 will bind to. The flash decision is per-model; the research (§3.2) only
 vouches for v3-class. Record the list in this file when done.
 
+**Full inventory obtained from the owner 2026-08-07** (Wyze app, cross-referenced
+against the LAN scan in `appliance/commissioning/05-devices-cloud.md` §2.1 —
+IPs match the 2026-08-07 re-measurement exactly, no further drift):
+
+| Name (Wyze app) | MAC | IP | Model | Firmware | `cam-*` Key |
+|---|---|---|---|---|---|
+| Garage Door Cam | `d0:3f:27:53:25:72` | 192.168.68.54 | Wyze Cam v3 (Floodlight bundle) | 4.36.16.7064 (floodlight 1.0.0.55) | `cam-garage` — name match |
+| Living Room Cam | `d0:3f:27:49:b2:f6` | 192.168.68.69 | Wyze Cam v3 | 4.36.16.7064 | `cam-living` — name match |
+| Family Room Cam | `d0:3f:27:8d:cc:54` | 192.168.68.57 | Wyze Cam v3 | 4.36.16.7064 | none yet — new `cam-family` Key planned, §A1a |
+| Back Yard Cam | `d0:3f:27:4a:95:76` | 192.168.68.62 | Wyze Cam v3 (Floodlight bundle) | 4.36.16.7064 (floodlight 1.0.0.55) | none yet — new `cam-backyard` Key planned, §A1a |
+| Back Yard Door Cam | `d0:3f:27:8e:4f:b1` | 192.168.68.63 | Wyze Cam v3 | 4.36.16.7064 | none yet — new `cam-backyard-door` Key planned, §A1a |
+
+**All five are Wyze Cam v3 — the exact model class D1 targets — and all
+five are already on firmware 4.36.16.7064, newer than 4.36.16.5654, the
+version that promoted RTSP from beta to production on 2026-02-02 (§3.2 of
+the research doc). That means D1's premise — "flash one unit" — may not
+apply at all: check each camera's Advanced Settings for an RTSP toggle
+before flashing anything.** Start with a **plain v3, not a Floodlight
+bundle** — Garage Door Cam and Back Yard Cam carry a second firmware
+(1.0.0.55) for the floodlight controller itself, extra surface the research
+doc flags as untested for this exact combination even though the base
+camera RTSP support should be identical. Family Room, Living Room, or Back
+Yard Door Cam are the three uncomplicated candidates for the first test.
+
+### A1a. Three new Panel Keys needed — owner action, Sweet Home 3D
+
+Only 2 of 5 cameras have a plausible existing Key (`cam-garage`,
+`cam-living`). Family Room, Back Yard, and Back Yard Door have nowhere to
+bind. **Owner decision 2026-08-07: add three new placeholder-house Keys now**
+(`cam-family`, `cam-backyard`, `cam-backyard-door`) rather than wait for the
+real drawing (**F1**) — matching the existing precedent of `outlet-outdoor-a`/`b`
+and `light-living` (D5): Keys are stable identities, a marker's *position* in
+the drawing is cheap to fix later (§3.3 of `panel/HOUSE-PLAN.md`: "drag the
+marker, save, re-run the converter" — no `bindings.yaml` change if the tag
+stays the same), so drawing them into the current placeholder floorplan today
+costs nothing extra at F1 time beyond a drag.
+
+This needs Sweet Home 3D on the Mac — no Linux path exists (ADR-0005) — so
+it's owner-only, not something an agent session can do. Per
+`panel/HOUSE-PLAN.md` §3.1, for each of the three:
+
+1. Open the drawing with `tool/sh3d.sh` (not Sweet Home 3D directly — the
+   `Placementkey` field is invisible otherwise).
+2. Drag a **camera** marker from the Smart Home category into any room —
+   position is a placeholder, it will move at F1.
+3. Name it what the Panel should show, e.g. `Back Yard Camera`.
+4. **Other properties…** → set **Placementkey** to the planned tag
+   (`cam-family`, `cam-backyard`, `cam-backyard-door`) — must be unique in
+   the house; leave **Kind** alone.
+5. Save. Repeat for the other two.
+6. From `panel/`: `python3 tool/sh3d_to_yaml.py <path>.sh3d -o assets/house/house.yaml --name "..."` — check the device count in the success line matches expectations (3 more than before).
+7. Add one `bindings.yaml` entry per new tag (agent-doable once the tags
+   exist) — `stream:` pointing at the eventual go2rtc stream name for each
+   camera, `connectivity: local` if the RTSP-firmware path works, `cloud` if
+   it ends up going through the bridge (§2.2/§2.3 of
+   `appliance/commissioning/05-devices-cloud.md`).
+
+At F1, each marker just moves to its true position — same tag, same
+binding, no re-authoring.
+
 ## A2. The RTSP-flash experiment — ONE unit (D1)
 
 Goal: a camera that serves RTSP locally with no cloud dependency —
