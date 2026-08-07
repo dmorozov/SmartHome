@@ -203,7 +203,7 @@ cd panel
 flutter run -d chrome \
   --dart-define=HUB=ha \
   --dart-define=HA_URL=http://<hub-ip>:8123 \
-  --dart-define=HA_TOKEN="$(cat ../hub/token)"
+  --dart-define=HA_TOKEN="$(cat ~/.sh_keys/token)"
 ```
 
 `-d chrome` is a **web** build, and web has no process environment — so the
@@ -212,7 +212,7 @@ settings resolve from the environment first, which is what makes an
 unreserved lease (phase 0 as-built) cheap to correct:
 
 ```sh
-HUB=ha HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)" \
+HUB=ha HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ~/.sh_keys/token)" \
   flutter run -d linux        # or -d macos
 ```
 
@@ -256,7 +256,7 @@ stream in it, and pointing the Panel at an empty go2rtc would buy nothing.
   `hub.snapshot` line. `hub.missing_entities` will list ~everything —
   correct: the laptop Hub has no stand-in fleet and no real devices yet.
   Phases 2–5 drain that list; this phase only proves the wiring.
-- `PANEL_LIVE_HUB=1 HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ../hub/token)"
+- `PANEL_LIVE_HUB=1 HA_URL=http://<hub-ip>:8123 HA_TOKEN="$(cat ~/.sh_keys/token)"
   flutter test test/ha_hub_live_test.dart` passes. (`flutter test` is a VM
   target, so it honours the environment; `PANEL_LIVE_HUB` is the deliberate
   opt-in that keeps a plain `flutter test` from ever dialling a real house.)

@@ -99,7 +99,7 @@
       panel_hub_kind=ha needs a token: PANEL_HA_TOKEN is unset on the
       controller and {{ panel_env_file }} is missing or empty on the host.
       Supply it for this converge —
-      PANEL_HA_TOKEN="$(cat ../../hub/token)" ansible-playbook site.yml -l <host>
+      PANEL_HA_TOKEN="$(cat ~/.sh_keys/token)" ansible-playbook site.yml -l <host>
   when: panel_hub_kind == 'ha'
 
 - name: Create the appliance config directory

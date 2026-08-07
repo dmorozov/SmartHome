@@ -2,24 +2,39 @@
 # parked behind the `zigbee` profile until the SLZB-06 coordinator exists).
 #
 # Runs on the dev laptop today (ADR-0008) and migrates UNCHANGED to the Ryzen
-# AI mini PC (copy this directory, including runtime state, and
-# `docker compose up -d`).
+# AI mini PC (copy this directory AND ~/.sh_keys — see ADR-0010, secrets no
+# longer live under this directory — then `docker compose up -d`).
 #
 # Start order: mosquitto -> ring-mqtt/zigbee2mqtt (depends_on) -> homeassistant.
 #   `docker compose up -d` handles it; Home Assistant tolerates the broker
 #   appearing after it (the MQTT integration reconnects).
 #
+# RUNNING `up`/`--force-recreate` FROM INSIDE THE DEVCONTAINER (ADR-0010):
+#   relative paths here (./ha-config, ./mosquitto/config, …) resolve against
+#   the INVOKING SHELL's view of the filesystem, not the host's. This repo's
+#   devcontainer has its own /workspaces/SmartHome that is NOT the same
+#   directory as the real host's checkout — recreating a service from inside
+#   it silently re-points that service's mounts at an empty, unrelated path
+#   (measured 2026-08-07; mosquitto and go2rtc both "started" with no
+#   credentials). `docker compose restart <service>` is unaffected (reuses
+#   the running container's already-resolved mounts) — only recreation is at
+#   risk. From inside the devcontainer, recreate with:
+#     docker compose --project-directory /home/dmorozov/Work/SmartHome/hub \
+#       --env-file /workspaces/SmartHome/hub/.env -f compose.yaml up -d …
+#   or just run it from the host's own terminal, which has no ambiguity.
+#
 # Bring-up: docs/plans/device-integrations/phase-1-hub-stack.md is the
 # current step-by-step; README.md in this directory has the standing notes.
 # TL;DR:
 #   1. Mosquitto auth bootstrap (auth is REQUIRED — the broker is
-#      LAN-exposed): create the passwd file, then add users after start —
-#      see mosquitto/config/mosquitto.conf.
-#   2. cp ring-mqtt-data/config.example.json ring-mqtt-data/config.json
-#      and put the `ring` MQTT password into the copy (live file gitignored —
-#      the directory also accumulates the Ring refresh token).
-#   3. cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml (live file gitignored —
-#      stream URLs embed camera credentials).
+#      LAN-exposed): create ~/.sh_keys/mosquitto/passwd, then add users after
+#      start — see mosquitto/config/mosquitto.conf.
+#   2. cp ring-mqtt-data/config.example.json ~/.sh_keys/ring-mqtt/config.json
+#      and put the `ring` MQTT password into the copy (~/.sh_keys — the
+#      directory also accumulates the Ring refresh token; ADR-0010).
+#   3. mkdir -p ~/.sh_keys/go2rtc && cp go2rtc/go2rtc.example.yaml
+#      ~/.sh_keys/go2rtc/go2rtc.yaml (~/.sh_keys — stream URLs embed camera
+#      credentials; ADR-0010).
 #   3b. cp ha-config/mqtt.example.yaml ha-config/mqtt.yaml and fill the Ring
 #      ids per its comments (live file gitignored; configuration.yaml
 #      includes it, so HA will not start without the copy).
@@ -28,14 +43,29 @@
 #   5. HA onboarding at http://<appliance>:8123; MQTT integration -> broker
 #      127.0.0.1:1883, user `ha`.
 #
-# Secrets are NOT in git:
-#   - The Panel's long-lived HA token lives in ./token (gitignored).
-#   - HA runtime state (./ha-config/.storage — credentials, tokens) is gitignored.
-#   - MQTT passwords live only in mosquitto/config/passwd (hashed, gitignored),
-#     ring-mqtt-data/config.json (gitignored), and HA's .storage.
-#   - ring-mqtt stores the Ring REFRESH TOKEN under ./ring-mqtt-data (gitignored).
+# Secrets — ADR-0010: everything this stack itself owns the path for lives
+# outside the repo entirely, under ~/.sh_keys on the host, bind-mounted back
+# onto the SAME in-container paths they always used (so nothing inside a
+# container, and no `docker exec` command anywhere in the docs, changed).
+# `rm -rf ~/.sh_keys` is the whole "forget every credential" mechanism.
+#   - The Panel's long-lived HA token: ~/.sh_keys/token (was ./token).
+#   - Mosquitto's hashed passwd file: ~/.sh_keys/mosquitto/passwd (was
+#     mosquitto/config/passwd) — mosquitto.conf's password_file path is
+#     unchanged; only this one file's bind-mount source moved.
+#   - ring-mqtt's config.json + the Ring REFRESH TOKEN it accumulates in
+#     ring-state.json: ~/.sh_keys/ring-mqtt/ (was ./ring-mqtt-data).
+#   - go2rtc's live stream config (may embed camera credentials):
+#     ~/.sh_keys/go2rtc/go2rtc.yaml (was ./go2rtc/go2rtc.yaml, mounted as a
+#     directory — see the go2rtc service below for why) — go2rtc.example.yaml
+#     stays tracked at ./go2rtc/ as the starter template.
+#   - EXCEPTION, deliberate: HA's own runtime state (./ha-config/.storage —
+#     every cloud integration's OAuth tokens, the auth store) stays exactly
+#     where it is. HA owns that format/location internally; there's no path
+#     to "point it" elsewhere without relocating all of HA's config, not
+#     just its secrets. See ADR-0010.
 #   - Zigbee2MQTT writes the generated Zigbee network key into ./z2m-data
-#     after first start — see hub/.gitignore and README before committing.
+#     after first start (not yet created — no coordinator on the LAN yet).
+#     Revisit whether it joins ~/.sh_keys when that lands.
 
 services:
   homeassistant:
@@ -76,6 +106,9 @@ services:
       - "1883:1883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
+      # ADR-0010: the hashed passwd file itself lives outside the repo,
+      # overlaid onto the same in-container path mosquitto.conf names.
+      - ${SH_KEYS_DIR}/mosquitto/passwd:/mosquitto/config/passwd
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
     restart: unless-stopped
@@ -130,10 +163,10 @@ services:
       # Ring live streams from rtsp://127.0.0.1:8556/<device-id>_live.
       - "8556:8554"
     volumes:
-      # config.json (copy from config.example.json, add the MQTT password)
-      # plus runtime state including the Ring REFRESH TOKEN — everything but
-      # the example is gitignored.
-      - ./ring-mqtt-data:/data
+      # ADR-0010: config.json + runtime state (incl. the Ring REFRESH TOKEN)
+      # live at ~/.sh_keys/ring-mqtt/, not in the repo tree. The tracked
+      # starter is ./ring-mqtt-data/config.example.json (copy it there first).
+      - ${SH_KEYS_DIR}/ring-mqtt:/data
     restart: unless-stopped
 
   go2rtc:
@@ -146,6 +179,12 @@ services:
     # API/UI :1984, RTSP :8554, WebRTC :8555.
     network_mode: host
     volumes:
-      # Stream definitions (may embed camera credentials — gitignored).
-      - ./go2rtc:/config
+      # ADR-0010: the live stream config (may embed camera credentials) lives
+      # at ~/.sh_keys/go2rtc/go2rtc.yaml, not in the repo tree — mounted as a
+      # directory, not a single file: bind-mounting a lone file onto a
+      # container path with no pre-existing parent directory in the image
+      # fails at container-create time (measured, alexxit/go2rtc:1.9.10 ships
+      # no /config). The tracked starter is ./go2rtc/go2rtc.example.yaml — not
+      # mounted; go2rtc doesn't need it.
+      - ${SH_KEYS_DIR}/go2rtc:/config
     restart: unless-stopped

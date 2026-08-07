@@ -42,8 +42,9 @@ panel_ha_url: ""
 # honest answer for a box where nobody has stood up a stream yet.
 #
 # NOT a secret, unlike the token below: go2rtc here is unauthenticated and the
-# camera credentials live in hub/go2rtc/go2rtc.yaml, not in this base address.
-# So it rides an Environment= line and needs no EnvironmentFile= work.
+# camera credentials live in ~/.sh_keys/go2rtc.yaml (ADR-0010), not in this
+# base address. So it rides an Environment= line and needs no
+# EnvironmentFile= work.
 panel_go2rtc_url: ""
 
 # LOG resolves environment-first too (panel/lib/diagnostics/log.dart), and the
@@ -60,15 +61,23 @@ panel_log_level: ""
 # user with no authentication (D-Bus grants Properties.Get/GetAll to
 # context="default"; polkit defines no action for property reads), and the
 # unit file itself is 0644. `EnvironmentFile=` exposes only the PATH.
+#
+# Deliberately NOT under ~/.sh_keys (ADR-0010): this file is owned by
+# kiosk_user, a locked-down `nologin` system account, not by whoever runs
+# ansible-playbook — moving it under an interactive operator's home directory
+# would either put it somewhere the kiosk user can't read, or force loosening
+# its mode to make it reachable. /etc/smarthome/ already IS a dedicated,
+# correctly-permissioned (0755 dir, 0600 file, kiosk_user-owned) secrets
+# location; ~/.sh_keys/token below is the source value, this is a deployed
+# copy of it.
 panel_env_file: /etc/smarthome/panel.env
 
-# WHERE THE OPERATOR PUTS THE TOKEN: nowhere in this repo. It lives in
-# `hub/token`, which hub/.gitignore already reserves for exactly this ("The
-# laptop/appliance Hub's long-lived Panel token"), on whichever machine runs
-# the playbook. It reaches this converge through the controller's environment:
+# WHERE THE OPERATOR PUTS THE TOKEN: nowhere in this repo. Per ADR-0010 it
+# lives in `~/.sh_keys/token`, on whichever machine runs the playbook. It
+# reaches this converge through the controller's environment:
 #
 #   cd appliance/ansible
-#   PANEL_HA_TOKEN="$(cat ../../hub/token)" \
+#   PANEL_HA_TOKEN="$(cat ~/.sh_keys/token)" \
 #     ansible-playbook site.yml -l laptop -e panel_hub_kind=ha
 #
 # `$(cat …)` keeps the value out of shell history; ansible.cfg's

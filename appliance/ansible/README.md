@@ -102,7 +102,7 @@ camera Popup says the view is unavailable.
 
 It is **not** a secret on this box and belongs on an `Environment=` line:
 go2rtc runs unauthenticated here and the camera credentials live in
-`hub/go2rtc/go2rtc.yaml`, not in this base address. That is a fact about this
+`~/.sh_keys/go2rtc/go2rtc.yaml` (ADR-0010), not in this base address. That is a fact about this
 deployment rather than about the setting — go2rtc 1.9 does have
 `api.username`/`api.password`, and a URL carrying them would be a secret on an
 `Environment=` line, which `systemctl show` hands to any local user with no
@@ -143,7 +143,7 @@ that is all it is:
   `user:pass@host`, one character of trailing punctuation). Do not read it as
   a guarantee.
 - Neither claim covers the **camera** credentials in
-  `hub/go2rtc/go2rtc.yaml`, which is a 0600 file and stays one.
+  `~/.sh_keys/go2rtc/go2rtc.yaml` (ADR-0010), which is a 0600 file and stays one.
 
 So: a credential in `GO2RTC_URL` or `HA_URL` does not reach the journal through
 the lines the Panel writes about those settings. A credential anywhere can
@@ -159,7 +159,7 @@ player on **both** targets — MJPEG over HTTP on this appliance, MSE over a
 WebSocket on web.
 
 What is still needed is a stream to point at. Each camera must be **one
-`streams:` entry with two producers** in `hub/go2rtc/go2rtc.yaml` — the H.264
+`streams:` entry with two producers** in `~/.sh_keys/go2rtc/go2rtc.yaml` — the H.264
 source plus an `ffmpeg:<name>#video=mjpeg` line — or this appliance gets a
 `200 OK` with zero bytes and no error anywhere. See
 [Ch. 6 §6.5b](../commissioning/06-panel-and-bindings.md), which has the `curl`
@@ -172,12 +172,12 @@ user with no authentication — the system D-Bus policy grants
 `context="default"`, and polkit defines no action for property reads — and
 the unit file itself is `0644`. `EnvironmentFiles=` reports only the path.
 
-Keep the token in `hub/token` (already gitignored) on the controller and
-hand it to the converge through the environment:
+Keep the token in `~/.sh_keys/token` (outside the repo entirely — ADR-0010)
+on the controller and hand it to the converge through the environment:
 
 ```sh
 cd appliance/ansible
-PANEL_HA_TOKEN="$(cat ../../hub/token)" \
+PANEL_HA_TOKEN="$(cat ~/.sh_keys/token)" \
   ansible-playbook site.yml -l laptop -e panel_hub_kind=ha
 ```
 
@@ -191,7 +191,7 @@ A converge with `PANEL_HA_TOKEN` unset leaves an existing token untouched
 `panel_hub_kind=ha` with no token anywhere fails the play rather than
 shipping a Panel that throws at boot and restart-loops behind a dead screen.
 
-Rotating the token: rewrite `hub/token`, re-converge. systemd re-reads
+Rotating the token: rewrite `~/.sh_keys/token`, re-converge. systemd re-reads
 `EnvironmentFile=` at every start, so no `daemon-reload` is involved — but the
 `Restart cage` handler is gated `when: kiosk_enable | bool`, and `kiosk_enable`
 defaults `false`. So the restart happens only where the kiosk is actually

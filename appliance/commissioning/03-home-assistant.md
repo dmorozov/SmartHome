@@ -100,24 +100,25 @@ token exactly once.
 > UNVERIFIED and navigate by what they do: profile page, security section,
 > long-lived tokens.
 
-Store it at `hub/token`, 0600, and never anywhere else:
+Store it at `~/.sh_keys/token`, 0600, and never anywhere else — **run this from
+the host's own terminal, not the devcontainer** (`~` means whoever's shell is
+running it; ADR-0010's "Consequences" section has the incident that found
+this out the hard way):
 
 ```sh
-cd <repo>                            # repo root; every path below is from here
-install -m 600 /dev/null hub/token   # create empty, correct mode, up front
-cat > hub/token                      # paste the token, then Ctrl-D
+mkdir -p ~/.sh_keys && install -m 600 /dev/null ~/.sh_keys/token   # create empty, correct mode, up front
+cat > ~/.sh_keys/token                                             # paste the token, then Ctrl-D
 ```
 
 `cat >` rather than an `echo`/`printf` one-liner on purpose: the token never
 enters shell history that way. A trailing newline is harmless — every reader
-here uses `$(cat hub/token)`, which strips it.
+here uses `$(cat ~/.sh_keys/token)`, which strips it.
 
-`token` is gitignored (`hub/.gitignore`, the phase-1 §1d addition). Verify both
-facts before you move on:
+Being outside the repo tree entirely (ADR-0010) is what keeps it out of git
+now, not a gitignore rule. Verify it's readable and that HA accepts it:
 
 ```sh
-git check-ignore -v hub/token           # must print the ignore rule
-curl -s -H "Authorization: Bearer $(cat hub/token)" http://127.0.0.1:8123/api/
+curl -s -H "Authorization: Bearer $(cat ~/.sh_keys/token)" http://127.0.0.1:8123/api/
 #  -> {"message":"API running."}
 ```
 
@@ -139,7 +140,7 @@ the "add-on or manual broker" menu and goes straight to the broker step.
 | Port | `1883` | `hub/mosquitto/config/mosquitto.conf`: `listener 1883 0.0.0.0` |
 | Protocol | `5` | The form's default at 2026.7 (`DEFAULT_PROTOCOL = PROTOCOL_5`) — leave it |
 | Username | `ha` | Created by the broker bootstrap, phase 1 §1c |
-| Password | `MOSQUITTO_HA_PASSWORD` from `hub/.broker-passwords.env` | Never typed into this repo |
+| Password | `MOSQUITTO_HA_PASSWORD` from `~/.sh_keys/broker-passwords.env` (ADR-0010) | Never typed into this repo |
 | Advanced options | unchecked | TLS/websockets/client-id live behind it; none apply here |
 
 The form validates by actually connecting, so a wrong password fails on submit
@@ -162,7 +163,7 @@ entry with zero devices is the correct end state for this chapter.
 
 ```sh
 cd <repo>
-curl -s -H "Authorization: Bearer $(cat hub/token)" \
+curl -s -H "Authorization: Bearer $(cat ~/.sh_keys/token)" \
   http://127.0.0.1:8123/api/config/config_entries/entry \
   | python3 -c 'import json,sys; [print(e["domain"], e["state"]) for e in json.load(sys.stdin)]'
 ```
@@ -269,8 +270,9 @@ curl -s -H "$H" -H 'Content-Type: application/json' \
 ```
 
 If you do run it, source the password rather than typing it:
-`set -a; . <repo>/hub/.broker-passwords.env; set +a` — and remember that the
-shell history now holds it.
+`set -a; . ~/.sh_keys/broker-passwords.env; set +a` (ADR-0010 — run this from
+the host's own terminal, not the devcontainer) — and remember that the shell
+history now holds it.
 
 ### What only the WebSocket gives you
 
@@ -320,8 +322,11 @@ Why it is shaped the way it is:
   `success: true`. A failed command still prints, with its `error` object, so a
   batch is debuggable.
 
-It resolves `hub/token` from its own location, so it works from any cwd.
-`HUB_DIR`, `HA_CONTAINER` and `HA_WS_URL` override that if the layout differs.
+It resolves `~/.sh_keys/token` by default (ADR-0010), so it works from any
+cwd — but `~` means whoever's shell runs it, so from inside the devcontainer
+that's not the same file the host's containers see; run it on the host, or
+pass `HUB_DIR=/home/dmorozov/.sh_keys` explicitly. `HUB_DIR`, `HA_CONTAINER`
+and `HA_WS_URL` override the defaults if the layout differs.
 
 Verified calls — the outputs below were produced by this tool against this Hub
 on 2026-08-04:
@@ -664,9 +669,9 @@ house can run water, belong to
   `samsungtv` implicit Wake-on-LAN removal). The pin is the guard; do not float
   it to keep an integration happy.
 - **Secrets referenced, never inlined.** Broker passwords:
-  `hub/.broker-passwords.env` (0600, gitignored). Panel token: `hub/token`
-  (0600, gitignored). Neither value belongs in this repo, in a shell history,
-  or in an as-built table.
+  `~/.sh_keys/broker-passwords.env`. Panel token: `~/.sh_keys/token`. Neither
+  lives in this repo at all any more (ADR-0010), and neither value belongs in
+  a shell history or an as-built table.
 
 ## 3.10 CORS — the web Panel's cross-origin access, and the restart it is waiting on
 

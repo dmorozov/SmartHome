@@ -24,7 +24,8 @@
 #   command, in the order given. Non-result frames (events) are skipped.
 #
 # ENV
-#   HUB_DIR    directory holding the HA token file  (default: <repo>/hub)
+#   HUB_DIR    directory holding the HA token file  (default: ~/.sh_keys —
+#              ADR-0010; override if the token lives somewhere else)
 #   HA_CONTAINER  container name                    (default: homeassistant)
 #   HA_WS_URL  websocket URL as seen from inside it (default:
 #              http://127.0.0.1:8123/api/websocket)
@@ -39,7 +40,7 @@ if [ $# -ne 1 ]; then
   exit 1
 fi
 
-HUB_DIR="${HUB_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../hub" && pwd)}"
+HUB_DIR="${HUB_DIR:-$HOME/.sh_keys}"
 HA_CONTAINER="${HA_CONTAINER:-homeassistant}"
 HA_WS_URL="${HA_WS_URL:-http://127.0.0.1:8123/api/websocket}"
 

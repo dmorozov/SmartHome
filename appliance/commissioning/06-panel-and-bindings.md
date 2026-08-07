@@ -272,7 +272,7 @@ devcontainer
 
 ```sh
 cd panel
-HUB=ha HA_URL=http://127.0.0.1:8123 HA_TOKEN="$(cat ../hub/token)" \
+HUB=ha HA_URL=http://127.0.0.1:8123 HA_TOKEN="$(cat ~/.sh_keys/token)" \
   flutter run -d linux
 ```
 
@@ -283,7 +283,7 @@ cd panel
 flutter run -d chrome \
   --dart-define=HUB=ha \
   --dart-define=HA_URL=http://192.168.68.81:8123 \
-  --dart-define=HA_TOKEN="$(cat ../hub/token)"
+  --dart-define=HA_TOKEN="$(cat ~/.sh_keys/token)"
 ```
 
 `127.0.0.1` works from the Hub host itself because Home Assistant is
@@ -319,7 +319,7 @@ cd panel
 flutter run -d chrome \
   --dart-define=HUB=ha \
   --dart-define=HA_URL=http://192.168.68.81:8123 \
-  --dart-define=HA_TOKEN="$(cat ../hub/token)" \
+  --dart-define=HA_TOKEN="$(cat ~/.sh_keys/token)" \
   --dart-define=GO2RTC_URL=http://192.168.68.81:1984
 ```
 
@@ -591,7 +591,7 @@ reaches the converge through the controller's environment. Never as
 
 ```bash
 cd appliance/ansible
-PANEL_HA_TOKEN="$(cat ../../hub/token)" \
+PANEL_HA_TOKEN="$(cat ~/.sh_keys/token)" \
   ansible-playbook site.yml -l laptop -e panel_hub_kind=ha
 ```
 
@@ -665,7 +665,7 @@ opt-in:
 
 ```sh
 cd panel
-PANEL_LIVE_HUB=1 HA_URL=http://192.168.68.81:8123 HA_TOKEN="$(cat ../hub/token)" \
+PANEL_LIVE_HUB=1 HA_URL=http://192.168.68.81:8123 HA_TOKEN="$(cat ~/.sh_keys/token)" \
   flutter test test/ha_hub_live_test.dart
 ```
 
@@ -742,7 +742,7 @@ Xvfb :99 -screen 0 1280x800x24 +extension GLX +render &
 cd panel
 DISPLAY=:99 GDK_BACKEND=x11 WAYLAND_DISPLAY= \
 LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe \
-HUB=ha HA_URL=http://127.0.0.1:8123 HA_TOKEN="$(cat ../hub/token)" \
+HUB=ha HA_URL=http://127.0.0.1:8123 HA_TOKEN="$(cat ~/.sh_keys/token)" \
 GO2RTC_URL=http://127.0.0.1:1984 LOG=debug \
   build/linux/x64/release/bundle/panel
 ```
@@ -765,7 +765,7 @@ needed; that is an expectation, not a measurement.
 ```sh
 cd <repo>
 # off, then on — two POSTs, and the reason is in the log below
-curl -s -X POST -H "Authorization: Bearer $(cat hub/token)" \
+curl -s -X POST -H "Authorization: Bearer $(cat ~/.sh_keys/token)" \
   -H 'Content-Type: application/json' -d '{"state":"off"}' \
   http://127.0.0.1:8123/api/states/sensor.ring_doorbell
 ```

@@ -419,88 +419,43 @@ mapping. Pairing devices from that frontend is a later chapter.
 Nothing in the table below is in git, and every path is covered by a rule in
 [`../../hub/.gitignore`](../../hub/.gitignore) (verified with `git check-ignore`).
 
-| Path | Holds | Ignored by | Mode / owner |
-|---|---|---|---|
-| `hub/mosquitto/config/passwd` | The three broker credentials, **hashed** | `passwd` | `1883:1883 0600` — see §3, this one is load-bearing |
-| `hub/mosquitto/config/passwd.backup.*` | Same hashes, left behind by `mosquitto_passwd` | `passwd.backup.*` | Delete them |
-| `hub/.broker-passwords.env` | The three broker passwords in **cleartext**: `MOSQUITTO_HA_PASSWORD`, `MOSQUITTO_RING_PASSWORD`, `MOSQUITTO_Z2M_PASSWORD` | `*.env` | `0600`. **Move these into your password store and delete it** — nothing reads it at runtime; steps in [§8a](#8a-retiring-broker-passwordsenv-owner-task-g3) |
-| `hub/ring-mqtt-data/config.json` | The `ring` password, in cleartext, inside `mqtt_url` | `ring-mqtt-data/*` | `0600` |
-| `hub/ring-mqtt-data/ring-state.json` | The Ring **refresh token** (does not exist until Ring auth) | `ring-mqtt-data/*` | written by the container |
-| `hub/ha-config/.storage/` | HA auth store, user credentials, and **every integration's saved credentials/tokens** | `ha-config/*` | `root:root`, written by the container |
-| `hub/token` | The Panel's long-lived HA access token (10-year validity) | `token` | `0600` |
-| `hub/go2rtc/go2rtc.yaml` | Camera RTSP credentials, once streams exist | `go2rtc/*` | — |
-| `hub/z2m-data/configuration.yaml` | The generated Zigbee network key and pan_id, once Z2M runs | `z2m-data/*` | — |
+| Path | Holds | Mode / owner |
+|---|---|---|
+| `~/.sh_keys/mosquitto/passwd` | The three broker credentials, **hashed** | `1883:1883 0600` — see §3, this one is load-bearing |
+| `~/.sh_keys/broker-passwords.env` | The three broker passwords in **cleartext**: `MOSQUITTO_HA_PASSWORD`, `MOSQUITTO_RING_PASSWORD`, `MOSQUITTO_Z2M_PASSWORD` | `0600` — durable reference copy, per ADR-0010 |
+| `~/.sh_keys/ring-mqtt/config.json` | The `ring` password, in cleartext, inside `mqtt_url` | `0600` |
+| `~/.sh_keys/ring-mqtt/ring-state.json` | The Ring **refresh token** | written by the container |
+| `hub/ha-config/.storage/` | HA auth store, user credentials, and **every integration's saved credentials/tokens** — deliberately NOT under `~/.sh_keys`, see ADR-0010 | `root:root`, written by the container |
+| `~/.sh_keys/token` | The Panel's long-lived HA access token (10-year validity) | `0600` |
+| `~/.sh_keys/go2rtc/go2rtc.yaml` | Camera RTSP credentials, once streams exist | `0600` |
+| `hub/z2m-data/configuration.yaml` | The generated Zigbee network key and pan_id, once Z2M runs — not yet created, not yet moved (ADR-0010) | `—` |
+
+Every path above except `hub/ha-config/` and `hub/z2m-data/` lives outside the
+repo entirely as of **ADR-0010** (2026-08-07) — none of it is in `hub/` to be
+gitignored any more. The remaining two are still covered by rules in
+[`../../hub/.gitignore`](../../hub/.gitignore).
 
 The delivery side on the Appliance is separate and also not in git: the Panel's
 token reaches the kiosk as `EnvironmentFile=-/etc/smarthome/panel.env` (0600,
 kiosk user), written by a `no_log` Ansible task from `$PANEL_HA_TOKEN` on the
-controller. See [`../ansible/README.md`](../ansible/README.md).
+controller (sourced from `~/.sh_keys/token`). See
+[`../ansible/README.md`](../ansible/README.md).
 
-### 8a. Retiring `.broker-passwords.env` (owner task **G3**)
+### 8a. `.broker-passwords.env` — superseded by ADR-0010
 
-This section used to state the requirement and stop, which left the one
-question that actually decides whether you can act on it — *does anything break
-if I delete it?* — unanswered. Measured 2026-08-04: **no.**
+This section used to walk through moving the three broker passwords into a
+password manager by hand (owner task **G3**). As of 2026-08-07 that's done a
+different way: **[ADR-0010](../../docs/adr/0010-secrets-consolidated-outside-the-repo.md)**
+moved every credential this stack owns the path for — this file included —
+out of the repo tree to `~/.sh_keys`, so there's no separate password-manager
+step and nothing left to delete. `~/.sh_keys/broker-passwords.env` **is** the
+durable reference copy now.
 
-- `hub/compose.yaml` has **no `env_file:`** anywhere, so nothing loads it at
-  container start.
-- No script, playbook, Python, Dart or Ansible file reads it. `grep -rl
-  broker-passwords --include='*.sh' --include='*.yml' --include='*.py'
-  --include='*.dart' .` returns nothing; every hit in this repo is prose.
-- What the broker actually authenticates against is
-  `hub/mosquitto/config/passwd` — **hashes**, `1883:1883 0600`, which your own
-  user cannot even read. Three clients were connected while this was verified.
-
-The file is therefore a note-to-self in cleartext, not a runtime dependency.
-
-**Where each password already lives**, which is what makes deleting it safe:
-
-| Variable | Broker user | Its other home |
-|---|---|---|
-| `MOSQUITTO_HA_PASSWORD` | `ha` | Saved inside HA's `.storage` when you added the MQTT integration (§3 of [3](03-home-assistant.md)) |
-| `MOSQUITTO_RING_PASSWORD` | `ring` | **Also cleartext** in `hub/ring-mqtt-data/config.json`, inside `mqtt_url` — see the caveat below |
-| `MOSQUITTO_Z2M_PASSWORD` | `z2m` | Nowhere. Z2M is parked until the SLZB-06 exists (owner item **D2**), so this one is unused today |
-
-**The steps.** Run them in your own shell — the values must not travel through
-a transcript, an agent session or a paste buffer:
-
-```bash
-# 1. Read them.
-cat ~/Work/SmartHome/hub/.broker-passwords.env
-
-# 2. Put all three in your password manager. Suggested entry names, so that
-#    future-you searching for "mosquitto" finds them:
-#      SmartHome / Mosquitto — ha
-#      SmartHome / Mosquitto — ring
-#      SmartHome / Mosquitto — z2m
-#    Note on each: broker at <hub-ip>:1883, host-networked;
-#    hashes in hub/mosquitto/config/passwd.
-
-# 3. Read one BACK out of the manager and compare it to the file.
-#    Do not skip this. It is the only step that catches a botched paste
-#    while the original still exists.
-
-# 4. Delete the file.
-shred -u ~/Work/SmartHome/hub/.broker-passwords.env
-
-# 5. Prove nothing broke. No restart is needed; existing sessions are unaffected
-#    because the broker never read this file. You want no new auth failures.
-cd ~/Work/SmartHome/hub && docker logs mosquitto --tail 20 && docker logs ring-mqtt --tail 10
-```
-
-**This does not de-cleartext the Hub, and saying so is the point.** The `ring`
-password stays in `hub/ring-mqtt-data/config.json` as
-`mqtt://ring:<password>@mosquitto:1883` — 0600 and gitignored, but readable by
-anyone who can read that file. ring-mqtt has no secrets-file option, so there
-is no cheap fix and it is not part of G3. Know about it rather than believe
-this task removed it.
-
-**Losing these is a reset, not a cliff.** A hash is one-way, so a forgotten
-password cannot be recovered — but it can be *replaced*: `mosquitto_passwd` the
-user, then update that user's one consumer. Minutes. Contrast the re-pairing
-cliff below, where losing `.storage` means walking to the thermostat. That
-asymmetry is why **E7** (back up `.storage`) outranks this item even though
-this one looks more like a security task.
+**What ADR-0010 did NOT do: change any credential's value.** `MOSQUITTO_RING_PASSWORD`
+leaked into an agent transcript on 2026-08-05 (inspecting `ring-mqtt-data/config.json`,
+now `~/.sh_keys/ring-mqtt/config.json`, for an unrelated task) — moving the file
+cannot undo that, only rotating the password can. That rotation is the one
+part of G3 still open; see `TODO.md`.
 
 ### The re-pairing cliff
 
@@ -509,7 +464,7 @@ Two directories are irreplaceable state, not caches:
 | If you lose | You must redo |
 |---|---|
 | `hub/ha-config/.storage/` | Every integration's credentials and its whole entity/device registry — including **entity IDs**, which the Panel's `bindings.yaml` names directly. The Ecobee's HomeKit pairing key lives here, so losing `.storage` means a **physical re-pair at the thermostat's touchscreen** — someone has to walk to the device and read a code off it |
-| `hub/ring-mqtt-data/` | Ring login **plus 2FA**, from the container's web UI |
+| `~/.sh_keys/ring-mqtt/` (was `hub/ring-mqtt-data/` — ADR-0010) | Ring login **plus 2FA**, from the container's web UI |
 
 > An earlier draft of this table said the Ecobee "has exactly one free HomeKit
 > pairing slot". **Do not restore that.** It was a misreading of the `sf` flag
@@ -519,9 +474,10 @@ Two directories are irreplaceable state, not caches:
 > [`04-devices-local.md` §4.2.2](04-devices-local.md). What is true, and all
 > that this row needs, is that re-pairing is a trip to the thermostat.
 
-`mosquitto/config/passwd` is cheap by comparison — regenerate it with §3 and
-re-enter three passwords. `mosquitto/data/mosquitto.db` is retained messages
-only; losing it costs nothing but a re-publish.
+`~/.sh_keys/mosquitto/passwd` (was `hub/mosquitto/config/passwd`) is cheap by
+comparison — regenerate it with §3 and re-enter three passwords.
+`mosquitto/data/mosquitto.db` is retained messages only; losing it costs
+nothing but a re-publish.
 
 **No phase in `docs/plans/device-integrations/` has a backup step — not phase
 0 through 6.** Measured on this host today: HA's Backup integration entry
@@ -534,9 +490,17 @@ Until someone designs that step, the honest mitigation is a manual one, and it
 is worth doing before the next chapter starts creating pairings:
 
 Payload as measured 2026-08-04: **212 KB**, 24 files under `.storage` plus two
-in `ring-mqtt-data/` and the broker `passwd`. Downtime: seconds. This is a
-two-minute job, and the write-up below is longer than the job because step 4 is
-the only thing standing between you and a backup that is quietly useless.
+in `ring-mqtt-data/` and the broker `passwd`. **Since ADR-0010 (2026-08-07),
+the latter two live at `~/.sh_keys/ring-mqtt/` and `~/.sh_keys/mosquitto/passwd`
+— outside `hub/` entirely, so they need a second, separate `tar` invocation;
+`-C "$PWD"` from `hub/` can no longer reach them.** Downtime: seconds. This is
+a two-minute job, and the write-up below is longer than the job because step 4
+is the only thing standing between you and a backup that is quietly useless.
+
+Run this from the **host's own terminal**, not from inside the devcontainer:
+`~` means whoever's shell is running the command, and the devcontainer's `~`
+is not the same filesystem the host's dockerd (and `~/.sh_keys`) lives on —
+see ADR-0010's "Consequences" for the incident that discovered this.
 
 **1 — stop the two writers.**
 
@@ -552,9 +516,14 @@ of a half-written JSON file restores into an HA that will not start.
 **2 — take the archive, with `sudo`.**
 
 ```sh
-sudo tar czf ~/hub-state-$(date +%F).tgz -C "$PWD" \
-    ha-config/.storage ring-mqtt-data mosquitto/config/passwd
+sudo tar czf ~/hub-state-$(date +%F).tgz -C "$PWD" ha-config/.storage
+sudo tar czf ~/hub-secrets-$(date +%F).tgz -C ~ .sh_keys
 ```
+
+Two archives, not one: `.storage` needs `sudo` because five of its files are
+`root:root 0600` (step 4 below); `~/.sh_keys` needs it because
+`mosquitto/passwd` is `1883:1883 0600`. Keep them together wherever this ends
+up — one without the other is a partial restore.
 
 **3 — start again immediately**, before verifying. There is no reason to keep
 the house down while you inspect a file.
@@ -595,20 +564,23 @@ exists is what people trust.
 **5 — fix the mode, which `sudo` got wrong for you.**
 
 ```sh
-sudo chmod 600 ~/hub-state-$(date +%F).tgz
-sudo chown "$USER:$USER" ~/hub-state-$(date +%F).tgz
+sudo chmod 600 ~/hub-state-$(date +%F).tgz ~/hub-secrets-$(date +%F).tgz
+sudo chown "$USER:$USER" ~/hub-state-$(date +%F).tgz ~/hub-secrets-$(date +%F).tgz
 ```
 
 `sudo tar` creates the file as `root:root` under root's umask — observed
 `-rw-r--r--`, i.e. **world-readable**, holding every integration's credentials
-in cleartext and the Ecobee's HomeKit pairing key. Both commands need `sudo`
-precisely because root owns the file; a bare `chmod` fails.
+in cleartext and the Ecobee's HomeKit pairing key (`hub-secrets-*.tgz` holds
+the broker password, the Ring refresh token and the Panel's HA token — no
+less sensitive). Both commands need `sudo` precisely because root owns the
+file; a bare `chmod` fails.
 
 If the archive will live anywhere you do not fully control, encrypt it instead
 of relying on modes:
 
 ```sh
 gpg -c ~/hub-state-$(date +%F).tgz && shred -u ~/hub-state-$(date +%F).tgz
+gpg -c ~/hub-secrets-$(date +%F).tgz && shred -u ~/hub-secrets-$(date +%F).tgz
 ```
 
 **6 — get it off this disk. This step *is* the task.**
@@ -617,7 +589,7 @@ Steps 1–5 only produce a file. An archive on the same NVMe as the original
 defends against every failure mode except the one people actually have.
 
 ```sh
-scp ~/hub-state-$(date +%F).tgz <you>@<mac>:~/Backups/
+scp ~/hub-state-$(date +%F).tgz ~/hub-secrets-$(date +%F).tgz <you>@<mac>:~/Backups/
 ```
 
 **7 — know how to restore it**, because an untested backup is a belief.
@@ -626,11 +598,13 @@ scp ~/hub-state-$(date +%F).tgz <you>@<mac>:~/Backups/
 cd hub
 docker compose stop homeassistant ring-mqtt
 sudo tar xzf /path/to/hub-state-YYYY-MM-DD.tgz -C "$PWD"
+sudo tar xzf /path/to/hub-secrets-YYYY-MM-DD.tgz -C ~
 docker compose start homeassistant ring-mqtt
 ```
 
 Extract **as root**. GNU tar preserves ownership only for the superuser, and
-files that land owned by you are files HA cannot read.
+files that land owned by you (or, for `mosquitto/passwd`, not owned
+`1883:1883`) are files their service cannot read.
 
 **What is deliberately not in it:** `hub/token`, the Panel's long-lived access
 token. It is re-mintable from the HA UI in under a minute, and putting a
