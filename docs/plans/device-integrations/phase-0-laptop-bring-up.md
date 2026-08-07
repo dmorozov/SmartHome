@@ -555,12 +555,21 @@ link-local IPv6 only (`fe80::…`) and `resolvectl mdns` is off on every link.
     there and is clean against `HEAD`, so a Panel built from the repo today
     opens that Popup with no video in it. See phase-4 §B.
 
-15. **`appliance/test/run.sh` bind-mounts the Hub's own Docker socket into a
-    `--privileged` container.** Harmless when the dev box was a Mac and that
-    socket belonged to Docker Desktop's disposable VM — which is still how
-    `appliance/test/README.md` frames it. It is not harmless now: the same
-    laptop is the Hub host, so from phase 1 onward that socket is
-    root-equivalent access to the daemon running Home Assistant, Mosquitto,
-    ring-mqtt and go2rtc. Either fence the test bed off the Hub daemon
-    (a rootless or separate daemon, or drop the socket mount) or state
-    explicitly that the test bed must not be run while the Hub stack is up.
+15. ~~**`appliance/test/run.sh` bind-mounts the Hub's own Docker socket into a
+    `--privileged` container.**~~ **✅ CLOSED 2026-08-07.** Harmless when the
+    dev box was a Mac and that socket belonged to Docker Desktop's disposable
+    VM; not harmless once the same laptop became the Hub host, because from
+    phase 1 onward that socket is root-equivalent access to the daemon running
+    Home Assistant, Mosquitto, ring-mqtt and go2rtc.
+
+    Closed by taking the first of the two options — fence the test bed off the
+    Hub daemon — rather than the second, because "state explicitly that it must
+    not be run while the Hub stack is up" leaves the failure one forgotten
+    sentence away. The mount is now opt-in (`TEST_DOCKER_SOCKET=1`, default
+    off), and even opted in, `run.sh` **refuses** when it can see the Hub stack
+    running on that daemon by container name. Nothing the test bed exists to do
+    needs the socket: Ansible reaches the container over SSH like any host and
+    `spike/bootstrap.sh` does not use Docker — the mount only ever bought the
+    sibling-container debugging `appliance/test/README.md` describes, which now
+    has its own section there explaining the trade. The guard is a name match,
+    so it stops the accident and not a determined operator.

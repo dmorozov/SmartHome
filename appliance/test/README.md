@@ -65,15 +65,50 @@ git clone /mnt/SmartHome-src ~/SmartHome
 ~/SmartHome/spike/bootstrap.sh        # long: clones Flutter + release build
 ```
 
+## The Docker socket is opt-in
+
+`run.sh up` used to bind-mount the host's `/var/run/docker.sock` into this
+container unconditionally. **It does not any more** (changed 2026-08-07,
+phase-0 open item 15):
+
+```sh
+./run.sh up                        # no socket. The default.
+TEST_DOCKER_SOCKET=1 ./run.sh up   # socket at /docker.sock, if you mean it
+```
+
+**Why it was harmless and stopped being.** The section below frames that socket
+as Docker Desktop's — a disposable Linux VM on a Mac, where "the host's daemon"
+was itself a throwaway. That is no longer the machine this runs on. Under
+[ADR-0008](../../docs/adr/0008-hub-runs-in-docker-on-the-appliance.md) the same
+laptop is the Hub host, so from phase 1 onward that socket is **root-equivalent
+access to the daemon running Home Assistant, Mosquitto, ring-mqtt and
+go2rtc** — handed to a `--privileged` container whose whole purpose is running
+deployment code under debug. The blast radius of a bug in the thing being
+tested became the house.
+
+**Nothing this test bed exists to do needs it.** The Ansible playbooks reach
+this container over SSH exactly like a real host, and `spike/bootstrap.sh` does
+not use Docker. What the mount buys is the sibling-container debugging
+described below, which is real but occasional — so it survives behind a name
+you have to type.
+
+**And when you do type it, `run.sh` still refuses** if it can see the Hub stack
+running on that daemon (`homeassistant`, `mosquitto`, `go2rtc` or `ring-mqtt`
+by name). Stop the stack first, or run the test bed somewhere that is not the
+Hub. The check is a container-name match, so it is a guard against the
+accident, not against someone determined to work around it.
+
 ## macOS notes (Docker Desktop)
 
 - Containers run in Docker Desktop's Linux VM; systemd as PID 1 needs the
   `--privileged` + `/sys/fs/cgroup` mount that `run.sh` passes.
-- The host docker socket is bind-mounted at `/docker.sock` (with `DOCKER_HOST`
-  set image-wide), so `docker ps` inside shows the **host's** daemon —
-  containers started from inside are siblings, visible and debuggable from the
-  Mac. It cannot live at the conventional `/var/run/docker.sock`: systemd
-  mounts a tmpfs over `/run` at boot and would shadow the bind.
+- The host docker socket **is no longer mounted by default** — see
+  [The Docker socket is opt-in](#the-docker-socket-is-opt-in) below. With
+  `TEST_DOCKER_SOCKET=1` it is bind-mounted at `/docker.sock` (with
+  `DOCKER_HOST` set image-wide), so `docker ps` inside shows the **host's**
+  daemon — containers started from inside are siblings, visible and debuggable
+  from the Mac. It cannot live at the conventional `/var/run/docker.sock`:
+  systemd mounts a tmpfs over `/run` at boot and would shadow the bind.
 - Caveat for later hub-stack testing via that socket: bind-mount paths in a
   `compose.yaml` run from inside resolve against the VM/host filesystem, not
   this container's — revisit when the hub compose gets tested this way.

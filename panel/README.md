@@ -868,6 +868,67 @@ an HA restart, and it is owner work at the door. Until it runs, treat the
 classifier as argued-for and not observed. See
 [phase-7 §A4](../docs/plans/device-integrations/phase-7-doorbell-events-and-cameras.md).
 
+## The Cameras view
+
+The Panel's **second full-screen surface**, and until 2026-08-07 this README
+mentioned it only in passing inside Popup sections. A right-edge tab on the
+Dollhouse (`CamerasTab`, present only if the House has a video Device at all)
+slides out a grid of tiles, one per camera and doorbell.
+
+**A tile is off by default and shows a still.** The face is the Hub's own
+snapshot — `Image.memory` with `gaplessPlayback`, refreshed every
+`kCamerasSnapshotRefresh` (60 s), fetched through HA's `camera_proxy` from the
+`snapshot:` binding. That fetch **costs no device session**: HA already holds
+the JPEG, so an off tile is a real picture of the porch that wakes nothing. A
+Device with a stream but no snapshot shows its kind's icon; one with neither
+says "Not wired up yet".
+
+**Tapping goes live**, and `Tap for live` is drawn only where a tap can
+actually deliver — a wired stream on a build that knows where go2rtc is.
+Tapping again, or closing the view, tears the session down.
+
+**Which tiles come up live on their own is a property of the kind, not of the
+Device.** `KindSpec.autoLive` is true for `camera` and **false for
+`doorbell`** — so the doorbell tile opens off, every time, and that is
+#177014 protection rather than an oversight: any brand's doorbell live view has
+cloud side effects, and an open Ring session can suppress the *next* real ding.
+It is per-kind for ADR-0006's reason — per-Device would invite hand-editing the
+safety back off.
+
+**The view returns itself to the Dollhouse when nobody is watching.**
+`kCamerasIdleReturn` is 5 minutes; `kCamerasIdleWarning` (30 s, *part of* that
+5 minutes rather than added to it) is the "Still watching?" prompt that softens
+it. Unanswered, the view pops. One tap per five minutes is the price of holding
+a Ring session open on purpose.
+
+### `cameras.*` — the log vocabulary
+
+Eleven events. The view's own lifecycle, then each tile's.
+
+| Line | When |
+|---|---|
+| `I cameras.opened tiles=N auto_live=N` | the view opened; `auto_live` is how many tiles came up live by themselves |
+| `I cameras.closed open_s=N live=N` | it went away, how long it was up, how many tiles were still live |
+| `D cameras.idle_blocked retry_s=30` | the idle deadline fired against a route it may not pop; retries after the warning window |
+| `I cameras.idle_return reason=unanswered` | "Still watching?" went unanswered and the view returned itself |
+| `D cameras.tile_skipped device=… reason=no_stream_name \| go2rtc_unconfigured` | a tile that cannot dial, and which of the two reasons it is |
+| `I cameras.tile_unsupported name=…` | this build cannot play video — the browser has no `MediaSource`. Not a go2rtc fault, and deliberately not `tile_failed` |
+| `I cameras.tile_open name=…` | a stream was opened for that tile |
+| `W cameras.tile_failed name=… reason=…` | go2rtc's own sentence, already through the players' redaction |
+| `I cameras.tile_closed name=… reason=…` | the stream was let go |
+| `D cameras.snapshot_ok entity=…` | a still landed. Logged **on change only** — a broken Hub would otherwise write once a minute forever |
+| `W cameras.snapshot_failed entity=… status=…` | `status` is an HTTP code or an exception's bare **type name** — never exception text, which embeds the request URL, and that request carries the Hub token |
+
+The `snapshot:` binding key that feeds all of this is documented for the
+author in [HOUSE-PLAN.md](HOUSE-PLAN.md); the Popup uses the same key for its
+own fallback ([Live video in the Popup](#live-video-in-the-popup)).
+
+**On web this needs Home Assistant to allow the origin.** The still is a
+cross-origin `fetch` with an `Authorization` header, so HA must carry an
+`http: cors_allowed_origins:` entry or every tile falls back to its icon and
+logs `snapshot_failed`. The appliance build uses `dart:io` and is unaffected.
+See `appliance/commissioning/03-home-assistant.md` §3.10.
+
 ## House Plan pipeline (ADR-0004)
 
 **The manual: [HOUSE-PLAN.md](HOUSE-PLAN.md)** — written for whoever draws
@@ -954,7 +1015,7 @@ order is not cosmetic and is pinned by tests (`hub.config` renders in
 [panel] I panel.start hub=ha mode=profile platform=web log=info log_from=build
 [panel] I hub.config HUB=build HA_URL=build HA_TOKEN=build GO2RTC_URL=absent env=unavailable
 [panel] I popup.go2rtc url=absent
-[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33 streams=0
+[panel] I house.loaded name="Demo House" floors=3 rooms=15 devices=33 bound=33 streams=1
 [panel] I hub.configured url=http://localhost:18123 token=set
 [panel] I hub.connecting url=ws://localhost:18123
 [panel] I hub.connected url=ws://localhost:18123 devices=33

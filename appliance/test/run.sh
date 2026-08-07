@@ -23,6 +23,28 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 UBUNTU_TAG="${UBUNTU_TAG:-24.04}"   # 24.04 = mini PC (ADR-0001); 26.04 = dev laptop
 IMAGE="smarthome-appliance-test:${UBUNTU_TAG}"
+
+# Whether to hand the container the HOST's Docker socket. Default OFF, and the
+# default changed on 2026-08-07 — phase-0 open item 15.
+#
+# It used to be unconditional, and it was harmless when it was written: the dev
+# box was a Mac, so that socket belonged to Docker Desktop's disposable Linux
+# VM and "the host's daemon" meant a throwaway. It is not a throwaway now. The
+# same laptop is the Hub host (ADR-0008), so from phase 1 onward that socket is
+# root-equivalent access to the daemon running Home Assistant, Mosquitto,
+# ring-mqtt and go2rtc — handed to a `--privileged` container whose entire
+# purpose is executing deployment code under debug.
+#
+# Nothing in the test bed's own job needs it: the Ansible playbooks reach this
+# container over SSH like any host, and `spike/bootstrap.sh` does not use
+# Docker. What the mount buys is the debugging convenience README.md
+# describes — `docker ps` inside showing sibling containers — so it stays
+# available, behind a name you have to type:
+#
+#   TEST_DOCKER_SOCKET=1 ./run.sh up
+#
+# Only do that when the Hub stack is down, or on a machine that is not the Hub.
+TEST_DOCKER_SOCKET="${TEST_DOCKER_SOCKET:-0}"
 CONTAINER=smarthome-test
 SSH_PORT=2222
 KEY_DIR="${SCRIPT_DIR}/.keys"          # gitignored
@@ -63,21 +85,33 @@ up() {
     destroy
 
     say "Starting ${CONTAINER} from ${IMAGE} (systemd PID 1; SSH on localhost:${SSH_PORT})"
-    # --privileged + cgroup mount: required for systemd as PID 1 under
-    # Docker Desktop's Linux VM. The docker.sock bind exposes the HOST's
-    # daemon inside (sibling containers — debuggable from outside); target
-    # is /docker.sock because systemd's tmpfs over /run would shadow the
-    # conventional /var/run/docker.sock (DOCKER_HOST is set in the image).
-    # The repo is mounted read-only; tests clone from it (bootstrap.sh's
-    # git guard needs a real clone, and ro keeps the test from ever
-    # mutating the working tree).
+
+    # The socket mount is opt-in — see TEST_DOCKER_SOCKET at the top for why
+    # the default flipped. Target is /docker.sock, not the conventional
+    # /var/run/docker.sock, because systemd's tmpfs over /run would shadow the
+    # bind (DOCKER_HOST is set image-wide to match).
+    local socket_mount=()
+    if [ "${TEST_DOCKER_SOCKET}" != "0" ]; then
+        if docker ps --format '{{.Names}}' | grep -qE '^(homeassistant|mosquitto|go2rtc|ring-mqtt)$'; then
+            die "TEST_DOCKER_SOCKET=1 refused: the Hub stack is running on this
+  daemon, and the mount would give a --privileged test container
+  root-equivalent control of it (phase-0 item 15). Stop the Hub stack first,
+  or run the test bed on a machine that is not the Hub."
+        fi
+        say "TEST_DOCKER_SOCKET is set — exposing the host daemon at /docker.sock"
+        socket_mount=(-v /var/run/docker.sock:/docker.sock)
+    fi
+
+    # --privileged + cgroup mount: required for systemd as PID 1. The repo is
+    # mounted read-only; tests clone from it (bootstrap.sh's git guard needs a
+    # real clone, and ro keeps the test from ever mutating the working tree).
     docker run -d \
         --name "${CONTAINER}" \
         --hostname appliance-test \
         --privileged \
         --cgroupns=host \
         -v /sys/fs/cgroup:/sys/fs/cgroup \
-        -v /var/run/docker.sock:/docker.sock \
+        "${socket_mount[@]}" \
         -v "${REPO_ROOT}:/mnt/SmartHome-src:ro" \
         -p "${SSH_PORT}:22" \
         "${IMAGE}" >/dev/null

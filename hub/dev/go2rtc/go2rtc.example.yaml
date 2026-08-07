@@ -22,6 +22,30 @@ api:
   origin: "*"
 
 streams:
+  # The one stream this file DECLARES rather than comments out, and the reason
+  # is that `../README.md` already tells you to point at it: "`selftest` is the
+  # stream to point at while there is no camera." Until 2026-08-07 this file
+  # shipped `streams:` followed by nothing but commented placeholders, so a
+  # fresh devcontainer had no stream at all and that instruction dialled a name
+  # go2rtc did not have.
+  #
+  # It matters more than convenience. `panel/test/live_video_keepalive_live_test.dart`
+  # defaults to this name precisely so that video work does not have to touch
+  # the doorbell — HA core #177014 says an open Ring session can suppress the
+  # *next* real ding, so pointing a test loop at `ring_doorbell` is not a
+  # neutral choice. With no `selftest` here, the only runnable target was the
+  # real camera.
+  #
+  # **Two producers, not one**, copied from the production example for the
+  # reason it states at length: the web build plays H.264 over a WebSocket and
+  # a native `-d linux` build pulls multipart JPEG off the same stream name. A
+  # single-producer stream serves one of them and hands the other a 200 with
+  # zero bytes — the documented silent failure. Keeping both here means the
+  # sandbox exercises the same shape a real camera will.
+  selftest:
+    - ffmpeg:virtual?video&size=640x480#video=h264
+    - ffmpeg:selftest#video=mjpeg
+
   # Wyze v3 / Pan v3 after the official RTSP firmware flash
   # (docs/research/hub-and-device-integrations.md §3.2):
   # wyze_porch: rtsp://user:pass@CAMERA-LAN-IP/live

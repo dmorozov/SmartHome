@@ -157,6 +157,7 @@ Copying a marker copies its tag too, so two devices end up claiming the same one
 | Change what the panel calls it | change the marker's *Name* |
 | Change which Hub switch it uses | edit `bindings.yaml`, nothing else |
 | Change which camera feed it shows | edit its `stream:` in `bindings.yaml`, nothing else |
+| Change the still photo its popup falls back to | edit its `snapshot:` in `bindings.yaml`, nothing else |
 | Delete it | delete the marker, re-run the converter, delete its `bindings.yaml` entry |
 
 If you delete a marker but forget its binding, the panel refuses to start and tells you exactly which leftover to remove. That's deliberate — a silent leftover would be a device that quietly never works.
@@ -205,6 +206,7 @@ bindings:
 
 - **`entity`** — what Home Assistant calls this device. **Leave the line out entirely** if the hardware doesn't exist yet; the device still appears on the panel, showing unknown state, which is exactly right for something still in a box.
 - **`stream`** — cameras and doorbells only: the **name** of a stream in `hub/go2rtc/go2rtc.yaml`, like `stream: front_door`. It is a name, never a web address — pasting an `rtsp://…` link here would tell go2rtc to go and dial it, and the camera password inside that link would end up in the panel's log. So a stream name may only be letters, digits, dots, dashes and underscores, which is exactly what a `go2rtc.yaml` key looks like and leaves no room for the `:`, `/` and `@` a web address needs; anything else stops the panel at boot. The complaint you get **won't repeat back what you typed** — it is written to the log itself, so printing a mis-pasted address there is precisely how the password would escape. It names this file and the device instead, and you look at the line yourself. Leave the line out until the camera is set up; the pin still appears and its popup says the view isn't available, which is the truth. Two devices may name the same stream — two rooms watching one camera is fine. One more thing to check on the go2rtc side, because it fails without saying anything: that camera's entry there needs **two producers**, the camera's own H.264 line plus an `ffmpeg:<name>#video=mjpeg` line. Without the second, the wall panel — which plays JPEG, not H.264 — gets an empty stream and shows "Live view unavailable" with no error anywhere. [Ch. 6 §6.5b](../appliance/commissioning/06-panel-and-bindings.md) has the one-line check.
+- **`snapshot`** — cameras and doorbells only, and optional: the Home Assistant **camera entity** holding a still photo of what that camera sees, like `snapshot: camera.front_door_snapshot`. This is the picture the panel shows when there is no live video — while the stream is starting, and when it fails. It is what stops the doorbell popup being a blank rectangle at the moment somebody wants to see who is at the door. It is always labelled on screen as a still, never passed off as live. Two separate things to know. **It is a different entity from `entity:`, and neither can be worked out from the other** — the doorbell's `entity:` is what it *does* (it rang), and its `snapshot:` is what it *sees*; copy both from Home Assistant's own entity list. And **it must be a `camera.` entity** — the panel fetches it through Home Assistant's camera picture service, so a sensor or a web address pasted here would quietly fail on every attempt rather than at boot, which is why the panel refuses anything that isn't one. Leave the line out if the camera has no still; the popup falls back to its plain "connecting" and "unavailable" wording, exactly as before. Two devices may name the same one.
 - **`connectivity`** — `local` if it works without the manufacturer's cloud, `cloud` if it doesn't. This is required and has no default, because guessing would mislabel every planned device.
 
 Blank lines and `#` comments are fine — group entries by room if it helps you find them.
@@ -268,6 +270,8 @@ camera password. See *Which messages repeat your value back* below.
 | `is not a Home Assistant entity id` | entity ids look like `light.kitchen`, all lowercase with one dot |
 | `is not a go2rtc stream name` | you put a web address in `stream:`; put the stream's **name** from `go2rtc.yaml` there instead |
 | `only a camera or a doorbell plays video` | you put `stream:` on something that isn't a camera or doorbell; delete the line, or fix the marker's kind in the drawing (it does not tell you which stream name you typed — see below) |
+| `is not a camera entity id` | your `snapshot:` isn't a `camera.` entity. Still photos come from Home Assistant's camera entities — `camera.front_door_snapshot`, not the doorbell's own `event.` or `binary_sensor.` entity, and never a web address |
+| `only a camera or a doorbell wears a still-image face` | you put `snapshot:` on something that isn't a camera or doorbell; delete the line, or fix the marker's kind in the drawing (it does not repeat the entity you typed — see below) |
 | `which YAML read as a … rather than text` | a value like `007` was read as a number; put quotes around it. **This is the one message that repeats your value back** — see below |
 | `is a block of its own rather than one line of text` | you indented something underneath `entity:` or `stream:` (a `url:` line, or a `- ` list). These fields take one value on the same line as the name |
 
@@ -277,11 +281,20 @@ messages get written to the panel's log, which is the file an operator copies
 into an issue. The whole list is here, because the gaps in earlier versions of
 this list were found by someone driving the code, not by reading it.
 
-- **Your `entity:`, `stream:` and `connectivity:` values are not repeated.**
-  That covers `is not a Home Assistant entity id`, `is not a go2rtc stream
-  name`, `is neither of the two words this field takes`, `is a block of its own
-  …` and `is not a block of settings`. They name the file, the device and the
-  field only. Open `bindings.yaml` at the device they name and look.
+- **Your `entity:`, `stream:`, `snapshot:` and `connectivity:` values are not
+  repeated.** That covers `is not a Home Assistant entity id`, `is not a go2rtc
+  stream name`, `is not a camera entity id`, `only a camera or a doorbell wears
+  a still-image face`, `is neither of the two words this field takes`, `is a
+  block of its own …` and `is not a block of settings`. They name the file, the
+  device and the field only. Open `bindings.yaml` at the device they name and
+  look.
+
+  `snapshot:` is withheld for the same reason `stream:` is, and deliberately
+  even though it is the stricter field of the two: it must already look like a
+  `camera.` entity to get past the parser, so there is less that could be
+  hiding in it. The value is kept out anyway, because two messages in one place
+  with two different disclosure rules is how the careful one gets loosened by
+  someone tidying up later.
 - **Your device's *key* is repeated only when it is plainly a name** — starts
   with a letter or a digit, then letters, digits, spaces, dots, dashes and
   underscores, 40 characters at most. That is every key you would actually

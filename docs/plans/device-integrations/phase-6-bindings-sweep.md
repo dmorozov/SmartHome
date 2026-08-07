@@ -101,6 +101,41 @@ over untouched (ADR-0005's whole promise). Any Key that got bound to a
 device in a *different* real room than the placeholder Room is a note in
 the table, not a problem — the real drawing fixes geometry, not identity.
 
+### The table (started 2026-08-07; six Keys bound to real hardware)
+
+These are the Keys in `panel/test/support/integrated_bindings.dart` — the ones
+whose `entity:` has left the dev-Hub stand-ins. **Type these exact Keys into
+the F1 drawing's markers** and `bindings.yaml` needs no edit at all.
+
+Read the last column before drawing: three of the six sit in a placeholder Room
+that is **not** where the hardware actually is. That is the expected kind of
+note, not a defect — but it means the drawing must place them by their *real*
+location while keeping the Key, and two of the Key *names* will read as
+misnomers forever afterwards.
+
+| Key | Placeholder Room | Physical device | Hub entity | Where it really is |
+|---|---|---|---|---|
+| `thermostat` | `hall` | ecobee Smart Thermostat Premium "Main Floor", paired locally over HomeKit | `climate.main_floor` | as drawn, near enough |
+| `doorbell` | `hall` | Ring doorbell, via ring-mqtt (device `90486cf35236`) | `event.front_door_ding` (+ `stream: ring_doorbell`, `snapshot: camera.front_door_snapshot`) | the front door — the Key is a hall pin standing in for a doorway |
+| `outlet-outdoor-a` | `family-room` | Kasa EP40 outdoor socket, the one physically labelled **"Plug 1"** | `switch.outdoor_outlet_a` | outdoors. **A3's trap:** TP-Link labels sockets from 1, HA numbers children from 0, so "Plug 1" is child `_0` |
+| `outlet-outdoor-b` | `office` | the other socket of the same EP40 unit | `switch.outdoor_outlet_b` | outdoors, beside A. Identified **by elimination** — only A was toggled at the plug |
+| `light-living` | `living-room` | Kasa HS103, repurposed from the old fridge | `switch.entry_light` | **the entry, not the living room.** Key name is a placeholder-house fiction |
+| `light-landing` | `landing` | Kasa HS103, repurposed from the aquarium | `switch.stairs_light` | **the stairs, not the landing.** Same fiction |
+
+Two things the drawing session should decide rather than inherit:
+
+- **`light-living` and `light-landing` are misnamed.** `light-hall` would have
+  been right for the entry and is deliberately *not* used — it is the live test
+  suite's own togglable fixture, and taking it would cost that suite a switch it
+  can flip without touching the house. Renaming a Key is drawing work plus a
+  `bindings.yaml` edit plus a line in `integratedBindings`; doing it at F1 is
+  cheap, doing it later is a three-file change with a silent failure mode
+  (`bindings_drift_test.dart` catches it, which is why that test exists).
+- **The two outdoor outlets are drawn indoors**, in two different rooms, because
+  the placeholder house has no outdoor surface. Whether the real drawing gets one
+  is a House Plan question — every point belongs to exactly one Room (CONTEXT.md),
+  so "outside" has to be a Room if it is to hold a pin at all.
+
 ## 3. Test and golden closure
 
 ```sh

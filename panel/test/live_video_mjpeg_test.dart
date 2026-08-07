@@ -17,8 +17,19 @@ import 'package:panel/ui/video/mjpeg_frames.dart';
 /// to work — and all of it except the pixels is testable here: the framing is
 /// byte arithmetic, and `flutter test` can drive a real socket on localhost
 /// that speaks go2rtc's exact multipart dialect. What is *not* proved here is
-/// that a Linux build compiles and paints, because this host has no
-/// clang/cmake/ninja/gtk (TODO G4).
+/// that a Linux build compiles and paints — but no longer for the reason this
+/// comment used to give. It said "this host has no clang/cmake/ninja/gtk
+/// (TODO G4)", and that is stale twice over: **G4 is done** (the Hub host got
+/// the toolchain 2026-08-04, and `flutter build linux --release` has since
+/// produced a bundle that rendered live video), and the devcontainer this
+/// suite actually runs in ships clang, cmake, ninja and gtk+-3.0 as well
+/// (ADR-0009, re-checked 2026-08-07). Compiling is not the gap.
+///
+/// The gap is what it always really was: **pixels, under the real
+/// compositor.** No VM test paints, and the kiosk the Panel ships into is
+/// `cage`, which is still not installed (**G6**) on a host with no
+/// touchscreen attached (**A7**). `panel/README.md`'s "Not finished" section
+/// keeps the current version of that list.
 ///
 /// Every wire shape below was measured against go2rtc 1.9.10 on 2026-08-04:
 /// `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: n\r\n\r\n<n
