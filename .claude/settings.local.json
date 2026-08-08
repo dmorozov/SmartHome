@@ -56,7 +56,11 @@
       "Bash(HUB_DIR=/tmp/claude-1000/-workspaces-SmartHome/28d49e88-42d0-4b7b-a756-18409d3c77b8/scratchpad/sh_keys ./hactl '[{\"type\":\"config_entries/get\"}]')",
       "Bash(HUB_DIR=/tmp/claude-1000/-workspaces-SmartHome/28d49e88-42d0-4b7b-a756-18409d3c77b8/scratchpad/sh_keys ./hactl '[{\"type\":\"config/entity_registry/list\"},{\"type\":\"get_states\"}]')",
       "Bash(python3 *)",
-      "Bash(HUB_DIR=/tmp/claude-1000/-workspaces-SmartHome/28d49e88-42d0-4b7b-a756-18409d3c77b8/scratchpad/sh_keys ./hactl '[{\"type\":\"config/device_registry/list\"}]')"
+      "Bash(HUB_DIR=/tmp/claude-1000/-workspaces-SmartHome/28d49e88-42d0-4b7b-a756-18409d3c77b8/scratchpad/sh_keys ./hactl '[{\"type\":\"config/device_registry/list\"}]')",
+      "Bash(flutter analyze *)",
+      "Bash(timeout 300 flutter build web --profile -t lib/ui/doorbell_popup_prototype.dart --output build/prototype_web)",
+      "Bash(flutter test *)",
+      "Bash(dart format *)"
     ]
   },
   "enabledMcpjsonServers": [

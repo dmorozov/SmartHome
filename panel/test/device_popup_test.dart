@@ -76,21 +76,23 @@ void main() {
     Duration? dismissAfter,
     Duration? dismissCeiling,
   }) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(
-        builder: (context) => TextButton(
-          onPressed: () => showDevicePopup(
-            context,
-            presentation: DevicePresentation(device, null),
-            video: video,
-            snapshots: snapshots,
-            dismissAfter: dismissAfter,
-            dismissCeiling: dismissCeiling,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showDevicePopup(
+              context,
+              presentation: DevicePresentation(device, null),
+              video: video,
+              snapshots: snapshots,
+              dismissAfter: dismissAfter,
+              dismissCeiling: dismissCeiling,
+            ),
+            child: const Text('tap the pin'),
           ),
-          child: const Text('tap the pin'),
         ),
       ),
-    ));
+    );
     await tester.tap(find.text('tap the pin'));
     await tester.pumpAndSettle();
   }
@@ -99,8 +101,10 @@ void main() {
       'stream', (tester) async {
     final go2rtc = FakeGo2rtc();
 
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
 
     expect(go2rtc.only.url.toString(), 'ws://hub:1984/api/ws?src=porch');
     expect(go2rtc.only.name, 'porch');
@@ -123,30 +127,37 @@ void main() {
 
     for (final route in routesOut.entries) {
       final go2rtc = FakeGo2rtc();
-      await openPopup(tester,
-          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open));
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
 
       await route.value(tester);
       await tester.pumpAndSettle();
 
       expect(find.byType(Dialog), findsNothing, reason: route.key);
       expect(go2rtc.only.closes, 1, reason: route.key);
-      expect(popupLines('stream_closed').last.fields,
-          {'name': 'porch', 'reason': 'popup_closed'}, reason: route.key);
+      expect(popupLines('stream_closed').last.fields, {
+        'name': 'porch',
+        'reason': 'popup_closed',
+      }, reason: route.key);
     }
   });
 
   testWidgets('a Popup with no go2rtc configured shows the placeholder it '
-      'always showed, and says why in the log, not on the wall',
-      (tester) async {
+      'always showed, and says why in the log, not on the wall', (
+    tester,
+  ) async {
     final go2rtc = FakeGo2rtc();
 
     await openPopup(tester, video: VideoConfig(open: go2rtc.open));
 
     expect(go2rtc.opened, isEmpty);
     expect(find.text('Live view placeholder — go2rtc stream'), findsOneWidget);
-    expect(popupLines('stream_skipped').single.fields,
-        {'device': 'cam-porch', 'reason': 'no_go2rtc_url'});
+    expect(popupLines('stream_skipped').single.fields, {
+      'device': 'cam-porch',
+      'reason': 'no_go2rtc_url',
+    });
     // The reason is a thing to grep for, not a thing to read across a room.
     expect(find.textContaining('no_go2rtc_url'), findsNothing);
   });
@@ -162,35 +173,45 @@ void main() {
     );
     final go2rtc = FakeGo2rtc();
 
-    await openPopup(tester,
-        device: unwired,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open));
+    await openPopup(
+      tester,
+      device: unwired,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
 
     expect(go2rtc.opened, isEmpty);
-    expect(popupLines('stream_skipped').single.fields,
-        {'device': 'cam-garage', 'reason': 'no_stream_name'});
+    expect(popupLines('stream_skipped').single.fields, {
+      'device': 'cam-garage',
+      'reason': 'no_stream_name',
+    });
   });
 
   testWidgets('a go2rtc address that will not parse costs the picture and '
       'nothing else', (tester) async {
     final go2rtc = FakeGo2rtc();
 
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'localhost:1984', open: go2rtc.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'localhost:1984', open: go2rtc.open),
+    );
 
     // The Dialog still has the Device's name and a way out of itself — the
     // whole reason urlFor returns null instead of throwing.
     expect(find.text('Porch Camera'), findsOneWidget);
     expect(find.text('Close'), findsOneWidget);
-    expect(popupLines('stream_skipped').single.fields,
-        {'device': 'cam-porch', 'reason': 'bad_go2rtc_url'});
+    expect(popupLines('stream_skipped').single.fields, {
+      'device': 'cam-porch',
+      'reason': 'bad_go2rtc_url',
+    });
   });
 
   testWidgets('a stream go2rtc refuses reads as unavailable, never as a '
       'black rectangle', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
 
     go2rtc.only.fails('mse: stream not found');
     await tester.pump();
@@ -199,8 +220,10 @@ void main() {
     // go2rtc's own words, verbatim and only in the log: it is a human
     // sentence go2rtc is free to reword, so nothing branches on it and the
     // wall never shows it.
-    expect(popupLines('stream_failed').single.fields,
-        {'name': 'porch', 'reason': 'mse: stream not found'});
+    expect(popupLines('stream_failed').single.fields, {
+      'name': 'porch',
+      'reason': 'mse: stream not found',
+    });
     expect(find.textContaining('mse:'), findsNothing);
   });
 
@@ -217,15 +240,18 @@ void main() {
     // proves the Popup publishes exactly what it is handed and the rendered
     // line survives the trip.
     const password = 'hunter2';
-    const stderr = 'mse: streams: exec/pipe: EOF\n'
+    const stderr =
+        'mse: streams: exec/pipe: EOF\n'
         '[tcp @ 0x769] Connection to tcp://127.0.0.1:9 failed: Connection '
         'refused\n'
         'Error opening input file http://127.0.0.1:9/cgi-bin/CGIProxy.fcgi'
         '?loginuse=admin&loginpas=$password.\n'
         'Error opening input files: Connection refused\n';
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
 
     go2rtc.only.fails('go2rtc refused: ${redactCredentials(stderr)}');
     await tester.pump();
@@ -237,8 +263,13 @@ void main() {
     // afford to drop the URL whole — and the reason an operator came for is
     // still legible through log.dart's escaping.
     expect(line, contains('name=porch'));
-    expect(line, contains(r'Error opening input file http://127.0.0.1:9 '
-        r'<redacted>.\n'));
+    expect(
+      line,
+      contains(
+        r'Error opening input file http://127.0.0.1:9 '
+        r'<redacted>.\n',
+      ),
+    );
     expect(line, contains('Connection refused'));
     // And never on the wall: it is a sentence go2rtc is free to reword.
     expect(find.textContaining('ffmpeg'), findsNothing);
@@ -247,8 +278,10 @@ void main() {
 
   testWidgets('a build that cannot play video says so too, without inventing '
       'a go2rtc problem', (tester) async {
-    await openPopup(tester,
-        video: const VideoConfig(go2rtcUrl: 'http://hub:1984', open: noPlayer));
+    await openPopup(
+      tester,
+      video: const VideoConfig(go2rtcUrl: 'http://hub:1984', open: noPlayer),
+    );
 
     expect(find.text('Live view unavailable'), findsOneWidget);
     // No `stream_failed`: nothing failed, and no operator can fix a build
@@ -265,8 +298,10 @@ void main() {
     // existed. `panel.start platform=…` scrolled past hours ago, so the line
     // that has to tell "this build cannot play video" from "go2rtc is
     // healthy" is this one.
-    await openPopup(tester,
-        video: const VideoConfig(go2rtcUrl: 'http://hub:1984', open: noPlayer));
+    await openPopup(
+      tester,
+      video: const VideoConfig(go2rtcUrl: 'http://hub:1984', open: noPlayer),
+    );
 
     expect(popupLines('stream_open'), isEmpty);
 
@@ -279,9 +314,11 @@ void main() {
   testWidgets('the deadline is cancelled with the widget — a Timer outliving '
       'the tree fails this test by itself', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-        dismissAfter: const Duration(seconds: 30));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+    );
 
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
@@ -296,9 +333,11 @@ void main() {
   testWidgets('an auto-opened Popup closes itself; a tapped one waits for a '
       'person', (tester) async {
     final unprompted = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: unprompted.open),
-        dismissAfter: const Duration(seconds: 30));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: unprompted.open),
+      dismissAfter: const Duration(seconds: 30),
+    );
 
     await tester.pump(const Duration(seconds: 31));
     await tester.pumpAndSettle();
@@ -309,8 +348,10 @@ void main() {
     expect(unprompted.only.closes, 1);
 
     final tapped = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: tapped.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: tapped.open),
+    );
 
     await tester.pump(const Duration(minutes: 5));
 
@@ -321,10 +362,12 @@ void main() {
   testWidgets('a second reason to open the Popup extends it instead of '
       'tearing the stream down and paying for it again', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-        dismissAfter: const Duration(seconds: 30),
-        dismissCeiling: const Duration(minutes: 2));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
 
     await tester.pump(const Duration(seconds: 20));
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.extended);
@@ -346,17 +389,21 @@ void main() {
   testWidgets('a reason arriving faster than the deadline cannot hold the '
       'session open forever — the ceiling ends it', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-        dismissAfter: const Duration(seconds: 30),
-        dismissCeiling: const Duration(minutes: 2));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
 
     // A doorbell dinging every 25 s for a simulated hour. Before the ceiling
     // existed this ran to the end with one session open and never closed.
     var extensions = 0;
-    for (var elapsed = Duration.zero;
-        elapsed < const Duration(hours: 1);
-        elapsed += const Duration(seconds: 25)) {
+    for (
+      var elapsed = Duration.zero;
+      elapsed < const Duration(hours: 1);
+      elapsed += const Duration(seconds: 25)
+    ) {
       await tester.pump(const Duration(seconds: 25));
       if (extendDevicePopup('cam-porch') == DevicePopupExtension.extended) {
         extensions++;
@@ -369,8 +416,10 @@ void main() {
     // Four extensions get inside two minutes; the fifth falls past the
     // ceiling and is refused, which is what closed the session.
     expect(extensions, 4);
-    expect(popupLines('deadline_ceiling').single.fields,
-        {'device': 'cam-porch', 'open_s': 120});
+    expect(popupLines('deadline_ceiling').single.fields, {
+      'device': 'cam-porch',
+      'open_s': 120,
+    });
     // And once it is closed it is closed: the Popup is gone, so a later
     // reason finds nothing to extend and its caller has to push a fresh one.
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
@@ -379,15 +428,21 @@ void main() {
   testWidgets('a route stacked on top does not leave the Popup with no '
       'deadline at all', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-        dismissAfter: const Duration(seconds: 30),
-        dismissCeiling: const Duration(minutes: 2));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
 
-    final navigator =
-        tester.state<NavigatorState>(find.byType(Navigator).first);
-    navigator.push(MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: Text('something else'))));
+    final navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('something else')),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // The deadline fires against a route this Popup may not pop. It must not
@@ -396,8 +451,10 @@ void main() {
     // and a go2rtc session held until a human intervened.
     await tester.pump(const Duration(seconds: 45));
     expect(go2rtc.only.closes, 0);
-    expect(popupLines('dismiss_blocked').single.fields,
-        {'device': 'cam-porch', 'retry_s': 1});
+    expect(popupLines('dismiss_blocked').single.fields, {
+      'device': 'cam-porch',
+      'retry_s': 1,
+    });
 
     navigator.pop();
     await tester.pumpAndSettle();
@@ -411,15 +468,21 @@ void main() {
   testWidgets('the ceiling still applies while a Popup is stuck under another '
       'route, so a blocked Popup is not an unbounded one', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-        dismissAfter: const Duration(seconds: 30),
-        dismissCeiling: const Duration(minutes: 2));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
 
-    final navigator =
-        tester.state<NavigatorState>(find.byType(Navigator).first);
-    navigator.push(MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: Text('something else'))));
+    final navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('something else')),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // Extensions keep arriving at a rate that would re-arm the deadline
@@ -447,8 +510,10 @@ void main() {
     final go2rtc = FakeGo2rtc();
     // No `dismissAfter`: a person tapped this pin, so a person closes it
     // (D14).
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
 
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.held);
 
@@ -475,9 +540,13 @@ void main() {
       throw StateError('SyntaxError: cannot construct a WebSocket from $url');
     }
 
-    await openPopup(tester,
-        video: VideoConfig(
-            go2rtcUrl: 'http://admin:hunter2@hub:1984', open: refuses));
+    await openPopup(
+      tester,
+      video: VideoConfig(
+        go2rtcUrl: 'http://admin:hunter2@hub:1984',
+        open: refuses,
+      ),
+    );
 
     expect(attempts, 1);
     // Still a Dialog: the Device's name and a way out of it, which is the
@@ -487,10 +556,14 @@ void main() {
     expect(find.text('Live view unavailable'), findsOneWidget);
     // The type, never the message: a SyntaxError quotes the URL it refused,
     // and that URL is the one string here that can carry a password.
-    expect(popupLines('stream_failed').single.fields,
-        {'name': 'porch', 'reason': 'the opener threw StateError'});
-    expect(records.map((r) => r.toString()).join('\n'),
-        isNot(contains('hunter2')));
+    expect(popupLines('stream_failed').single.fields, {
+      'name': 'porch',
+      'reason': 'the opener threw StateError',
+    });
+    expect(
+      records.map((r) => r.toString()).join('\n'),
+      isNot(contains('hunter2')),
+    );
     // Nothing was ever opened, so nothing may claim to have been.
     expect(popupLines('stream_open'), isEmpty);
 
@@ -502,8 +575,10 @@ void main() {
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
 
     final healthy = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: healthy.open));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: healthy.open),
+    );
 
     expect(find.byType(Dialog), findsOneWidget);
     expect(healthy.opened, hasLength(1));
@@ -522,23 +597,32 @@ void main() {
     final go2rtc = FakeGo2rtc();
     final video = VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open);
     late BuildContext wall;
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(builder: (context) {
-        wall = context;
-        return const SizedBox.shrink();
-      }),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) {
+            wall = context;
+            return const SizedBox.shrink();
+          },
+        ),
+      ),
+    );
 
     // The older one is a person's: no deadline, so it stays until somebody
     // closes it (D14).
-    showDevicePopup(wall,
-        presentation: DevicePresentation(camera, null), video: video);
+    showDevicePopup(
+      wall,
+      presentation: DevicePresentation(camera, null),
+      video: video,
+    );
     await tester.pumpAndSettle();
-    showDevicePopup(wall,
-        presentation: DevicePresentation(camera, null),
-        video: video,
-        dismissAfter: const Duration(seconds: 30),
-        dismissCeiling: const Duration(minutes: 2));
+    showDevicePopup(
+      wall,
+      presentation: DevicePresentation(camera, null),
+      video: video,
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
     await tester.pumpAndSettle();
     expect(go2rtc.opened, hasLength(2));
 
@@ -562,10 +646,12 @@ void main() {
   testWidgets('a Popup already popping cannot be extended, so nobody opens a '
       'second session on a stream that still has one', (tester) async {
     final go2rtc = FakeGo2rtc();
-    await openPopup(tester,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-        dismissAfter: const Duration(seconds: 30),
-        dismissCeiling: const Duration(minutes: 2));
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
 
     await tester.tap(find.text('Close'));
     // One frame in: the pop has been requested, the exit animation is
@@ -598,8 +684,10 @@ void main() {
         'stream that is still running', (tester) async {
       final go2rtc = FakeGo2rtc();
       final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
-      final video =
-          VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open);
+      final video = VideoConfig(
+        go2rtcUrl: 'http://hub:1984',
+        open: keepAlive.open,
+      );
 
       await openPopup(tester, video: video);
       // The keep-alive is invisible to the three honest bodies: with a
@@ -620,8 +708,11 @@ void main() {
       await tester.tap(find.text('tap the pin'));
       await tester.pumpAndSettle();
 
-      expect(go2rtc.opened, hasLength(1),
-          reason: 'a second dial is the relaunch that loses the IDR race');
+      expect(
+        go2rtc.opened,
+        hasLength(1),
+        reason: 'a second dial is the relaunch that loses the IDR race',
+      );
       expect(find.text('Close'), findsOneWidget);
 
       // Inside the body, not `addTearDown`: the tree is disposed — and its
@@ -646,11 +737,12 @@ void main() {
       final go2rtc = FakeGo2rtc();
       final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
 
-      await openPopup(tester,
-          video:
-              VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open),
-          dismissAfter: const Duration(seconds: 30),
-          dismissCeiling: kLiveVideoMaxHeld);
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open),
+        dismissAfter: const Duration(seconds: 30),
+        dismissCeiling: kLiveVideoMaxHeld,
+      );
 
       // Held open past its deadline by a stream of dings, all the way to the
       // ceiling — the `kDoorbellPopupCeiling` scenario.
@@ -661,18 +753,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Close'), findsNothing, reason: 'the ceiling popped it');
-      expect(go2rtc.only.closes, 1,
-          reason: 'retired at the cap, not kept for another 20 s');
+      expect(
+        go2rtc.only.closes,
+        1,
+        reason: 'retired at the cap, not kept for another 20 s',
+      );
       keepAlive.dispose();
     });
 
-    testWidgets('a Popup nobody reopens still lets the stream go', (tester) async {
+    testWidgets('a Popup nobody reopens still lets the stream go', (
+      tester,
+    ) async {
       final go2rtc = FakeGo2rtc();
       final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
 
-      await openPopup(tester,
-          video:
-              VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open));
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open),
+      );
       await tester.tap(find.text('Close'));
       await tester.pumpAndSettle();
       await tester.pump(kLiveVideoLinger + const Duration(seconds: 1));
@@ -740,15 +838,19 @@ void main() {
         'Hub\'s still — captioned, so it cannot pass for live', (tester) async {
       final go2rtc = FakeGo2rtc();
 
-      await openPopup(tester,
-          device: doorbell,
-          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-          snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)),
+      );
 
       // Fetched from HA's camera-proxy, which serves the JPEG the Hub already
       // holds — no go2rtc frame-grab, so no Ring session (#177014).
-      expect(asked.single.toString(),
-          'http://hub:8123/api/camera_proxy/camera.front_door_snapshot');
+      expect(
+        asked.single.toString(),
+        'http://hub:8123/api/camera_proxy/camera.front_door_snapshot',
+      );
       expect(find.byType(Image), findsOneWidget);
       // ADR-0007: a picture that is not live may not be dressed as one. The
       // phase's own sentence stays on screen, over the still.
@@ -760,10 +862,12 @@ void main() {
         'a real picture of the porch for a sentence', (tester) async {
       final go2rtc = FakeGo2rtc();
 
-      await openPopup(tester,
-          device: doorbell,
-          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-          snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)),
+      );
       go2rtc.only.fails('go2rtc sent 6s of video the browser could not decode');
       await tester.pumpAndSettle();
 
@@ -776,10 +880,12 @@ void main() {
         'of the way', (tester) async {
       final go2rtc = FakeGo2rtc();
 
-      await openPopup(tester,
-          device: doorbell,
-          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-          snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        snapshots: snapshotsThat(() => SnapshotResult.ok(onePixelPng)),
+      );
       go2rtc.only.plays();
       await tester.pumpAndSettle();
 
@@ -789,48 +895,204 @@ void main() {
     });
 
     testWidgets('a Hub that will not serve the still leaves the Popup saying '
-        'exactly what it said before, and logs a status, never a message',
-        (tester) async {
+        'exactly what it said before, and logs a status, never a message', (
+      tester,
+    ) async {
       final go2rtc = FakeGo2rtc();
 
-      await openPopup(tester,
-          device: doorbell,
-          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-          snapshots: snapshotsThat(() => const SnapshotResult.refused('404')));
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        snapshots: snapshotsThat(() => const SnapshotResult.refused('404')),
+      );
 
       expect(find.byType(Image), findsNothing);
       expect(find.textContaining('Still'), findsNothing);
       expect(find.textContaining('Connecting to the camera'), findsOneWidget);
       // An HTTP code or a bare exception type — never exception text, which
       // embeds the request URL, and this request carries the Hub token.
-      expect(popupLines('snapshot_failed').single.fields,
-          {'entity': 'camera.front_door_snapshot', 'status': '404'});
+      expect(popupLines('snapshot_failed').single.fields, {
+        'entity': 'camera.front_door_snapshot',
+        'status': '404',
+      });
     });
 
     testWidgets('a Device with no snapshot bound never asks, and a Popup given '
         'no Hub never asks either', (tester) async {
       for (final scene in {
         'no snapshot binding': (Device d, SnapshotConfig? s) => (camera, s),
-        'no snapshots config': (Device d, SnapshotConfig? s) => (doorbell, null),
+        'no snapshots config': (Device d, SnapshotConfig? s) =>
+            (doorbell, null),
       }.entries) {
         final go2rtc = FakeGo2rtc();
         final (device, snapshots) = scene.value(
-            doorbell, snapshotsThat(() => SnapshotResult.ok(onePixelPng)));
+          doorbell,
+          snapshotsThat(() => SnapshotResult.ok(onePixelPng)),
+        );
         asked.clear();
 
-        await openPopup(tester,
-            device: device,
-            video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-            snapshots: snapshots);
+        await openPopup(
+          tester,
+          device: device,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          snapshots: snapshots,
+        );
 
         expect(asked, isEmpty, reason: scene.key);
         expect(find.byType(Image), findsNothing, reason: scene.key);
-        expect(find.textContaining('Connecting to the camera'), findsOneWidget,
-            reason: scene.key);
+        expect(
+          find.textContaining('Connecting to the camera'),
+          findsOneWidget,
+          reason: scene.key,
+        );
 
         await tester.tap(find.text('Close'));
         await tester.pumpAndSettle();
       }
     });
+  });
+
+  /// Variant D's pick, folded in: A's bigger card kept, B's circular
+  /// call-style mic standing in for A's full-width pill. The A/B/C/D
+  /// prototype it was chosen from was never committed and is gone —
+  /// `device_popup.dart`'s `_PushToTalkButton` doc is the only record of
+  /// the comparison left.
+  group('push-to-talk', () {
+    const doorbell = Device(
+      id: 'doorbell',
+      name: 'Ring Doorbell',
+      kind: DeviceKind.doorbell,
+      connectivity: Connectivity.cloud,
+      position: Offset.zero,
+      streamName: 'ring_doorbell',
+    );
+
+    const thermostat = Device(
+      id: 'thermostat',
+      name: 'Hallway Thermostat',
+      kind: DeviceKind.thermostat,
+      connectivity: Connectivity.local,
+      position: Offset.zero,
+    );
+
+    testWidgets('the doorbell Popup grows the button and its caption', (
+      tester,
+    ) async {
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+
+      expect(find.byKey(const ValueKey('push-to-talk')), findsOneWidget);
+      expect(
+        find.text('Push to talk — two-way audio isn\'t wired up yet'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'a camera Popup renders exactly what it always has — Ring is the '
+      'only kind with two-way audio to put a button on',
+      (tester) async {
+        final go2rtc = FakeGo2rtc();
+        await openPopup(
+          tester,
+          device: camera,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        );
+
+        expect(find.byKey(const ValueKey('push-to-talk')), findsNothing);
+        expect(find.textContaining('Push to talk'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a thermostat Popup — no video body at all — never grows one either',
+      (tester) async {
+        final go2rtc = FakeGo2rtc();
+        await openPopup(
+          tester,
+          device: thermostat,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        );
+
+        expect(find.byKey(const ValueKey('push-to-talk')), findsNothing);
+        expect(find.textContaining('Push to talk'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'holding the button swaps the mic icon and logs the press — and '
+      'never says "Talking…", which nothing here can back up yet',
+      (tester) async {
+        // The real Panel's size, not the 800×600 test default: at 800×600
+        // the button sits below the fold of the scrollable middle (the very
+        // case the next test is about), so a coordinate-driven press would
+        // be landing on a clipped, non-hit-testable spot rather than on the
+        // button — a fact about the window, not about the gesture this test
+        // means to drive.
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        );
+
+        expect(find.byIcon(Icons.mic_none), findsOneWidget);
+        expect(find.byIcon(Icons.mic), findsNothing);
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+        );
+        await tester.pump();
+
+        expect(find.byIcon(Icons.mic), findsOneWidget);
+        expect(find.byIcon(Icons.mic_none), findsNothing);
+        // ADR-0007's rule, applied to a control instead of a reading: a thing
+        // that is not happening yet may not look like it is. The caption says
+        // "not wired up yet" whether or not a thumb is on the glass — the
+        // button itself must not contradict it by claiming "Talking…".
+        expect(find.textContaining('Talking'), findsNothing);
+        expect(popupLines('talk_start').single.fields, {'device': 'doorbell'});
+
+        await gesture.up();
+        await tester.pump();
+
+        expect(find.byIcon(Icons.mic_none), findsOneWidget);
+        expect(find.byIcon(Icons.mic), findsNothing);
+        expect(popupLines('talk_stop').single.fields, {'device': 'doorbell'});
+      },
+    );
+
+    testWidgets(
+      'Close stays reachable even at a window short enough to make the '
+      'card scroll — it never lives inside the region that scrolls',
+      (tester) async {
+        // The default test surface (800×600) is exactly the case that first
+        // exposed this as a real bug: with Close inside the scrollable
+        // middle, a tap at the on-screen "Close" position missed — the
+        // Dialog stayed up, silently, on any window shorter than the real
+        // Panel's 1280×800.
+        final go2rtc = FakeGo2rtc();
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        );
+
+        await tester.tap(find.text('Close'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(Dialog), findsNothing);
+      },
+    );
   });
 }

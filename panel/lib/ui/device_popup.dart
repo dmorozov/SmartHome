@@ -207,7 +207,8 @@ class _DevicePopupBody extends StatefulWidget {
   State<_DevicePopupBody> createState() => _DevicePopupBodyState();
 }
 
-class _DevicePopupBodyState extends State<_DevicePopupBody> {
+class _DevicePopupBodyState extends State<_DevicePopupBody>
+    with SingleTickerProviderStateMixin {
   /// How often a Popup that could not pop itself tries again.
   ///
   /// A short fixed interval rather than a fresh [_DevicePopupBody.dismissAfter]:
@@ -247,9 +248,57 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
   /// timer because its tiles sit there for minutes; this does not.
   Uint8List? _still;
 
+  /// Whether this Popup is the one kind Ring actually offers two-way audio
+  /// on. `deviceIcon` (theme.dart) has exactly one `DeviceKind.doorbell`, so
+  /// this is the whole gate — a thermostat or a plain camera Popup never
+  /// sees the bigger card or the button below.
+  bool get _isDoorbell =>
+      widget.presentation.device.kind == DeviceKind.doorbell;
+
+  var _talking = false;
+
+  /// The push-to-talk pulse ring's clock. Declared for every Popup — a
+  /// mixin is per-class, not per-condition — but only ever started while a
+  /// doorbell Popup's button is actually held, so a thermostat Popup pays
+  /// nothing for it beyond one idle controller. See [_startTalking].
+  ///
+  /// Built in [initState], not as a `late final` field initializer: a field
+  /// initializer runs lazily on first read, and for every non-doorbell
+  /// Popup that first read used to be [dispose] itself — by which point the
+  /// element is deactivated and `vsync: this` has nothing to look up.
+  /// `initState` is the one place guaranteed to run exactly once, while the
+  /// widget is still mounted.
+  late final AnimationController _pulse;
+
+  /// **Stub.** No audio is captured or sent — Ring's two-way-audio API is a
+  /// separate piece of work from this button's layout, tracked in TODO.md.
+  /// What is real: the gesture, the pressed-state colour change, and the
+  /// pulse — the same kind of press feedback any button gives, not a claim
+  /// about what is happening at the door. What is deliberately *not* said
+  /// is "Talking…": ADR-0007's rule that a reading which is not live may
+  /// not be dressed as one applies here just as it does to the still photo
+  /// below the video — this button must not tell anyone at the wall that
+  /// their voice is reaching the porch when it is not. [_TalkCaption] is
+  /// where that stays said, always, not just while pressed.
+  void _startTalking() {
+    setState(() => _talking = true);
+    _pulse.repeat();
+    Log.debug('popup', 'talk_start', {'device': widget.presentation.device.id});
+  }
+
+  void _stopTalking() {
+    setState(() => _talking = false);
+    _pulse.stop();
+    Log.debug('popup', 'talk_stop', {'device': widget.presentation.device.id});
+  }
+
   @override
   void initState() {
     super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
     _session = _openVideo();
     _fetchStill();
     // Checked immediately as well as on change: an opener can answer
@@ -298,6 +347,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
     if (gone) _showing.remove(id);
     _deadline?.cancel();
     _ceiling?.cancel();
+    _pulse.dispose();
     final session = _session;
     if (session != null) {
       session.phase.removeListener(_reportFailure);
@@ -310,8 +360,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
       // somebody ever pastes a source spec where a name belongs, credentials
       // too). log.dart: **Never log a secret**.
       if (_announcedOpen) {
-        Log.info('popup', 'stream_closed',
-            {'name': _streamName, 'reason': 'popup_closed'});
+        Log.info('popup', 'stream_closed', {
+          'name': _streamName,
+          'reason': 'popup_closed',
+        });
       }
     }
     // Last, so that whoever is waiting on it learns this Popup is gone only
@@ -369,8 +421,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
       // (log.dart: **Never log a secret**). Reported through the ordinary
       // `failed` path rather than a line of its own, because the wall's answer
       // is the ordinary one — there is no picture, said plainly.
-      return SettledLiveVideoSession(LiveVideoPhase.failed,
-          failure: 'the opener threw ${error.runtimeType}');
+      return SettledLiveVideoSession(
+        LiveVideoPhase.failed,
+        failure: 'the opener threw ${error.runtimeType}',
+      );
     }
     if (session.phase.value == LiveVideoPhase.unsupported) {
       // `stream_open` would be a lie here: on every build that is not web the
@@ -419,8 +473,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
       // `status` is an HTTP code or an exception's bare type name — never
       // exception text, which embeds the request URL, and this request carries
       // the Hub token in its headers (`snapshot.dart`).
-      Log.warn('popup', 'snapshot_failed',
-          {'entity': entity, 'status': result.status});
+      Log.warn('popup', 'snapshot_failed', {
+        'entity': entity,
+        'status': result.status,
+      });
       return;
     }
     setState(() => _still = result.bytes);
@@ -431,8 +487,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
   /// documented hermetic default. Neither is a fault worth a `W` line —
   /// `popup.go2rtc` at boot already said which of the two the Panel is in.
   LiveVideoSession? _skip(Device device, String reason) {
-    Log.debug(
-        'popup', 'stream_skipped', {'device': device.id, 'reason': reason});
+    Log.debug('popup', 'stream_skipped', {
+      'device': device.id,
+      'reason': reason,
+    });
     return null;
   }
 
@@ -449,8 +507,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
     if (session == null || _reportedFailure) return;
     if (session.phase.value != LiveVideoPhase.failed) return;
     _reportedFailure = true;
-    Log.warn('popup', 'stream_failed',
-        {'name': _streamName, 'reason': session.failure ?? 'unknown'});
+    Log.warn('popup', 'stream_failed', {
+      'name': _streamName,
+      'reason': session.failure ?? 'unknown',
+    });
   }
 
   /// Answers [extendDevicePopup] for this Popup.
@@ -562,7 +622,9 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
     if (controller != null &&
         specOf(presentation.device.kind).family == StateFamily.thermostat) {
       return ThermostatControls(
-          controller: controller, device: presentation.device);
+        controller: controller,
+        device: presentation.device,
+      );
     }
     return Text(
       presentation.statusText,
@@ -575,72 +637,124 @@ class _DevicePopupBodyState extends State<_DevicePopupBody> {
     final presentation = widget.presentation;
     final device = presentation.device;
     final isLocal = device.connectivity == Connectivity.local;
-    return Dialog(
-      backgroundColor: PanelTheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+    // The doorbell is the one Popup with somewhere to grow into: it is the
+    // only kind Ring offers two-way audio on, so it is the only one that
+    // gains a button — and the bigger card below is sized for that button,
+    // not decoration for its own sake. Every other kind renders exactly the
+    // numbers it always has.
+    final isDoorbell = _isDoorbell;
+    final avatarSize = isDoorbell ? 64.0 : 44.0;
+    final nameSize = isDoorbell ? 24.0 : 17.0;
+    final subtitleSize = isDoorbell ? 14.0 : 12.0;
+    final header = Row(
+      children: [
+        Container(
+          width: avatarSize,
+          height: avatarSize,
+          decoration: BoxDecoration(
+            color: PanelTheme.surfaceRaised,
+            shape: BoxShape.circle,
+            boxShadow: PanelTheme.raised(8),
+          ),
+          child: Center(
+            child: Icon(
+              deviceIcon(device.kind),
+              color: PanelTheme.ink,
+              size: isDoorbell ? 30 : null,
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
           child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: PanelTheme.surfaceRaised,
-                      shape: BoxShape.circle,
-                      boxShadow: PanelTheme.raised(8),
-                    ),
-                    child: Center(
-                      child: Icon(deviceIcon(device.kind),
-                          color: PanelTheme.ink),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          device.name,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: PanelTheme.ink,
-                          ),
-                        ),
-                        Text(
-                          isLocal ? 'Local Device' : 'Cloud Device',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isLocal
-                                ? const Color(0xFF4CAF7D)
-                                : PanelTheme.inkFaint,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              Text(
+                device.name,
+                style: TextStyle(
+                  fontSize: nameSize,
+                  fontWeight: FontWeight.w700,
+                  color: PanelTheme.ink,
+                ),
               ),
-              const SizedBox(height: 18),
-              _body(),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Close'),
+              Text(
+                isLocal ? 'Local Device' : 'Cloud Device',
+                style: TextStyle(
+                  fontSize: subtitleSize,
+                  color: isLocal
+                      ? const Color(0xFF4CAF7D)
+                      : PanelTheme.inkFaint,
                 ),
               ),
             ],
           ),
         ),
+      ],
+    );
+    // Everything that can grow tall: the video and, on a doorbell, its
+    // button. Kept apart from [header] and the Close row below so those two
+    // can be wrapped in [Flexible] + `SingleChildScrollView` *without*
+    // taking the Close button down with them — see the doorbell branch
+    // below for why that matters.
+    final middle = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _body(),
+        if (isDoorbell) ...[
+          const SizedBox(height: 6),
+          _PushToTalkButton(
+            talking: _talking,
+            pulse: _pulse,
+            onStart: _startTalking,
+            onStop: _stopTalking,
+          ),
+          const SizedBox(height: 6),
+          const _TalkCaption(),
+        ],
+      ],
+    );
+    final closeRow = Align(
+      alignment: Alignment.centerRight,
+      child: TextButton(
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Text('Close'),
+      ),
+    );
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        header,
+        SizedBox(height: isDoorbell ? 12 : 18),
+        // Doorbell only: the bigger card plus its button is tall enough to
+        // outgrow a short window (a resized dev browser, a widget test's
+        // default surface) — and, measured, tall enough to graze even the
+        // Panel's real 1280×800 by a few px once the header, the two gaps
+        // around the button and the Close row are all accounted for. Every
+        // px trimmed from those gaps above and in [middle] pays down that
+        // margin directly. `Flexible` + a scroll view is what makes the
+        // remainder harmless: the last few px of the caption scroll under
+        // the fold on the tightest windows rather than throwing a render
+        // overflow. Stops at the middle on purpose — Close sits *outside*
+        // the scrollable region, always at a fixed spot, never the thing
+        // that scrolls out of reach behind content nobody asked to see more
+        // of. Every other kind is unchanged — its card has never come close
+        // to overflowing, so it keeps hugging its content exactly as before.
+        if (isDoorbell)
+          Flexible(child: SingleChildScrollView(child: middle))
+        else
+          middle,
+        SizedBox(height: isDoorbell ? 8 : 12),
+        closeRow,
+      ],
+    );
+    return Dialog(
+      backgroundColor: PanelTheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: isDoorbell ? 760 : 420),
+        child: Padding(padding: const EdgeInsets.all(24), child: content),
       ),
     );
   }
@@ -671,8 +785,7 @@ class _LiveVideoBox extends StatelessWidget {
     }
     return ValueListenableBuilder<LiveVideoPhase>(
       valueListenable: session.phase,
-      builder: (context, phase, _) =>
-          _VideoFrame(child: _body(phase, session)),
+      builder: (context, phase, _) => _VideoFrame(child: _body(phase, session)),
     );
   }
 
@@ -690,8 +803,8 @@ class _LiveVideoBox extends StatelessWidget {
       // that person is reading journald, not standing in the hall. What the
       // wall owes them is that there is no picture, said plainly instead of
       // shown as a black rectangle they would stand there waiting on.
-      LiveVideoPhase.failed || LiveVideoPhase.unsupported =>
-        'Live view unavailable',
+      LiveVideoPhase.failed ||
+      LiveVideoPhase.unsupported => 'Live view unavailable',
     };
     final icon = switch (phase) {
       LiveVideoPhase.failed || LiveVideoPhase.unsupported => Icons.videocam_off,
@@ -772,10 +885,7 @@ class _VideoFrame extends StatelessWidget {
       borderRadius: BorderRadius.circular(16),
       child: AspectRatio(
         aspectRatio: 16 / 9,
-        child: ColoredBox(
-          color: const Color(0xFF2A2F3E),
-          child: child,
-        ),
+        child: ColoredBox(color: const Color(0xFF2A2F3E), child: child),
       ),
     );
   }
@@ -805,6 +915,99 @@ class _VideoNotice extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The doorbell Popup's push-to-talk control: a call-style circular button
+/// with a pulsing ring while held.
+///
+/// The pick from an A/B/C/D throwaway prototype comparison. The prototype
+/// itself was never committed and was deleted once D won, so it left no
+/// trace to point to — what is here is the whole record of the comparison
+/// now. A's bigger card, kept, with B's circular mic swapped in for A's
+/// full-width pill. [pulse] is owned by the caller, not this widget: it
+/// lives beside [talking] in [_DevicePopupBodyState] so a rebuild here (the
+/// ring's own `AnimatedBuilder`) never restarts or re-creates the ticker
+/// driving it.
+class _PushToTalkButton extends StatelessWidget {
+  const _PushToTalkButton({
+    required this.talking,
+    required this.pulse,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final bool talking;
+  final AnimationController pulse;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: GestureDetector(
+        key: const ValueKey('push-to-talk'),
+        onTapDown: (_) => onStart(),
+        onTapUp: (_) => onStop(),
+        onTapCancel: onStop,
+        child: SizedBox(
+          width: 140,
+          height: 140,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (talking)
+                AnimatedBuilder(
+                  animation: pulse,
+                  builder: (context, _) => Container(
+                    width: 96 + 44 * pulse.value,
+                    height: 96 + 44 * pulse.value,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: const Color(
+                        0xFFE05252,
+                      ).withValues(alpha: .35 * (1 - pulse.value)),
+                    ),
+                  ),
+                ),
+              Container(
+                width: 96,
+                height: 96,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: talking ? const Color(0xFFE05252) : PanelTheme.accent,
+                  border: Border.all(color: PanelTheme.surfaceRaised, width: 3),
+                  boxShadow: PanelTheme.raised(10),
+                ),
+                child: Icon(
+                  talking ? Icons.mic : Icons.mic_none,
+                  color: Colors.white,
+                  size: 40,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The honest label under the button, always on screen and never dependent
+/// on [_DevicePopupBodyState._talking] — see [_DevicePopupBodyState._startTalking]
+/// for why the button itself never claims "Talking…". Same rule ADR-0007
+/// applies to the still photo below the video, applied to a control instead
+/// of a reading: a thing that is not happening yet may not look like it is.
+class _TalkCaption extends StatelessWidget {
+  const _TalkCaption();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'Push to talk — two-way audio isn\'t wired up yet',
+      textAlign: TextAlign.center,
+      style: TextStyle(fontSize: 11, color: PanelTheme.inkFaint),
     );
   }
 }
