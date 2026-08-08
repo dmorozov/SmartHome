@@ -79,7 +79,7 @@ TEST_DOCKER_SOCKET=1 ./run.sh up   # socket at /docker.sock, if you mean it
 **Why it was harmless and stopped being.** The section below frames that socket
 as Docker Desktop's — a disposable Linux VM on a Mac, where "the host's daemon"
 was itself a throwaway. That is no longer the machine this runs on. Under
-[ADR-0008](../../docs/adr/0008-hub-runs-in-docker-on-the-appliance.md) the same
+[ADR-0008](../../docs/adr/0008-device-integrations-on-a-linux-host-never-macos.md) the same
 laptop is the Hub host, so from phase 1 onward that socket is **root-equivalent
 access to the daemon running Home Assistant, Mosquitto, ring-mqtt and
 go2rtc** — handed to a `--privileged` container whose whole purpose is running

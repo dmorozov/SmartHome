@@ -1,13 +1,16 @@
 # 5 — The cloud fleet: Ring, Wyze, and the account devices
 
-**None of this is set up. This chapter is instructions, not an as-built
-record.** Every earlier chapter describes something that exists on this
-machine and was measured. This one describes work that has not been done:
-no Ring account is authenticated, no camera streams, HACS is not
-installed, and no LG / Whisker / Petlibro / Emporia entity exists in Home
-Assistant. Where a value has to come off the operator's own device or
-vendor account, it says so; where the repo's research left something
-open, it is marked UNVERIFIED rather than guessed into a step.
+**Mostly instructions, not an as-built record — three exceptions below are
+done and measured.** Every earlier chapter describes something that
+exists on this machine and was measured. This one still describes work
+that has not been done for most of the fleet: no Wyze camera stream, no
+LG / Whisker / Petlibro entity exists in Home Assistant. Three parts of
+this chapter *are* as-built, each with its own verified entry: **Ring**
+(§1, authenticated 2026-08-05), **HACS** (§3, installed and authenticated
+2026-08-07), and **Emporia** (§7, authenticated 2026-08-08). Where a value
+has to come off the operator's own device or vendor account, it says so;
+where the repo's research left something open, it is marked UNVERIFIED
+rather than guessed into a step.
 
 Research base: [`../../docs/research/hub-and-device-integrations.md`](../../docs/research/hub-and-device-integrations.md)
 (cited as §3.x). Build plans:
@@ -34,7 +37,7 @@ cannot be automated from an agent session.
 | LG washer + dryer (`lg_thinq`) | no | n/a | 5 | cloud |
 | Litter-Robot 5 Pro (`litterrobot`) | no | n/a | 5 | cloud |
 | Petlibro One + Granary (HACS) | no | n/a | 5 | cloud |
-| Emporia Vue 3 + plugs (HACS) | no | n/a | 5 | cloud now, local after reflash (D2) |
+| Emporia Vue 3 + plugs (HACS) | **yes** — added and authenticated 2026-08-08 (§7) | **yes** — entry `01KZFNVXV01M73F63FS8EQ19S4`, `state: loaded`, 58 entities across 19 devices | 5 | cloud now, local after reflash (D2) |
 | SmartThings oven | no | n/a | **none** | cloud — D3, a decision, not a build task |
 
 ring-mqtt 5.9.3 is the only one already running, because phase 1 put it in
@@ -100,9 +103,10 @@ docker logs -f ring-mqtt
 ```
 
 On success ring-mqtt writes `/data/ring-state.json` — on the host that is
-`hub/ring-mqtt-data/ring-state.json`, gitignored by the `ring-mqtt-data/*`
-rule — and begins device discovery. Because MQTT discovery is on, the
-doorbell materialises in HA on its own; no config flow to drive.
+`~/.sh_keys/ring-mqtt/ring-state.json` (was `hub/ring-mqtt-data/` before
+ADR-0010 moved it outside the repo entirely) — and begins device discovery.
+Because MQTT discovery is on, the doorbell materialises in HA on its own;
+no config flow to drive.
 
 ### 1.2 The refresh token IS the re-pairing cliff
 
@@ -110,10 +114,13 @@ doorbell materialises in HA on its own; no config flow to drive.
 this stack whose loss costs a human being a live 2FA session, and it
 therefore governs three operational rules:
 
-1. **Back it up with the rest of the runtime state.** The migration list
-   in [`../../hub/README.md`](../../hub/README.md) names `ha-config/.storage`,
-   `z2m-data`, and Mosquitto persistence; `ring-mqtt-data/` belongs on
-   that list too, and does not currently appear on it.
+1. **Back it up with the rest of the runtime state.** Since ADR-0010,
+   `~/.sh_keys/` (which now holds `ring-mqtt/ring-state.json`) is its own
+   backup unit, separate from the `hub/ha-config/.storage` /
+   `z2m-data` / Mosquitto-persistence archive named in
+   [`../../hub/README.md`](../../hub/README.md) — Ch. 2 §8 gives both
+   tarball recipes. Neither is on a repeatable schedule yet (TODO, "a
+   repeatable backup step" in `COMMISSIONING.md`'s Status).
 2. **Never restore a stale copy over a newer one, and never run a second
    ring-mqtt against the same Ring account.** ring-mqtt refreshes the
    token in place; a rolled-back or duplicated state file is expected to
@@ -589,7 +596,7 @@ file an upstream issue. Do not substitute a stand-in.
 
 ---
 
-## 7. Emporia Vue 3 + Emporia plugs — HACS, cloud for now (D2)
+## 7. Emporia Vue 3 + Emporia plugs — HACS, cloud for now (D2) — DONE 2026-08-08
 
 Emporia publishes no API and **no Vue device has any local network
 interface** on stock firmware — the vendor says so itself (§3.4). So the
@@ -599,16 +606,72 @@ stock path is cloud, at 1-minute granularity.
 day, deliberately deferred.** It needs the case open and a wired UART
 flash — it must not block this plan.
 
-The integration is `magico13/ha-emporia-vue`, and per §3.4 it is **not in
-the HACS default store** — add it as a custom repository. Credentials are
-the Emporia app account's email and password. Vue 3 arrives as per-circuit
-power sensors; Emporia smart plugs arrive as switches with power readings.
+### 7.1 What was done
+
+1. **Custom repository, added via HACS's own dialog** (three-dot menu →
+   **"Custom repositories"** — label quoted from the live, installed
+   `hacs_frontend` bundle, not guessed): URL
+   `https://github.com/magico13/ha-emporia-vue`, category **Integration**
+   (`common.type.integration` in the same bundle). Per §3.4 this
+   integration is **not in HACS's default store**, so this step is
+   mandatory, unlike a normal HACS install.
+2. **Download**, then the HACS-raised **Repairs** issue ("Restart
+   required… click submit to restart now") worked through, or a plain
+   `docker restart homeassistant` — same devcontainer path caveat as the
+   HACS install itself (§3.1).
+3. **Settings → Devices & Services → Add Integration → "Emporia Vue"** —
+   the owner typed the Emporia app account's **email and password** into
+   the HA UI directly; nothing was pasted into an agent session.
+
+### 7.2 What it produced — verified against production, not assumed
+
+`config_entries/get` against **production** (port 8123, not 18123 — see
+the two-instances warning up top): entry `01KZFNVXV01M73F63FS8EQ19S4`,
+domain `emporia_vue`, `state: loaded`, `title: "den.morozov@gmail.com
+(208781)"`.
+
+**58 entities** landed, across **19 devices** in the registry — 16 CT
+channels on the Vue 3 itself, plus the two channels the owner has already
+named (`A/C`, `Balance`), plus one separate physical Emporia smart plug
+(`Computer`) — grouped below by what they represent rather than listed
+device-by-device, since 16 of the 19 currently share one vendor-default
+name (`config/device_registry/list`, cross-referenced by `device_id`; the
+entity list alone doesn't distinguish them):
+
+| Device | Model | What it is | Entities |
+|---|---|---|---|
+| Home Main Panel | `VUE003` (the Vue 3 itself) | The whole panel's own reading — the **only one of the 16 numbered channels that carries the real total**, not a per-circuit tap | `sensor.home_main_panel_power_minute_average` (768.5 W live) + 15 more identically-named siblings (`_2`…`_16`) for the other 15 CT channels, none yet renamed off the Emporia default in the vendor app |
+| A/C | `VUE003` (a channel on the same Vue 3) | A branch circuit the owner has already named in the Emporia app | `sensor.a_c_power_minute_average`, `_energy_this_month`, `_energy_today` |
+| Balance | `VUE003` (a channel on the same Vue 3) | Another owner-named branch circuit | `sensor.balance_power_minute_average`, `_energy_this_month`, `_energy_today` |
+| Computer | `SSO001` (an Emporia smart plug, a separate physical device) | A switched outlet with its own power reading | `switch.computer` (currently `on`), `sensor.computer_power_minute_average`, `_energy_this_month`, `_energy_today` |
+
+**Picking `sensor.home_main_panel_power_minute_average` for the
+`energy-monitor` Key was not a naming guess.** The 16 numbered
+`home_main_panel_power_minute_average*` entities are 16 **separate**
+devices in the registry (`config/device_registry/list` — each its own
+`device_id`, all model `VUE003`), every one still carrying the vendor's
+default device name, `Home Main Panel` — so the registry alone says only
+"this is a Vue 3 channel," not which channel is the whole-panel total.
+That took an arithmetic check instead: the unsuffixed entity
+(768.544044494629 W) equals the sum of the other 15 numbered channels
+(744.304109… W) **plus** `sensor.balance_power_minute_average`
+(24.239935… W) to within floating-point noise (`4.5e-13`) — i.e. "Balance"
+is Emporia's own computed remainder, mains total minus every individually
+clamped branch, and the unsuffixed channel is the only one whose value is
+consistent with being that mains total rather than one more branch.
 
 ```yaml
   energy-monitor:
-    entity: sensor.<vue3>_total_power     # W-valued; PowerState kind
+    entity: sensor.home_main_panel_power_minute_average   # W-valued; PowerState kind
     connectivity: cloud
 ```
+
+**Not yet done, and it blocks anything below the whole-house total:** the
+16 main-panel channels are still on Emporia's default naming — only two
+circuits (`A/C`, `Balance`) have been named by the owner in the Emporia
+app so far. Binding any individual breaker to a Panel Key needs that
+channel named first; until then `energy-monitor` is the only usable pin
+out of this integration.
 
 **Foot-gun before binding an Emporia plug to an `outlet-*` Key:** per
 ADR-0006 togglability follows from the Device kind, so an `outlet` Key is
@@ -658,21 +721,27 @@ Hub cannot see. The dated warning also lives in
 
 ## 9. Where the credentials land
 
-No credential in this chapter belongs in a tracked file. For reference,
-by path:
+No credential in this chapter belongs in a tracked file. Since ADR-0010,
+that means `~/.sh_keys/` outside the repo for anything this stack owns the
+path for; everything a vendor issues through an HA config-flow UI (Ring,
+LG, Whisker, Petlibro, Ecobee, Emporia) lives in HA's own
+`hub/ha-config/.storage` instead, deliberately not moved there — see
+[ADR-0010](../../docs/adr/0010-secrets-consolidated-outside-the-repo.md)
+for why. For reference, by path:
 
 | Secret | Path | Notes |
 |---|---|---|
-| Ring refresh token | `hub/ring-mqtt-data/ring-state.json` | 0600, gitignored; the only unrecoverable one |
-| ring-mqtt's broker password | `hub/ring-mqtt-data/config.json` | gitignored; the `ring` broker user |
-| Broker user passwords | `hub/.broker-passwords.env` | 0600, gitignored (`*.env`) |
-| Panel's long-lived HA token | `hub/token` | 0600, gitignored |
-| Wyze bridge account + API key | a new `hub/*.env` | gitignored by the `*.env` rule |
-| LG PAT, Whisker / Petlibro / Emporia logins | `hub/ha-config/.storage` | typed into the HA UI only; gitignored |
-| Camera RTSP credentials | `hub/go2rtc/go2rtc.yaml` | gitignored — stream URLs embed them |
+| Ring refresh token | `~/.sh_keys/ring-mqtt/ring-state.json` | 0600; the only unrecoverable one (was `hub/ring-mqtt-data/`, ADR-0010) |
+| ring-mqtt's broker password | `~/.sh_keys/ring-mqtt/config.json` | the `ring` broker user (was `hub/ring-mqtt-data/`, ADR-0010) |
+| Broker user passwords | `~/.sh_keys/broker-passwords.env` | 0600 (was `hub/.broker-passwords.env`, ADR-0010) |
+| Panel's long-lived HA token | `~/.sh_keys/token` | 0600 (was `hub/token`, ADR-0010) |
+| Wyze bridge account + API key | `~/.sh_keys/wyze.env` | ADR-0010; the API key pair is in, the bridge account itself is not yet (only needed if the docker-wyze-bridge path is chosen over RTSP-flash) |
+| Ring, LG PAT, Whisker / Petlibro / Ecobee / Emporia logins | `hub/ha-config/.storage` | typed into the HA UI only; gitignored — HA owns this format internally, so it stays out of `~/.sh_keys` on purpose |
+| Camera RTSP credentials | `~/.sh_keys/go2rtc/go2rtc.yaml` | stream URLs embed them (was `hub/go2rtc/go2rtc.yaml`, ADR-0010) |
 
-Whatever backup covers `hub/ha-config/.storage` must cover
-`hub/ring-mqtt-data/` too, for the reason in §1.2.
+Whatever backup covers `hub/ha-config/.storage` must cover `~/.sh_keys/`
+too, for the reason in §1.2 — as two separate tarballs (Ch. 2 §8), since
+ADR-0010 moved the latter fully outside `hub/`.
 
 ---
 
