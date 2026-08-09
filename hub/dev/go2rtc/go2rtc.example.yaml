@@ -77,13 +77,20 @@ streams:
   ring: ring:?device_id=90486cf35236&camera_id=319156885&refresh_token=INSERT_TOKEN_HERE
 
   # The microphone this machine talks THROUGH — the `src` of the TALK call
-  # above. Commented out on purpose: it captures via PipeWire's PulseAudio
-  # socket, and this container has neither the socket mounted nor PULSE_SERVER
-  # set (verified: `docker inspect go2rtc-dev` shows one bind, ./go2rtc only).
-  # Uncommenting it without those would give a stream that fails only when
-  # somebody presses talk, which is the worst moment to find out. See
-  # docs/plans/ring-audio-stack.md — the compose change has to be applied from
-  # a HOST shell, never `docker compose up` from inside the devcontainer.
+  # above. It captures via PipeWire's PulseAudio socket, so it needs BOTH the
+  # socket mounted and PULSE_SERVER set on the container (README Step 10).
+  # Enabling it without those gives a stream that fails only when somebody
+  # presses talk, which is the worst moment to find out — and that is exactly
+  # what happened on 2026-08-09, when Step 11 was applied and Step 10 was not.
+  #
+  # The compose half now exists in hub/dev/compose.yaml. 🔴 It only takes effect
+  # on a RECREATE from a HOST shell (`cd hub/dev && docker compose up -d go2rtc`)
+  # — mounts and environment are fixed at container-create time, so `docker
+  # restart` will not do it, and `docker compose` from inside the devcontainer
+  # resolves relative bind mounts against a path the host daemon does not have.
+  #
+  # Left commented here because this is the STARTER file: a fresh checkout has
+  # no talkback until somebody works Steps 10-11 deliberately.
   #
   # mic: >-
   #   exec:ffmpeg -re -f pulse -i default -c:a libopus -b:a 48k

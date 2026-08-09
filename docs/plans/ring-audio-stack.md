@@ -516,21 +516,39 @@ exist and come back after a restart with nobody logged in. What is left:
   and it belongs with item 4, not here, because the answer may be a line in
   `cage@.service.j2`.
 
-### 2. 🔴 Watchdog / dead-man switch — mandatory, not optional
+### 2. 🟢 Watchdog / dead-man switch — **built 2026-08-09**
 §1.8 of the lab plan warned go2rtc has **no idle timeout on internal producers**,
 and this session proved it for real: a leaked `curl` consumer held the doorbell in
 live view for ~30 minutes and pulled 160 MB before anyone noticed
-(RESULTS.md, incident section). Requirements:
+(RESULTS.md, incident section).
 
-- Reap **orphaned consumers**, not just stop the mic. A dead client keeps the Ring
-  producer alive indefinitely.
-- Fire `dst=ring&src=` liberally — it is idempotent (verified 40/40 → HTTP 200).
-- Stop unconditionally on popup close **and** app shutdown, and once at startup to
-  clear anything a previous crash left open.
-- Absolute talk cap (30–60 s).
-- **Monitor the consumer list, not just the process list** — the checks used
-  throughout the lab looked only for `ffmpeg` and would never have caught a stray
-  `curl`.
+Shipped as [`hub/talk-watchdog/`](../../hub/talk-watchdog/README.md) — one
+stdlib-only Python file, wired into `hub/dev/compose.yaml` as `talk-watchdog`,
+24 tests against a scripted fake go2rtc. Against the requirements as written:
+
+| Requirement | Status |
+|---|---|
+| Fire `dst=ring&src=` liberally — idempotent (40/40 → 200) | ✅ |
+| Stop once at startup, to clear what a crash left open | ✅ |
+| Absolute talk cap (30–60 s) | ✅ `TALK_CAP_S`, default 45 |
+| Monitor the **consumer list**, not the process list | ✅ |
+| Stop unconditionally on popup close **and** app shutdown | ⬜ Panel-side, item 4 below |
+| Reap **orphaned consumers** | 🔴 **impossible as specified** — see below |
+
+🔴 **"Reap orphaned consumers" cannot be met over HTTP, and this requirement
+should be re-read as written.** go2rtc exposes **no consumer-kill endpoint**;
+the leaked `curl` was removed with `pkill -9 -x curl` *inside the container*,
+and `PUT`/`DELETE` on `/api/streams` are worse than useless — they rewrite
+`go2rtc.yaml` on disk, token included, and stop no producer. The watchdog
+therefore **alerts on a stalled consumer rather than reaping it**. Three ways to
+close the gap, all owner decisions: own every consumer (which also settles item
+4 below), restart the go2rtc container (drops every camera in the house), or
+accept it.
+
+⚠️ Also note what the stop call can and cannot reach: it stops producers pushed
+*into* `ring`, so it reliably closes a wedged microphone. Whether it clears a
+ghost `ring:` producer — go2rtc#1961, which never reproduced in the lab — is
+**unverified**.
 
 ### 3. Echo cancellation — only once inbound playback ships
 There is **no echo path today** (the Panel plays MJPEG, which carries no audio).
@@ -626,30 +644,35 @@ gst-launch-1.0 rtspsrc location=rtsp://<go2rtc>:8554/ring protocols=tcp latency=
   audio/x-raw,format=F32LE,rate=48000,channels=2 ! wavenc ! filesink location=/tmp/t.wav
 ```
 
-**Reaching the right go2rtc.** The workspace sits on `smarthome-dev-hub_default`,
-where `go2rtc-dev` offers only `ring_doorbell` — and that is
-`rtsp://ring-mqtt:8554/…`, the **video-only** ring-mqtt restream, not the native
-`ring:` source. The stream that matters lives in the lab container
-`go2rtc-ring-test`, on its own compose network. For the test, join it:
+**Reaching the right go2rtc.** ✅ **Simplified 2026-08-09 — the paragraph that
+used to live here is obsolete.** The `ring:` source now has its permanent home
+in the dev Hub's own go2rtc, so there is no lab container to join and no
+`docker network connect` step:
 
 ```sh
-docker network connect smarthome-dev-hub_default go2rtc-ring-test
+rtsp://go2rtc-dev:8554/ring        # from the devcontainer
+rtsp://127.0.0.1:28554/ring        # from a host shell
 ```
 
-Runtime-only, reversible with `network disconnect`. 🔴 **Once the lab directories
-are deleted (§6 item 7), the `ring:` source needs a permanent home in the dev
-Hub's own go2rtc** — otherwise this verification cannot be re-run, and the dev
-stack has no way to exercise talkback at all. That is a new dependency between
-item 7 and everything else.
+The old instruction — that the stream lived in `go2rtc-ring-test` on its own
+compose network and had to be joined with
+`docker network connect smarthome-dev-hub_default go2rtc-ring-test` — is
+**stale**; that container is not running. `go2rtc-dev`'s `ring_doorbell` is
+still the wrong target: it is `rtsp://ring-mqtt:8554/…`, the **video-only**
+ring-mqtt restream. `ring` is the one with the backchannel. Setup runbook:
+[`hub/dev/go2rtc/README.md`](../../hub/dev/go2rtc/README.md).
 
-⚠️ **And there is a version skew nobody has looked at.** Everything in ADR-0011
-was measured against `go2rtc-ring-test`, which runs **1.9.14**. Both
-`hub/compose.yaml` and `hub/dev/compose.yaml` pin **1.9.10**, deliberately. The
-ADR's own "re-check this decision if" clause is about the `ring:` module being
-abandoned and fragile — which makes a four-patch difference in exactly that
-module the wrong thing to assume away. Whoever moves the source into the dev Hub
-should either bump that stack's pin or re-run the dial on 1.9.10 first, and
-record which.
+✅ **The version skew is settled for inbound, and the pin does not need
+bumping.** This used to warn that nobody had looked at it. Measured on
+`go2rtc-dev` (**1.9.10**) on 2026-08-09, one live view: `ring:` dialled with
+`codec_name=h264` and `codec_name=opus`/`channels=2`, and 33.3 s of inbound
+audio decoded through GStreamer with **0 out-of-range samples**. Source-side
+the talkback path is *byte-identical* v1.9.10↔v1.9.14 — `pkg/ring`'s
+`AddTrack`, the speaker-enable `camera_options` message, the SDP offer, and
+`internal/streams/api.go`'s `POST dst/src` branch — with all three deltas in
+that range sitting before audio, so a 1.9.10 failure would surface as a
+dial/auth error rather than bad audio. ⚠️ **Talkback (V6) has still not been
+run on 1.9.10**; it needs somebody at the door.
 
 Then measure `/tmp/t.wav` the way RESULTS.md does — **count samples with
 `|v| > 1.0`**. The pass criterion is objective:

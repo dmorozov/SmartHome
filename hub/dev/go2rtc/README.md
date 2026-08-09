@@ -115,9 +115,10 @@ docker inspect go2rtc-dev --format \
 curl -s "$G2/api/streams"
 ```
 
-Expect exactly one bind ending `hub/dev/go2rtc -> /config`, and a JSON body
-containing `selftest`. If the path shows `ring-audio-test`, you are on the lab
-container, not this one.
+Expect a bind ending `hub/dev/go2rtc -> /config`, and a JSON body containing
+`selftest`. If the path shows `ring-audio-test`, you are on the lab container,
+not this one. (Once Step 10 is applied there is a **second** bind, the
+PulseAudio socket — expected, not a sign you are on the wrong container.)
 
 Open `http://localhost:11984` in a host browser and play `selftest`. A moving
 picture there means the container, the ports, the WebRTC candidate and
@@ -230,14 +231,24 @@ PulseAudio socket. Out of the box `go2rtc-dev` has neither that socket mounted
 nor `PULSE_SERVER` set.
 
 Add to the `go2rtc` service in `hub/dev/compose.yaml`, mirroring what
-`ring-audio-test/compose.yaml` already proves works:
+`ring-audio-test/compose.yaml` already proves works — an `environment:` block,
+and **one more entry on the `volumes:` list the service already has**:
 
 ```yaml
     environment:
       PULSE_SERVER: unix:/run/user/1000/pulse/native
     volumes:
-      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse
+      - ./go2rtc:/config                                          # already there
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse   # add this
 ```
+
+🔴 **Merge that second entry into the existing list; do not paste a second
+`volumes:` key.** YAML is last-wins on duplicate keys, so a second `volumes:`
+silently discards `./go2rtc:/config` — and go2rtc then starts with **no config
+at all**, which looks like "my streams vanished", not like a YAML mistake.
+
+⚠️ **Applied as of 2026-08-09** (unstaged). Verify rather than re-apply:
+`git diff -- hub/dev/compose.yaml`.
 
 ## Step 11 — (talkback) Enable the `mic` stream and recreate
 
@@ -311,9 +322,10 @@ docker exec go2rtc-dev sh -c 'timeout 15 ffprobe -v error -rtsp_transport tcp \
 ```
 
 **Expect:** `codec_name=h264` and `codec_name=opus` with `channels=2`.
-**If it reports nothing**, suspect the version skew first — every talkback
-measurement was taken on go2rtc **1.9.14** and this container runs **1.9.10**
-(see *Troubleshooting*).
+✅ Measured exactly that on **1.9.10** on 2026-08-09, so a null result here is
+no longer "probably the version skew" — see *Troubleshooting*, *version skew*,
+which now records what was and was not settled. Suspect the token or the
+network first.
 
 ### V5 — Inbound audio is audible and clean
 
@@ -501,6 +513,7 @@ recorded beside it in `RESULTS.md`.
 | [`docs/plans/ring-audio-stack.md`](../../../docs/plans/ring-audio-stack.md) | The spec — packages, the Appliance's audio stack, verification procedure. §0 is a status table. |
 | [`docs/plans/ring-audio-next-session.md`](../../../docs/plans/ring-audio-next-session.md) | The work queue, in priority order, with what is blocked on whom. |
 | [`docs/research/ffmpeg-ring-opus-corruption.md`](../../../docs/research/ffmpeg-ring-opus-corruption.md) | Why inbound must use GStreamer, and why the cause is still unknown. Read before filing anything upstream. |
+| [`hub/talk-watchdog/`](../../talk-watchdog/README.md) | The dead-man switch: what it caps, and the consumer-reaping gap it cannot close because go2rtc has no consumer-kill endpoint. |
 
 ---
 
@@ -630,17 +643,45 @@ Consequences that are not optional:
 - Check the **consumer list**, not the process list (V7). `pgrep -a -x ffmpeg`
   would never have caught that `curl` — and `pgrep -fa <pattern>` self-matches its
   own command line, so use `-x`.
-- A server-side dead-man switch is required before any of this ships. It does not
-  exist yet.
+- A server-side dead-man switch is required before any of this ships.
+  🟢 **It exists as of 2026-08-09**: [`hub/talk-watchdog/`](../../talk-watchdog/README.md),
+  wired into `hub/dev/compose.yaml` as `talk-watchdog`. It caps how long the
+  microphone may stay hot, stops at startup and on `SIGTERM`, and reaps a
+  producer left live with no consumers.
+  🔴 **It does not close this hole completely.** go2rtc exposes **no
+  consumer-kill endpoint** — the orphaned `curl` above was removed with
+  `pkill -9 -x curl` inside the container, and no HTTP verb can do that. A
+  stalled consumer is therefore **alerted, not reaped**. The gap and the three
+  ways to close it are written up in that README.
 
 ### It worked in the lab but not here — version skew
 
-⚠️ **`ring:` was never tested on 1.9.10.** Every talkback measurement in ADR-0011
-was taken against `go2rtc-ring-test`, which runs **1.9.14**; this container runs
-**1.9.10**. `ring:` is precisely the module the ADR flags as abandoned (14 commits
-ever, last functional one 2025-05-21), so four patch releases are not safely
-assumed neutral there. Bump the pin or re-run the dial on 1.9.14, and record
-which.
+✅ **Settled for inbound on 2026-08-09: 1.9.10 is fine.** This used to say
+`ring:` had never been tested on 1.9.10, and that both remaining options were
+guesses. Measured on this container, one live view:
+
+| Check | Result on **1.9.10** |
+|---|---|
+| V4 — does `ring:` dial | `codec_name=h264`, `codec_name=opus`, `channels=2` |
+| V5 — inbound via GStreamer | 33.3 s captured, **0 out-of-range samples**, peak −18.8 dBFS |
+
+Source-side, the talkback path is **byte-identical between v1.9.10 and
+v1.9.14**: `pkg/ring`'s `(*Client).AddTrack`, the speaker-enable
+`camera_options` message, the SDP offer (`Channels: 2`), and
+`internal/streams/api.go`'s `POST dst/src` branch. The three deltas in that
+range all sit *before* audio — no `clients_api/session` registration, an extra
+un-sessioned `GET /clients_api/ring_devices` per dial, and pings gated on
+`PeerConnectionStateConnected`. So a 1.9.10 failure would surface as a
+dial/auth error, not as bad audio.
+
+⚠️ **V6 (talkback) has still not been run on 1.9.10** — it needs Step 10
+applied and somebody at the door. Given the byte-identical code the risk is
+low, but "low" is not "measured". The pin does **not** need bumping.
+
+⚠️ One real 1.9.10-only defect, harmless today: the `#backchannel=1&audio=…`
+channel-count typo in `pkg/core/codec.go` (fixed in 1.9.14). `mic` uses the
+RTSP-output `exec:` form, which does not go near it — but it would bite the day
+anybody rewrites `mic` to the backchannel form.
 
 ### Dings started going missing
 

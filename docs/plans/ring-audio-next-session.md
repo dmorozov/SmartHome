@@ -6,7 +6,8 @@ Everything needed is in this file or linked from it.
 
 Written 2026-08-08 at the end of the session that got two-way audio working;
 **revised the same day** at the end of the session that converged the Ansible
-role and disproved the ffmpeg diagnosis.
+role and disproved the ffmpeg diagnosis; **revised again 2026-08-09**, when the
+owner's own `ring:` source was verified on 1.9.10 and the watchdog was built.
 
 ---
 
@@ -75,13 +76,15 @@ GStreamer path does not have, and now only cost fidelity.
   wreck the stack. `docker restart <name>` is safe.
 - Audio works: `PULSE_SERVER` and `PIPEWIRE_RUNTIME_DIR` are set, `pulsesink` and
   `pw-play` both verified. Smoke test: `pw-play example.wav`.
-- The `ring` stream lives in the lab container **`go2rtc-ring-test`**, on its own
-  compose network. Reach it with
-  `docker network connect smarthome-dev-hub_default go2rtc-ring-test`
-  (runtime-only; does not survive recreation).
-  **`go2rtc-dev`'s `ring_doorbell` is the wrong target** — it is
+- ⚠️ **Changed 2026-08-09.** The `ring` stream now lives in **`go2rtc-dev`**,
+  reachable directly as `http://go2rtc-dev:1984` / `rtsp://go2rtc-dev:8554/ring`
+  from the devcontainer. The old advice — that it lived in the lab container
+  `go2rtc-ring-test` and needed
+  `docker network connect smarthome-dev-hub_default go2rtc-ring-test` — is
+  **stale**; that container is not even running.
+  **`go2rtc-dev`'s `ring_doorbell` is still the wrong target** — it is
   `rtsp://ring-mqtt:8554/…`, the video-only ring-mqtt restream, which structurally
-  cannot carry talkback.
+  cannot carry talkback. `ring` is the one with the backchannel.
 
 ## Hard rules
 
@@ -132,37 +135,72 @@ there is no hardware, including on a real Appliance with a dead card. **So
 the criterion is **`wpctl status` showing a non-empty `Devices:` section**; see
 the three ordered checks at the top of §7.2. That is **D7**.
 
-### 1. Give the dev Hub's go2rtc its own `ring:` source — 🚧 blocked on the owner
-Today the only working `ring:` source is in the throwaway lab container, so
-**item 5 would destroy the dev stack's only way to exercise talkback**. This
-blocks item 5 — a dependency that is easy to miss working top-down.
+### 1. Give the dev Hub's go2rtc its own `ring:` source — 🟢 **inbound done 2026-08-09**, one step left
+The owner minted the second token (**B9**, now ticked) and worked the go2rtc
+README. `go2rtc-dev` now serves `selftest`, `ring_doorbell`, `ring` and `mic`.
+One live view on 2026-08-09 verified the new source end to end:
 
-Needs its own refresh token: **owner item B9** in `TODO.md` (interactive 2FA, no
-headless path). Tokens rotate on use, so consumers cannot share one. Note go2rtc
-**rewrites its own config** when Ring rotates the token — treat that file as
-machine-owned, and never assume the value on disk is what was pasted.
+| | Result |
+|---|---|
+| V4 — `ring:` dials on **1.9.10** | `codec_name=h264`, `codec_name=opus`, `channels=2` |
+| V5 — inbound via GStreamer | 33.3 s, **0 out-of-range samples**, peak −18.8 dBFS |
+| V7 — teardown | `"consumers":[]`, no `id`/`sdp`/`remote_addr` |
 
-⚠️ **Version skew, previously unrecorded:** talkback was proven on
-`alexxit/go2rtc:1.9.14` (the lab container). Both `hub/compose.yaml` and
-`hub/dev/compose.yaml` pin **1.9.10** on purpose. `ring:` is the abandoned module
-ADR-0011 warns about, so do not assume four patch releases are neutral there —
-bump the pin or re-run the dial on 1.9.10, and record which.
+**Version skew is settled for inbound; the pin does not need bumping.** The
+talkback path is *byte-identical* v1.9.10↔v1.9.14 — `pkg/ring`'s `AddTrack`,
+the speaker-enable `camera_options` message, the SDP offer, and
+`internal/streams/api.go`'s `POST dst/src` branch. The three deltas in that
+range all sit before audio, so a 1.9.10 failure would look like a dial/auth
+error, not bad audio. (One 1.9.10-only defect exists and is inert here: the
+`#backchannel=1&audio=…` channel-count typo in `pkg/core/codec.go`, fixed in
+1.9.14. `mic` uses the RTSP-output `exec:` form and never touches it.)
 
-### 2. Watchdog / dead-man switch — non-optional, and the next thing to build
-go2rtc has **no idle timeout on internal producers**; nothing reaps a wedged mic
-or an orphaned consumer. Requirements:
+🔴 **What is left: README Step 10 was skipped while Step 11 was applied.**
+`mic` is enabled in `go2rtc.yaml`, but the container had no `PULSE_SERVER` and
+no PulseAudio socket — the exact failure the README warns about, one that
+surfaces *only* when somebody presses talk. The compose fix is applied and
+unstaged (`hub/dev/compose.yaml`); it needs a **recreate from a host shell**,
+because mounts and environment are fixed at create time and `docker compose`
+from the devcontainer resolves relative bind mounts against a path the host
+daemon does not have (confirmed: `docker compose config` in here resolves the
+mount to `/tmp/user/1000/pulse`, the devcontainer's own `XDG_RUNTIME_DIR`):
 
-- Reap orphaned **consumers**, not just stop the mic — a dead client keeps the
-  Ring producer alive indefinitely (proven; see the incident in RESULTS.md).
-- Fire `dst=ring&src=` liberally; it is idempotent.
-- Absolute talk cap 30–60 s; stop on popup close, on app shutdown, and once at
-  startup to clear anything a crash left open.
-- Stop authority stays **server-side** — a wedged mic must close even if the Panel
-  process dies, which the Panel cannot guarantee about itself.
+```sh
+cd hub/dev && docker compose up -d go2rtc talk-watchdog     # HOST shell
+```
 
-Buildable and testable against a fake go2rtc API without item 1. Its final shape
-interacts with the open owner decision about `gst-launch-1.0` versus a supervised
-service (§5 item 4 of the spec).
+Then **V6 (talkback) is the only unrun check** — it needs somebody at the door.
+Item 5 stays blocked until it passes.
+
+### 2. Watchdog / dead-man switch — 🟢 **built 2026-08-09**, with one gap it cannot close
+[`hub/talk-watchdog/`](../../hub/talk-watchdog/README.md) — one stdlib-only
+Python file, wired into `hub/dev/compose.yaml` as `talk-watchdog`, 24 tests
+against a scripted fake go2rtc (no doorbell, no network). Smoke-tested against
+the live `go2rtc-dev`: startup stop `200`, quiet polls, `SIGTERM` → stop `200`.
+
+Caps the microphone at `TALK_CAP_S` (default 45 s), stops at startup and on
+`SIGTERM`, and stops a `ring` producer left live with no consumers and no talk.
+
+🔴 **It cannot reap consumers, and this is not a shortcut — go2rtc has no
+consumer-kill endpoint.** The orphaned `curl` in RESULTS.md was removed with
+`pkill -9 -x curl` inside the container; no HTTP verb does that. `PUT`/`DELETE`
+on `/api/streams` are worse than useless — they rewrite `go2rtc.yaml` on disk,
+token included, and stop nothing. So a stalled consumer is **alerted, not
+reaped**. Three ways to close it, none taken: own every consumer (which also
+settles the `gst-launch-1.0`-versus-service question), restart the go2rtc
+container (drops every camera; needs the docker socket and an owner yes), or
+accept it. **That choice is the owner's** — see the list below.
+
+Two findings from building it, both of which would have produced a wrong
+watchdog:
+- **`sendonly` audio medias appear on *consumers*.** A plain inbound RTSP
+  listener reports `"audio, sendonly, ANY"` — that is go2rtc describing what it
+  sends *to the listener*. Keying talk detection on `sendonly` would fire every
+  time somebody merely watched the doorbell. Hot-mic is read off the `mic`
+  stream's producer instead.
+- **Consumers use `format_name`, not `format`**, and a live producer may carry
+  `source` rather than `url`. RESULTS.md's rendering of the leaked consumer was
+  a summary, not the JSON.
 
 ### 3. Panel wiring
 `panel/lib/ui/device_popup.dart` — `_startTalking`/`_stopTalking` become the two
@@ -213,7 +251,15 @@ hardware. The packaging is settled and needs no new `audio_packages` entry:
 
 Tracked in `TODO.md` with stable IDs, except the last:
 
-- **B9** — the second Ring token (blocks item 1, and therefore item 5).
+- ~~**B9** — the second Ring token~~ ✅ **done 2026-08-09**, verified by a dial.
+- **NEW — may the watchdog restart the go2rtc container?** It is the only lever
+  that certainly clears an unowned consumer, and it drops every camera in the
+  house while it does. Needs the docker socket. Default until you say
+  otherwise: **alert, do not act**.
+- **NEW — who owns the inbound player?** Making the watchdog its parent settles
+  the open `gst-launch-1.0`-versus-supervised-service question and closes the
+  consumer-reaping gap in the same move, because reaping becomes a signal to a
+  pid it holds. It also lands half-duplex for free.
 - **D7** — speaker/microphone hardware. Now the **only** thing between the
   converged appliance audio stack and a sound coming out of it.
 - **E9** — which account owns the Appliance's audio session. Recommendation on

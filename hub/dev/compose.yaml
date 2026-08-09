@@ -108,6 +108,15 @@ services:
     # per docs/research/frigate-amd-acceleration.md).
     image: alexxit/go2rtc:1.9.10
     container_name: go2rtc-dev
+    environment:
+      # Talkback: the `mic` stream captures with `ffmpeg -f pulse -i default`,
+      # which needs a PulseAudio server. Container-side path, NOT the host's
+      # $XDG_RUNTIME_DIR — the bind mount below always lands at /run/user/1000
+      # inside regardless of which host path it came from, so this is a
+      # constant. (Same pair as ring-audio-test/compose.yaml, which is where
+      # microphone capture through PipeWire was first proven, and as
+      # .devcontainer/compose.yaml.)
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
     ports:
       # API + web UI (stream preview via MSE works over this port alone).
       # Shifted (see header): production go2rtc owns :1984.
@@ -126,4 +135,42 @@ services:
       # Stream definitions (may embed camera credentials — gitignored; copy
       # go2rtc.example.yaml -> go2rtc.yaml first, see README.md).
       - ./go2rtc:/config
+      # PipeWire's PulseAudio-compat socket, for the `mic` stream (talkback).
+      # A direct /dev/snd pass-through is the wrong answer and was tried:
+      # PipeWire already holds the device exclusively on any modern desktop,
+      # so ffmpeg gets "Resource busy". Going THROUGH PipeWire is the fix.
+      # World-rw, so no UID/group matching is needed inside the container.
+      # ⚠️ Worth saying plainly: with this mounted and `mic` enabled, anything
+      # that can reach go2rtc's API can open this machine's microphone. There
+      # is no auth on that API — the network boundary is the control (root
+      # README, E8), and every port here is bound to 127.0.0.1.
+      # ⚠️ /run/user/1000 is the DEV OPERATOR's uid. On the Appliance the
+      # kiosk account owns the audio session and this path is simply wrong —
+      # that is open owner decision E9, and it belongs to hub/compose.yaml,
+      # not here.
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse
+    restart: unless-stopped
+
+  talk-watchdog:
+    # Dead-man switch for Ring talkback. go2rtc has no idle timeout on internal
+    # producers, so nothing reaps a wedged microphone — and a wedged microphone
+    # holds a battery doorbell in live view. Stop authority has to be here
+    # rather than in the Panel, because the Panel is the thing that might crash
+    # mid-press. See ../talk-watchdog/README.md.
+    #
+    # No image build: the code is stdlib-only, so a stock python image with the
+    # directory mounted read-only is the whole deployment.
+    image: python:3.12-slim
+    container_name: talk-watchdog-dev
+    depends_on:
+      - go2rtc
+    command: ["python3", "/app/watchdog.py"]
+    environment:
+      # Service name on the compose network, not a published host port.
+      GO2RTC: http://go2rtc:1984
+      TALK_STREAM: ring
+      MIC_STREAM: mic
+      TALK_CAP_S: "45"
+    volumes:
+      - ../talk-watchdog:/app:ro
     restart: unless-stopped
