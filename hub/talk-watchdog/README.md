@@ -4,9 +4,9 @@ go2rtc has **no idle timeout on internal producers**. Nothing in the stack
 reaps a wedged microphone or an orphaned consumer, and either one holds the
 doorbell in live view — on a battery device, over somebody's bandwidth, and
 suppressing real dings while it lasts. A leaked `curl` once did exactly that
-for **~30 minutes and 160 MB** before a routine `/api/streams` dump found it
-([`../dev/ring-twoway-lab/RESULTS.md`](../dev/ring-twoway-lab/RESULTS.md),
-§"INCIDENT — a leaked consumer held the doorbell live for ~30 minutes").
+for **~30 minutes and 160 MB** before a routine `/api/streams` dump found it —
+[the incident record](#appendix--the-incident-this-service-exists-for) is at the
+bottom of this file.
 
 This service exists because **stop authority has to live on the server side**.
 The Panel is the thing that starts a talk session, but it is also the thing
@@ -169,3 +169,67 @@ The alternative — the Panel posting to a control plane here, which proxies to
 go2rtc — buys exact cap timing instead of timing quantised to `POLL_S`, and
 gives one place to change. It is worth revisiting if `POLL_S` granularity ever
 matters; it does not at a 45 s cap.
+
+---
+
+## Appendix — the incident this service exists for
+
+Moved here on 2026-08-09 from `hub/dev/ring-twoway-lab/RESULTS.md`, which is a
+throwaway lab directory scheduled for deletion. Two things cite this record —
+this file and `watchdog.py` — and it is the whole justification for the service
+existing, so it needed somewhere that outlives the lab. Reproduced faithfully;
+where later work overtook it, that is marked rather than edited away.
+
+### What happened
+
+While probing go2rtc's alternate outputs, two `curl` processes were started
+inside the container against `/api/stream.mp4` and `/api/stream.m3u8`. The
+enclosing tool call timed out and was killed **on the host side**, but the
+`curl` processes **kept running inside the container**:
+
+```
+consumer id:127  format:mp4  protocol:http  user_agent:"curl/8.17.0"
+bytes_send: 159,882,785
+```
+
+**~160 MB pulled, and the Ring producer held open continuously for roughly half
+an hour** — the doorbell in live view the whole time, on somebody's battery and
+bandwidth, entirely unnoticed until a routine `/api/streams` dump showed it.
+
+Cleaned with `pkill -9 -x curl` inside the container; verified only the intended
+GStreamer consumer remained.
+
+### Why it matters
+
+It is the lab's own §1.8 warning happening for real:
+
+> *"go2rtc has no idle timeout on internal producers. Nothing closes a wedged mic
+> for you. A server-side dead-man switch is mandatory, not optional."*
+
+That was written about the outbound mic. It applies just as much to **inbound
+consumers**: a dead or orphaned client keeps the Ring producer alive
+indefinitely, and go2rtc will never reap it.
+
+### The two requirements it produced, and what became of them
+
+1. **"The watchdog must reap idle/orphaned consumers, not just stop the mic."**
+   🔴 **Overtaken — this is impossible as written.** go2rtc exposes no
+   consumer-kill endpoint; the leaked `curl` above was killed with `pkill` inside
+   the container, not over the API, and that remains the only thing that worked.
+   `PUT`/`DELETE` on `/api/streams` rewrite `go2rtc.yaml` on disk and stop
+   nothing. So this service **alerts on a stalled consumer rather than reaping
+   it** — see [🔴 What this cannot do](#-what-this-cannot-do). The requirement is
+   left standing here because it is still the right goal; only the mechanism was
+   wrong.
+2. **"Every probe or diagnostic must be time-bounded at the far end"** — `timeout`
+   *inside* the container, not merely on the calling side. A killed caller does
+   not kill the work. ✅ Still correct, and now standing policy for every stream
+   probe.
+
+### The lesson that generalises
+
+The teardown checks used throughout the lab (`pgrep -a -x ffmpeg`,
+`/api/streams` consumer counts) only ever looked for **ffmpeg**. They would never
+have caught a stray `curl`. **Check the consumer list, not just the process
+list** — which is why `_talking()` in `watchdog.py` reads go2rtc's own view of
+the world rather than anything about processes.

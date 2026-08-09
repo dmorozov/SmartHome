@@ -234,12 +234,35 @@ records what is known, what was ruled out, and the single ~20 s raw-Opus +
 `tcpdump` capture that would turn the rest into offline analysis. **That capture
 is an owner decision** — see below.
 
-### 5. Delete the lab directories
-`hub/dev/ring-twoway-lab/` and `hub/dev/ring-audio-test/` — **only after item 1**.
+### 5. Delete the lab directories — 🟡 **prepared 2026-08-09, still gated**
+`hub/dev/ring-twoway-lab/` and `hub/dev/ring-audio-test/` — **only after item 1**,
+i.e. after V6 proves talkback on the dev Hub's own go2rtc. Deleting the
+environment that produced every number ADR-0011 rests on, *before* reproducing it
+on the real stack, is backwards. The cost of waiting is 228 KB and 9 tracked files.
+
 🔴 `ring-audio-test/go2rtc/go2rtc.yaml` holds a **live Ring token inside the repo
-tree**, contrary to ADR-0010; that is its own reason to finish and remove it.
-RESULTS.md's §B4g/§B4h conclusions are superseded by the research note, so nothing
-of value is lost with the directory — but read it first.
+tree**, contrary to ADR-0010. Checked 2026-08-09: it is **untracked and has never
+been committed** (`git log --all` on that path is empty), so this is a secret in
+the working tree — not in history, needing no re-mint and no rewrite. Owner
+decided 2026-08-09 to let it go with the directory rather than delete it early.
+
+**The "nothing of value is lost" claim was wrong and has been fixed.** It is true
+of RESULTS.md's §B4g/§B4h, which the research note supersedes. It was **not** true
+of §INCIDENT — the leaked `curl` that held the doorbell live for ~30 minutes — which
+is the entire justification for `hub/talk-watchdog/` and was cited by both
+`watchdog.py` and its README. That record has been **moved into
+[`hub/talk-watchdog/README.md`](../../hub/talk-watchdog/README.md)** ("Appendix —
+the incident this service exists for"), faithfully, with the one requirement later
+work overtook ("reap orphaned consumers") marked rather than edited away. Both
+citations now point there.
+
+**What still has to be cleaned up before the `rm`,** all of it prose:
+- `hub/dev/go2rtc/README.md` lines ~490 and ~502 — real markdown links into both
+  lab READMEs. These are the only remaining links that would actually break.
+- Provenance mentions in `ring-audio-stack.md` (line 5), ADR-0011 (line 110),
+  `ffmpeg-ring-opus-corruption.md` (line 5) and two compose comments. These name
+  the labs as where evidence came from; decide per site whether to reword or to
+  keep as a historical citation.
 
 ### Not on this list: echo cancellation
 There is **no echo path until inbound playback ships** — the Panel renders MJPEG,

@@ -4,8 +4,8 @@
 go2rtc has no idle timeout on internal producers. Nothing reaps a wedged
 microphone or an orphaned consumer, and both hold the doorbell in live view on
 somebody's battery — a leaked `curl` once did it for ~30 minutes and 160 MB
-before a routine `/api/streams` dump found it
-(`hub/dev/ring-twoway-lab/RESULTS.md` §"INCIDENT").
+before a routine `/api/streams` dump found it (README.md, "Appendix — the
+incident this service exists for").
 
 This runs beside go2rtc and enforces three things the Panel cannot guarantee
 about itself, because the Panel can die:

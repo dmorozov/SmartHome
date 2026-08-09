@@ -33,5 +33,23 @@ panel/tool/fixtures/*.sh3d
 # Agent working notes, not artefacts anyone reads twice.
 .playwright-mcp/
 
+# Compiled Python bytecode. 61 of these were tracked until 2026-08-09 and are
+# now removed — three from `hub/talk-watchdog/` (ours, committed by accident in
+# 39c8365) and the rest under `hub/custom_components/`, written by the Home
+# Assistant container as **root** while it imports HACS and emporia_vue.
+#
+# That second group is the reason this rule matters rather than being tidiness:
+# `hub/custom_components/` is HA's live config directory, mounted into a
+# running container, so the container regenerates these on every start and they
+# would otherwise reappear as diff noise for ever. They are also per-interpreter
+# (`cpython-312` and `cpython-314` both appeared, from two different Python
+# versions touching the same tree), so they churn whenever an image is bumped.
+#
+# Always regenerable, never read by anything but the interpreter that wrote
+# them: every one of the 61 had its `.py` beside it, checked before deleting.
+__pycache__/
+*.pyc
+*.pyo
+
 # macOS
 .DS_Store
