@@ -15,7 +15,10 @@ ring-mqtt-data/
 # Mosquitto: persistence database (config stays tracked).
 mosquitto/data/
 
-# go2rtc: only the tracked EXAMPLE starter; the live go2rtc.yaml is ignored —
-# stream definitions embed camera credentials.
+# go2rtc: only the tracked EXAMPLE starter and the README; the live
+# go2rtc.yaml is ignored — stream definitions embed camera credentials, and
+# since 2026-08-08 a Ring refresh token. Deny-all + allowlist, so anything new
+# dropped in here is ignored by default and has to be named to be tracked.
 go2rtc/*
 !go2rtc/go2rtc.example.yaml
+!go2rtc/README.md

@@ -1,0 +1,77 @@
+# Ring two-way audio — ISOLATED EXPERIMENT. Not the dev Hub, not the
+# appliance stack. Answers exactly one question: can go2rtc's native `ring:`
+# source (v1.9.13+) carry this laptop's own microphone to the real Front
+# Door doorbell's speaker, well enough to build the Panel's push-to-talk
+# button on top of it?
+#
+# WHY A THIRD go2rtc INSTANCE, NOT `go2rtc-dev`
+#   `../compose.yaml`'s go2rtc is deliberately pinned to 1.9.10 — the exact
+#   version Frigate 0.17 embeds (docs/research/frigate-amd-acceleration.md),
+#   so the future NVR plan can point everything at Frigate's own go2rtc
+#   without a version seam. The `ring:` source needs 1.9.13+. Bumping
+#   `go2rtc-dev` would quietly break that already-recorded parity — so this
+#   is a fourth container, own ports, own config, touching nothing that
+#   exists today. Owner's decision, 2026-08-08.
+#
+# WHY ITS OWN RING LOGIN, NOT ring-mqtt-dev's TOKEN
+#   Ring refresh tokens are single-use — they rotate on first use — so two
+#   independent consumers (ring-mqtt's own connection and this one) racing
+#   to refresh the SAME stored token invalidate each other. That risks
+#   breaking the doorbell integration that already works. This container
+#   gets its own account session via its own web UI login (below), same
+#   account, different "device" as far as Ring's API is concerned — exactly
+#   what go2rtc's own "Add Ring account" flow is for.
+#
+# BRING-UP: from a HOST terminal, never from inside the devcontainer —
+# see ../../../.devcontainer/compose.yaml's header for why relative bind
+# mounts resolve against the wrong filesystem root from in there.
+#
+#   cd hub/dev/ring-audio-test
+#   cp go2rtc/go2rtc.example.yaml go2rtc/go2rtc.yaml   # first time only
+#   docker compose up -d
+#   open http://localhost:31984          # go2rtc's own web UI
+#
+# Stop and remove entirely once the question above is answered, win or
+# lose: `docker compose down`. Nothing here is meant to outlive the answer.
+name: smarthome-ring-audio-test
+
+services:
+  go2rtc:
+    image: alexxit/go2rtc:1.9.14
+    container_name: go2rtc-ring-test
+    # NOT /dev/snd. First attempt passed the raw ALSA hardware device
+    # through directly (plughw:CARD=PCH,DEV=0) and it failed: "cannot open
+    # audio device ... (Resource busy)" — PipeWire already holds it
+    # exclusively, which is normal on any modern desktop with a running
+    # audio server. Going around PipeWire instead of through it was the
+    # mistake; the fix is its PulseAudio-compat socket, confirmed live on
+    # this laptop 2026-08-08 (`systemctl --user status pipewire-pulse`) at
+    # $XDG_RUNTIME_DIR/pulse/native, world-rw so no UID/group matching is
+    # needed inside the container.
+    environment:
+      # Container-side path, not the host's $XDG_RUNTIME_DIR — the bind
+      # mount below always lands at /run/user/1000 inside regardless of
+      # the host path it came from.
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+    ports:
+      # Deliberately not the production (1984/8554/8555) or dev-Hub
+      # (11984/28554/28555) ports — a THIRD, disjoint range so this can run
+      # alongside both without collision, and so a browser tab on one of
+      # them can never quietly be this experiment.
+      - "127.0.0.1:31984:1984" # API + web UI
+      - "127.0.0.1:38554:8554" # RTSP out, for ffprobe/VLC sanity checks
+      - "127.0.0.1:38555:8555/tcp" # WebRTC media
+      - "127.0.0.1:38555:8555/udp"
+    volumes:
+      # The PipeWire/PulseAudio socket — see the note above the service for
+      # why this replaced a direct /dev/snd pass-through.
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse
+      # A directory, not a single file, matching every other go2rtc mount
+      # in this repo (../go2rtc/, ../../go2rtc/): the web UI's "Add" flow
+      # rewrites go2rtc.yaml in place when a stream is added there (its
+      # PUT /api/streams handler calls app.PatchConfig), so go2rtc needs
+      # write access to the directory it lives in, not just the file.
+      # go2rtc/go2rtc.yaml is gitignored — it will hold the Ring
+      # refresh_token once the web UI login below completes (ADR-0010).
+      - ./go2rtc:/config
+    restart: "no" # experiment, not infrastructure — no auto-restart

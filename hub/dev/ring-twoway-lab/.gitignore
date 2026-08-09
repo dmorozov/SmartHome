@@ -1,0 +1,12 @@
+# ADR-0010: this lab's Ring refresh token lives OUTSIDE the tree, at
+# ~/.sh_keys/ring-twoway-lab.env — not in here. This rule is a backstop in
+# case someone drops one in anyway.
+.env
+*.env
+
+# Probe dependencies are installed inside a throwaway container at run time.
+probe/node_modules/
+probe/package-lock.json
+
+# Scratch audio used by experiment B2.
+probe/*.wav

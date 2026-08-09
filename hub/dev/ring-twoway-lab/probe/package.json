@@ -1,0 +1,12 @@
+{
+  "name": "ring-twoway-probe",
+  "private": true,
+  "type": "module",
+  "description": "Ring live-call protocol probe — experiment B1/B2, see ../README.md",
+  "engines": {
+    "node": "^20 || ^22 || ^24"
+  },
+  "dependencies": {
+    "@tsightler/ring-client-api": "14.3.1-beta.0"
+  }
+}

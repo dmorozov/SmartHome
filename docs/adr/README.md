@@ -14,11 +14,13 @@ The decisions this project is built on, and the reasoning that would otherwise h
 | [0008](0008-device-integrations-on-a-linux-host-never-macos.md) | Integrations on a Linux host, never macOS | Docker-on-Mac can't do multicast in any form; the Hub runs on the laptop now, the mini PC later |
 | [0009](0009-development-in-the-devcontainer-on-the-target-os.md) | Development in the devcontainer, on the target OS | Dev and tests run in a pinned Ubuntu 24.04 container — the mini PC's OS, not the host's; native host and Mac dev stopped being documented flows |
 | [0010](0010-secrets-consolidated-outside-the-repo.md) | Secrets consolidated under ~/.sh_keys | Every credential our own stack owns the path for moved outside the repo tree; HA's internal `.storage` is the one deliberate exception |
+| [0011](0011-ring-two-way-audio-via-go2rtc-half-duplex.md) | Ring two-way audio via go2rtc, half-duplex | Talkback uses go2rtc's native `ring:` source as shipped — two HTTP POSTs, no bespoke service; echo handled by muting playback while the button is held, AEC underneath |
 
 ## Related reference material
 
 - **[../sweet-home-3d-behaviour.md](../sweet-home-3d-behaviour.md)** — measured facts about Sweet Home 3D's file format and extension points that the pipeline depends on. Undocumented upstream; re-deriving any of it costs an afternoon.
 - **[../research/](../research/)** — the surveys behind 0001–0003.
+- **[../research/ffmpeg-ring-opus-corruption.md](../research/ffmpeg-ring-opus-corruption.md)** — why the doorbell's inbound audio must be consumed with GStreamer, what that is measured on, and why the cause 0011 originally named was withdrawn. Read before filing anything upstream.
 - **[../../panel/HOUSE-PLAN.md](../../panel/HOUSE-PLAN.md)** — the manual for actually drawing the house and placing Devices.
 
 ## Writing a new one

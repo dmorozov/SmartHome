@@ -23,6 +23,17 @@ ARG FLUTTER_VERSION=3.44.8
 #  - python3: panel/tool's Sweet Home 3D converter and its test suite —
 #    without it, house_pipeline_contract_test silently skips.
 #  - jq: JSON spelunking in HA's REST answers.
+#  - gstreamer1.0-{tools,plugins-base,plugins-good}: the ONLY correct consumer
+#    for the doorbell's inbound audio. ffmpeg destroys it — 36,642 out-of-range
+#    samples vs GStreamer's 0, both reading the same stream at the same moment
+#    (ADR-0011, docs/plans/ring-audio-stack.md). Why is unknown; the mechanism
+#    once written here does not reproduce (docs/research/ffmpeg-ring-opus-corruption.md).
+#    ffmpeg stays: outbound uses it as a *packetiser*, which is clean.
+#    plugins-base = opusdec/audioconvert/audioresample; plugins-good =
+#    rtspsrc/rtpopusdepay/pulsesink; tools = gst-launch-1.0/gst-inspect-1.0.
+#    This image is Ubuntu 24.04 like the Appliance, so it is also where the
+#    24.04 GStreamer pipeline gets verified before Ansible copies it.
+#  - pipewire-bin: pw-play/pw-record, for checking the host's audio is reachable.
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     && apt-get install -y --no-install-recommends \
         curl git unzip xz-utils zip ca-certificates \
@@ -30,6 +41,8 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
         xvfb \
         mosquitto-clients \
         ffmpeg \
+        gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+        pipewire-bin \
         python3 \
         jq \
     && apt-get clean && rm -rf /var/lib/apt/lists/*

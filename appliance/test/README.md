@@ -65,6 +65,64 @@ git clone /mnt/SmartHome-src ~/SmartHome
 ~/SmartHome/spike/bootstrap.sh        # long: clones Flutter + release build
 ```
 
+## Driving it from the devcontainer
+
+The usual caller is a host shell. An agent session is usually **inside the
+devcontainer** instead, and two things bite there. Both were hit and fixed on
+2026-08-08; neither is obvious from the failure.
+
+**1. The repo path.** Docker runs on the host (docker-outside-of-docker), so the
+`-v` source has to be a path *the daemon* has. In here the repo is
+`/workspaces/SmartHome`; the daemon only knows `/home/dmorozov/Work/SmartHome`,
+and a bind source it cannot find is **silently created as an empty directory**
+rather than erroring — `/mnt/SmartHome-src` then comes up empty. Same trap
+[ADR-0010](../../docs/adr/0010-secrets-consolidated-outside-the-repo.md) documents
+for `${HOME}`, same fix — pin the literal host path:
+
+```sh
+SH_REPO_ROOT=/home/dmorozov/Work/SmartHome ./run.sh up
+```
+
+Everything else (`docker build`, `exec`, `cp`, the published port) is path-free
+and works unchanged. Unset, `SH_REPO_ROOT` resolves itself, so a host shell needs
+no ceremony.
+
+**2. Ansible is not installed in the devcontainer.** Run the controller as its
+own throwaway container. `--network host` is what makes
+`host_vars/test-appliance.yml`'s `localhost:2222` reach the published SSH port,
+so the inventory needs no change:
+
+```sh
+docker run -d --name sh-ansible-ctl --network host \
+    -v /home/dmorozov/Work/SmartHome:/repo:ro python:3.12-slim sleep infinity
+docker exec sh-ansible-ctl sh -c \
+    'apt-get update -qq && apt-get install -y -qq --no-install-recommends openssh-client \
+     && pip install --quiet ansible-core'
+docker exec -w /repo/appliance/ansible sh-ansible-ctl ansible-playbook site.yml -l test-appliance
+```
+
+The role uses only `ansible.builtin` modules, so `ansible-core` alone is enough —
+no collections, no Galaxy step.
+
+### 🔴 `--check` on a *fresh* container fails, and the message is a lie
+
+```
+TASK [kiosk : Install kiosk, audio, Flutter toolchain, ...]
+fatal: FAILED! => "No package matching 'cage' is available"
+```
+
+`cage` is available; the **package cache is empty**. The Dockerfile ends with
+`rm -rf /var/lib/apt/lists/*` to keep the image small, and the apt module's
+`update_cache: true` does not run under `--check` — so check mode has no index to
+resolve names against. A real Ubuntu install ships a populated cache, so this is
+an artefact of *this image*, not a defect in the role. Prime it once:
+
+```sh
+docker exec smarthome-test apt-get update -qq
+```
+
+A converge (not check mode) does its own `update_cache` and is unaffected.
+
 ## The Docker socket is opt-in
 
 `run.sh up` used to bind-mount the host's `/var/run/docker.sock` into this

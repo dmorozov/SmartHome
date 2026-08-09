@@ -19,7 +19,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# The repo root AS THE DOCKER DAEMON SEES IT — which is not always what this
+# shell sees. Run from the devcontainer, `pwd` gives /workspaces/SmartHome, a
+# path docker-outside-of-docker's dockerd (the REAL host daemon) does not have:
+# it would silently auto-create an empty directory there and mount that, so
+# /mnt/SmartHome-src would come up empty with no error. Same trap ADR-0010
+# documents for ${HOME}, same fix — pin the literal host path:
+#
+#   SH_REPO_ROOT=/home/dmorozov/Work/SmartHome ./run.sh up
+#
+# Unset (the normal case, running from a host shell) it resolves itself.
+SH_REPO_ROOT="${SH_REPO_ROOT:-$(cd "${SCRIPT_DIR}/../.." && pwd)}"
+REPO_ROOT="${SH_REPO_ROOT}"
 
 UBUNTU_TAG="${UBUNTU_TAG:-24.04}"   # 24.04 = mini PC (ADR-0001); 26.04 = dev laptop
 IMAGE="smarthome-appliance-test:${UBUNTU_TAG}"

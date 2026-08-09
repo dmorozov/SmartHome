@@ -52,9 +52,11 @@
       when: kiosk_hwe_kernel_package in kiosk_hwe_auto.stdout_lines
       changed_when: true
 
-- name: Install kiosk, Flutter toolchain, and SDK bootstrap packages
+- name: Install kiosk, audio, Flutter toolchain, and SDK bootstrap packages
   ansible.builtin.apt:
-    name: "{{ kiosk_packages + flutter_toolchain_packages + flutter_bootstrap_packages }}"
+    name: >-
+      {{ kiosk_packages + audio_packages
+         + flutter_toolchain_packages + flutter_bootstrap_packages }}
     state: present
     update_cache: true
     cache_valid_time: 3600
@@ -67,6 +69,91 @@
     home: "/home/{{ kiosk_user }}"
     shell: /usr/sbin/nologin
     password_lock: true
+
+# --- Audio for the Panel's doorbell talkback (ADR-0011; full spec in
+# --- docs/plans/ring-audio-stack.md). The packages above are the easy half.
+# --- The hard half is that PipeWire and WirePlumber are `systemd --user`
+# --- services, and kiosk_user is a SYSTEM account with /usr/sbin/nologin and
+# --- a locked password — so it never gets a login session, therefore no
+# --- `systemd --user` instance, therefore no XDG_RUNTIME_DIR, therefore no
+# --- PipeWire and no /run/user/<uid>/pulse/native for anything to connect to.
+# ---
+# --- Lingering is the fix: it makes systemd start a user manager for the
+# --- account at boot with no login. The alternative — a system-wide PipeWire
+# --- instance — is discouraged upstream and has no session policy. No per-unit
+# --- enablement is needed, but note the credit belongs to the packages, not to
+# --- this role: deb-systemd-helper installs the /etc/systemd/user/*.wants
+# --- symlinks at install time. Nothing here asserts that, so an upstream
+# --- packaging change would break it quietly.
+# ---
+# --- ⚠️ The "no session, ever" premise above is only true UNTIL cage runs.
+# --- files/cage.pam ends in `session required pam_systemd.so` and the unit sets
+# --- PAMName=cage with a TTYPath, so a running cage DOES give this account a
+# --- logind session, on a seat. Lingering is still required — audio has to
+# --- exist before cage starts, survive it crashing, and outlive it for the Hub's
+# --- go2rtc, which mounts this runtime directory. But it does mean the
+# --- seat-dependent parts below (udev's uaccess ACL) may behave differently once
+# --- kiosk_enable is true, and that combination has never been exercised.
+# ---
+# --- ✅ CONVERGED AND OBSERVED WORKING 2026-08-08, in appliance/test on 24.04:
+# --- `loginctl show-user` reports State=lingering with Sessions= EMPTY, and
+# --- pipewire, pipewire-pulse and wireplumber are all active for the account
+# --- with /run/user/<uid>/pulse/native present — across a restart, with nobody
+# --- ever logging in. Full transcript: docs/plans/ring-audio-stack.md §4.5.
+# ---
+# --- 🔴 NO SOUND HAS BEEN PLAYED. PipeWire enumerates no cards in that
+# --- container (systemd-udevd is inactive and /run/udev absent, so its ALSA
+# --- monitor sees nothing), leaving only WirePlumber's fallback Dummy Output.
+# --- A `gst … ! pulsesink` there exits 0 having rendered to a null sink — it
+# --- proves the socket and the graph, not a speaker. And no Appliance speaker
+# --- or microphone has been chosen yet (docs/roadmap.md: "mic-array hardware
+# --- near the panel TBD"), which is TODO.md item D7.
+
+# Two groups, two different problems, both created by the lingering above.
+#
+# `audio` — a lingering user with no cage running has NO SEAT, so udev's uaccess
+# ACL, which is how a normal desktop login reaches /dev/snd/*, is never applied
+# to it. Those nodes are root:audio 0660, so group membership is the only route
+# left. Checked in appliance/test with a control, so it is not a coincidence:
+#     cage   (audio)  -> /dev/snd/controlC0 WRITABLE
+#     daemon, nobody  -> not writable
+# and no ACL is in play (plain 0660). Read it narrowly all the same: run.sh
+# starts the container --privileged, so those nodes are the DEV LAPTOP'S, leaked
+# in from the host, and nothing about the mini PC's devices follows.
+#
+# `pipewire` — RT scheduling, and this one was missed until it was measured.
+# pipewire-bin ships /etc/security/limits.d/25-pw-rlimits.conf granting
+# `rtprio 95 / nice -19 / memlock 4M` to @pipewire and nothing else; the
+# `pipewire` package's postinst creates that group but puts nobody in it. A
+# desktop user does not care, because PipeWire falls back to RTKit — but RTKit
+# authorises through polkit's `allow_active`, and a seatless lingering user has
+# no active session, so that fallback is closed here by construction. Measured
+# before this line existed: PipeWire ran SCHED_OTHER at priority 0 with
+# `Max realtime priority 0`, which is a glitch generator under load.
+#
+# 🔴 Supplementary groups are resolved ONCE, when the user manager starts. On a
+# fresh converge the ordering saves us (this task runs before enable-linger).
+# On a host that is ALREADY lingering, adding a group here changes nothing until
+# `user@<uid>.service` restarts — i.e. until a reboot. That restart kills cage
+# and the Panel with it, so the role deliberately does not do it for you.
+- name: Give the kiosk user access to audio devices
+  ansible.builtin.user:
+    name: "{{ kiosk_user }}"
+    groups: audio,pipewire
+    append: true
+
+- name: Check whether the kiosk user already lingers
+  ansible.builtin.stat:
+    path: "/var/lib/systemd/linger/{{ kiosk_user }}"
+  register: kiosk_linger
+
+# loginctl rather than the `user` module: lingering is a logind property with
+# no Ansible module, and the stat above is what keeps this idempotent (the
+# role's desired-state contract — see the file header).
+- name: Enable lingering so PipeWire starts without a login session
+  ansible.builtin.command: "loginctl enable-linger {{ kiosk_user }}"
+  when: not kiosk_linger.stat.exists
+  changed_when: true
 
 - name: Install the cage PAM stack
   ansible.builtin.copy:

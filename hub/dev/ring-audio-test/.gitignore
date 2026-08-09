@@ -1,0 +1,5 @@
+# go2rtc: only the tracked EXAMPLE starter; the live config holds the Ring
+# refresh_token once the web UI login completes. Same rule as every other
+# go2rtc.yaml in this repo (ADR-0010).
+go2rtc/*
+!go2rtc/go2rtc.example.yaml

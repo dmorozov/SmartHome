@@ -1,0 +1,100 @@
+# go2rtc config for the Ring two-way audio experiment — EXAMPLE FILE.
+#
+# Bring-up: copy this to go2rtc.yaml (gitignored — it will hold the Ring
+# refresh_token once the login below completes):
+#   cp go2rtc.example.yaml go2rtc.yaml
+#
+# See ../README.md for the full procedure. Summary:
+#
+#   1. `docker compose up -d` (from a HOST terminal — ../compose.yaml's
+#      header says why), then open http://localhost:31984.
+#   2. NOT the web UI's own "Add > Ring" login — hit a currently-open
+#      go2rtc bug 2026-08-08 (github.com/AlexxIT/go2rtc issues #2261,
+#      #2096: "auth request failed with status 406"), no fix or maintainer
+#      response as of writing. Routed around it instead, using the SAME
+#      Ring library already proven working for this house —
+#      `ring-mqtt-dev`'s own vendored `@tsightler/ring-client-api` ships a
+#      standalone login tool, entirely separate from go2rtc's broken code
+#      path:
+#        docker exec -it ring-mqtt-dev node \
+#          /app/ring-mqtt/node_modules/@tsightler/ring-client-api/lib/ring-auth-cli.js
+#      Interactive (email/password/2FA) — a FRESH login, not ring-mqtt's
+#      stored token (same reasoning as always: sharing one token between
+#      two consumers breaks both). Prints a refresh_token at the end; paste
+#      it into the `ring:` line below along with the device_id, which
+#      doesn't need looking up separately — `docker logs ring-mqtt-dev`
+#      already has it ("New device: Front Door (90486cf35236)").
+#   3. The `mic` stream below is this laptop's built-in microphone, captured
+#      through PipeWire's PulseAudio-compat socket (see ../compose.yaml's
+#      header — the first attempt went straight at the raw ALSA hardware
+#      device and got "Resource busy": PipeWire already holds it, which is
+#      normal on any modern desktop). A NORMAL producer, not tagged
+#      `#backchannel=1`. That flag means the opposite of what we want here:
+#      verified straight from go2rtc's exec.go source that `#backchannel=1`
+#      on an exec source feeds INCOMING audio into the process's stdin
+#      (i.e. play it out locally) — not the direction of capturing this mic
+#      to SEND upstream, which is the ordinary stdout-is-a-producer path
+#      with no backchannel tag at all.
+#   4. To actually push this mic into the doorbell's backchannel, once
+#      both streams above are live:
+#        curl -X POST 'http://localhost:31984/api/streams?dst=ring&src=mic'
+#      Verified from go2rtc's own streams/api.go source: a POST with `dst`
+#      naming an EXISTING stream (`ring`) and `src` naming another
+#      (`mic`) calls `stream.Play(src)` on it — the same mechanism the
+#      go2rtc README describes as "play audio files or live streams on any
+#      camera with two-way audio support". **Not yet verified**: the call
+#      that stops it again — that's the first thing to find out once this
+#      is running, before it goes anywhere near the Panel's button.
+
+api:
+  origin: "*" # E8 (root README) — 1.9.10 had no allowlist; 1.9.14 may
+  # differ, revisit once this is live rather than assuming.
+
+streams:
+  # A starting point, not a verified-good command. `-f pulse -i default`
+  # goes through PipeWire's pulse-compat socket (compose.yaml mounts it)
+  # rather than the raw ALSA hardware — see the header above for why the
+  # direct-hardware attempt failed with "Resource busy". Deliberately no
+  # input-side `-channels`/`-sample_rate`: unlike the alsa demuxer, it's
+  # unconfirmed whether ffmpeg's pulse demuxer honors those as capture
+  # hints or ignores them, so this lets PipeWire hand over its native
+  # format and leaves `-c:a libopus` to convert whatever that turns out to
+  # be — one fewer unverified assumption while everything else here is
+  # still being proven. `-re` paces the read to real time (without it an
+  # exec source can outrun the mic and the stream would drift),
+  # `-rtsp_transport tcp` matches what every other exec producer in this
+  # repo uses. The exact codec Ring's backchannel wants is also
+  # unconfirmed — libopus is exec.go's documented pipe-transport option,
+  # not a Ring-specific requirement; check the codec go2rtc's own WebUI
+  # info page reports for `ring` once it exists.
+  mic: >-
+    exec:ffmpeg -re -f pulse -i default -c:a libopus -b:a 48k
+    -rtsp_transport tcp -f rtsp {output}
+
+  # Filled in after step 2 above — left commented so a fresh copy of this
+  # file never claims a stream that doesn't exist yet.
+  #
+  # THREE params required, not the two go2rtc's own README shows
+  # (`ring:?device_id=XXX&refresh_token=XXX`) — verified straight from
+  # pkg/ring/client.go's Dial(): it also requires `camera_id` and returns
+  # "ring: wrong query" if any of the three is empty. The README's example
+  # is incomplete, presumably written assuming the web UI's "Add > Ring"
+  # flow fills in all three for you — which doesn't help here since that
+  # flow is the one broken by the 406 bug above.
+  #
+  # device_id (the MAC-like id, e.g. from ring-mqtt-dev's logs) and
+  # camera_id (Ring's own numeric doorbot id — NOT the same value, and
+  # not visible in ring-mqtt-dev's logs) both came from a one-off script
+  # against the vendored RingApi, using the refresh_token from step 2:
+  # `location.cameras[].data.id` is camera_id, `.data.device_id` is
+  # device_id. Front Door: device_id=90486cf35236, camera_id=319156885.
+  # refresh_token is secret and must come from your own ring-auth-cli run:
+  # ring: ring:?device_id=90486cf35236&camera_id=319156885&refresh_token=XXX
+
+webrtc:
+  candidates:
+    # The compose file publishes container 8555 as HOST 38555 on
+    # 127.0.0.1 — same reason as every other go2rtc config in this repo
+    # (see ../../go2rtc/go2rtc.example.yaml): without this, go2rtc
+    # advertises its unreachable container IP instead.
+    - 127.0.0.1:38555

@@ -49,8 +49,42 @@ services:
       # Chromium that post-create.sh would otherwise re-download on every
       # rebuild. Mountpoint pre-created vscode-owned in the Dockerfile.
       - playwright-cache:/home/vscode/.cache/ms-playwright
+      # The HOST's PipeWire, via its PulseAudio-compat socket. The workspace
+      # runs no audio server of its own — it borrows the host operator's
+      # session, exactly as hub/dev/ring-audio-test/compose.yaml already does
+      # for go2rtc. Needed to hear the doorbell (ADR-0011) and to verify the
+      # GStreamer inbound pipeline on Ubuntu 24.04 before Ansible copies it.
+      #
+      # Source resolves on the HOST (docker-outside-of-docker), so it is the
+      # host operator's $XDG_RUNTIME_DIR; the in-container path is fixed at
+      # /run/user/1000 regardless of either side's UID, which is why
+      # PULSE_SERVER below can be a constant. Absolute on purpose — unlike
+      # every other path here it must NOT resolve against hub/dev/.
+      #
+      # If the host has no PipeWire/Pulse socket the bind source does not
+      # exist and dockerd silently creates an empty directory (the ADR-0010
+      # ${HOME} trap): audio then fails at connect time, not at start time.
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse:/run/user/1000/pulse
+      # PipeWire's NATIVE socket, additionally, so pw-play/pw-record work as
+      # diagnostics. The pipeline that matters (gst pulsesink, go2rtc's
+      # `-f pulse`) needs only the pulse socket above — but pw-play speaks the
+      # native protocol and fails with "pw_context_connect() failed: Host is
+      # down" without this. Verified 2026-08-08: pw-play exits 0 with it.
+      #
+      # This binds a single SOCKET FILE, not a directory: if the host's
+      # PipeWire restarts it unlinks and recreates the socket, and the
+      # container keeps the stale inode until it is recreated too. Diagnostics
+      # break, audio does not — pulsesink keeps working through the directory
+      # mount above. Worth knowing before debugging a "pw-play broke" report.
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pipewire-0:/run/user/1000/pipewire-0
     environment:
       TZ: ${TZ:-UTC}
+      # Container-side path, not the host's — see the mount note above.
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+      # Points libpipewire at the native socket. Deliberately NOT
+      # XDG_RUNTIME_DIR: that is a broader contract other tools consume, and
+      # /run/user/1000 here holds only these two audio sockets.
+      PIPEWIRE_RUNTIME_DIR: /run/user/1000
     # Compose-based devcontainers do not override the command: the service
     # has to keep itself alive for the editor to attach to.
     command: sleep infinity

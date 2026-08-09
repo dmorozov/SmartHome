@@ -153,6 +153,67 @@ kiosk_packages:
   - wev
   - drm-info
 
+# Audio stack for the Panel's doorbell talkback (ADR-0011, and
+# docs/plans/ring-audio-stack.md for the full spec). A separate list from
+# kiosk_packages because it answers a different question and can be reasoned
+# about — or removed — on its own.
+#
+# 🔴 GSTREAMER IS NOT INTERCHANGEABLE WITH FFMPEG HERE. ffmpeg destroys the
+# doorbell's inbound audio. Counted as samples outside +/-1.0 on a float decode,
+# both clients reading the same stream at the same moment, twice:
+#   Ubuntu 24.04, GStreamer 1.24.2 / ffmpeg 6.1.1 -> 0 vs 44,404 bad samples
+#   Ubuntu 26.04, GStreamer 1.28.2 / ffmpeg 8.0   -> 0 vs 36,642 bad samples
+# It spans ffmpeg major versions; GStreamer is correct on both releases. WHY it
+# happens is NOT established — the "~60 ms Opus frames" explanation this comment
+# used to give does not reproduce (docs/research/ffmpeg-ring-opus-corruption.md).
+# The package choice rests on the measurement, not on the theory.
+# ffmpeg is still required for the OUTBOUND path, where it packetises rather
+# than depacketises and measures clean — it arrives via the Hub's go2rtc
+# container, not from here.
+#
+#  - gstreamer1.0-plugins-good : rtspsrc, rtpopusdepay, pulsesink
+#  - gstreamer1.0-plugins-base : opusdec, audioconvert, audioresample
+#  - gstreamer1.0-tools        : gst-launch-1.0, gst-inspect-1.0
+#  - pipewire/-audio/-pulse    : the graph, plus the PulseAudio-compat socket
+#                                that gstreamer and go2rtc both connect to
+#  - wireplumber               : session/route policy — without it nothing is
+#                                routed to a device at all
+#  - libspa-0.2-modules        : carries spa-0.2/aec/libspa-aec-webrtc.so, the
+#                                echo canceller (not used until inbound
+#                                playback ships — see the plan, item 3)
+#  - pipewire-bin              : pw-play/pw-record, for on-box diagnostics
+#  - alsa-utils                : aplay -l / amixer / alsactl. NOT part of the
+#                                pipeline — PipeWire needs none of it. It is
+#                                here because the Appliance is a headless box
+#                                with no desktop and no second opinion: when a
+#                                speaker finally arrives (D7) and there is no
+#                                sound, `aplay -l` saying whether the kernel
+#                                even sees a card, and `amixer` saying whether
+#                                it came up muted, are the difference between a
+#                                five-minute fix and a blind one. Added
+#                                2026-08-08 after the converge showed the box
+#                                could not answer either question.
+#
+# Note there is deliberately no pulseaudio-utils: `pactl` is absent from the
+# verified dev host and is not needed. Use `wpctl` (wireplumber).
+#
+# Several entries below are transitively redundant (`pipewire` alone pulls
+# `pipewire-bin` and `libpipewire-0.3-modules`; `pipewire-audio` pulls most of
+# the rest). They are listed anyway: this list is also the documentation of what
+# the audio stack consists of, and a dependency that today is hard can become a
+# Recommends in a later release without anyone noticing.
+audio_packages:
+  - pipewire
+  - pipewire-audio
+  - pipewire-pulse
+  - pipewire-bin
+  - wireplumber
+  - libspa-0.2-modules
+  - gstreamer1.0-tools
+  - gstreamer1.0-plugins-base
+  - gstreamer1.0-plugins-good
+  - alsa-utils
+
 # Flutter's documented Linux-desktop dependency list, minus the parts that
 # arrive by another route (`git` is in flutter_bootstrap_packages below).
 #

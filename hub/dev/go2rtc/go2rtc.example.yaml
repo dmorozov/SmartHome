@@ -22,26 +22,9 @@ api:
   origin: "*"
 
 streams:
-  # The one stream this file DECLARES rather than comments out, and the reason
-  # is that `../README.md` already tells you to point at it: "`selftest` is the
-  # stream to point at while there is no camera." Until 2026-08-07 this file
-  # shipped `streams:` followed by nothing but commented placeholders, so a
-  # fresh devcontainer had no stream at all and that instruction dialled a name
-  # go2rtc did not have.
-  #
-  # It matters more than convenience. `panel/test/live_video_keepalive_live_test.dart`
-  # defaults to this name precisely so that video work does not have to touch
-  # the doorbell — HA core #177014 says an open Ring session can suppress the
-  # *next* real ding, so pointing a test loop at `ring_doorbell` is not a
-  # neutral choice. With no `selftest` here, the only runnable target was the
-  # real camera.
-  #
-  # **Two producers, not one**, copied from the production example for the
-  # reason it states at length: the web build plays H.264 over a WebSocket and
-  # a native `-d linux` build pulls multipart JPEG off the same stream name. A
-  # single-producer stream serves one of them and hands the other a 200 with
-  # zero bytes — the documented silent failure. Keeping both here means the
-  # sandbox exercises the same shape a real camera will.
+  # Synthetic, two-producer — see go2rtc.example.yaml for why both. Point
+  # video work here rather than at ring_doorbell: an open Ring session can
+  # suppress the next real ding (HA core #177014).
   selftest:
     - ffmpeg:virtual?video&size=640x480#video=h264
     - ffmpeg:selftest#video=mjpeg
@@ -50,10 +33,61 @@ streams:
   # (docs/research/hub-and-device-integrations.md §3.2):
   # wyze_porch: rtsp://user:pass@CAMERA-LAN-IP/live
 
-  # Ring doorbell: ring-mqtt runs its own RTSP server INSIDE the compose
-  # network. The exact path (device id) is shown in the ring-mqtt web UI at
-  # http://localhost:65123 and in `docker logs ring-mqtt-dev`:
-  # ring_doorbell: rtsp://ring-mqtt:8554/RING-CAMERA-ID_live
+  # Ring doorbell, VIDEO ONLY: ring-mqtt runs its own RTSP server INSIDE the
+  # compose network. On-demand: the Ring cloud pull starts when a consumer
+  # connects and stops when the last one leaves (the Popup's teardown is built
+  # for exactly this). This is the REAL front door via the dev ring-mqtt's
+  # session — owner's decision 2026-08-06.
+  #
+  # It CANNOT carry talkback. A generic RTSP restream has no backchannel, which
+  # is why `ring:` below exists alongside it rather than replacing it. The Panel
+  # binds to THIS one (panel/assets/house/bindings.yaml, `stream: ring_doorbell`).
+  ring_doorbell: rtsp://ring-mqtt:8554/90486cf35236_live
+
+  # ---------------------------------------------------------------------------
+  # Ring doorbell, TWO-WAY: go2rtc's native `ring:` source (ADR-0011). This is
+  # the only stream in this repo that can carry audio TO the doorbell:
+  #   TALK  POST /api/streams?dst=ring&src=rtsp%3A%2F%2F127.0.0.1%3A8554%2Fmic
+  #   STOP  POST /api/streams?dst=ring&src=        (empty src; idempotent)
+  #
+  # 🔴 PASTE THE REFRESH TOKEN BELOW, IN AN EDITOR — never into a chat window,
+  # never via a shell command that lands in history. Replace the whole
+  # PASTE_REFRESH_TOKEN_HERE placeholder, keeping the line on one line. Mint it
+  # with (TODO.md B9):
+  #   docker exec -it ring-mqtt-dev node \
+  #     /app/ring-mqtt/node_modules/@tsightler/ring-client-api/lib/ring-auth-cli.js
+  #
+  # 🔴 It must be ITS OWN token, not ring-mqtt-dev's. Ring rotates refresh
+  # tokens on use, so two consumers sharing one invalidate each other.
+  #
+  # 🔴 go2rtc REWRITES THIS FILE. When Ring rotates the token it patches this
+  # line in place (observed 23 s after startup, preserving unrelated edits made
+  # seconds earlier). Treat the value on disk as machine-owned: it is not the
+  # one you pasted, restarting the container is not side-effect-free on the
+  # credential, and anything that reads it must read it at point of use.
+  #
+  # ⚠️ Two Ring sessions will now exist on this machine — ring-mqtt-dev's and
+  # this one. That was never load-tested; if dings start going missing or dials
+  # start failing, suspect this first (HA core #177014, #167406).
+  #
+  # This file is gitignored (hub/dev/.gitignore: `go2rtc/*`), so the token is
+  # not committed — but it IS on disk in the repo tree, unlike the production
+  # stack which keeps its go2rtc config under ~/.sh_keys (ADR-0010). Tighten
+  # the mode after pasting:  chmod 600 hub/dev/go2rtc/go2rtc.yaml
+  ring: ring:?device_id=90486cf35236&camera_id=319156885&refresh_token=INSERT_TOKEN_HERE
+
+  # The microphone this machine talks THROUGH — the `src` of the TALK call
+  # above. Commented out on purpose: it captures via PipeWire's PulseAudio
+  # socket, and this container has neither the socket mounted nor PULSE_SERVER
+  # set (verified: `docker inspect go2rtc-dev` shows one bind, ./go2rtc only).
+  # Uncommenting it without those would give a stream that fails only when
+  # somebody presses talk, which is the worst moment to find out. See
+  # docs/plans/ring-audio-stack.md — the compose change has to be applied from
+  # a HOST shell, never `docker compose up` from inside the devcontainer.
+  #
+  # mic: >-
+  #   exec:ffmpeg -re -f pulse -i default -c:a libopus -b:a 48k
+  #   -rtsp_transport tcp -f rtsp {output}
 
 webrtc:
   candidates:
@@ -63,3 +97,7 @@ webrtc:
     # must name the HOST port the browser can dial. To view from another
     # device, open the port binding in compose.yaml and add "LAN-IP:28555".
     - 127.0.0.1:28555
+
+# E8 (root README): "*" or no browser video — see go2rtc.example.yaml.
+api:
+  origin: "*"
