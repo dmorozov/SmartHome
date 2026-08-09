@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics/log.dart';
 import '../domain/house.dart';
+import 'audio/talk.dart';
 import 'device_presentation.dart';
 import 'hub_controller.dart';
 import 'theme.dart';
@@ -54,6 +55,7 @@ Future<void> showDevicePopup(
   required VideoConfig video,
   HubController? controller,
   SnapshotConfig? snapshots,
+  TalkConfig talk = const TalkConfig(),
   Duration? dismissAfter,
   Duration? dismissCeiling,
   VoidCallback? onGone,
@@ -64,6 +66,7 @@ Future<void> showDevicePopup(
     builder: (context) => _DevicePopupBody(
       presentation: presentation,
       video: video,
+      talk: talk,
       controller: controller,
       snapshots: snapshots,
       dismissAfter: dismissAfter,
@@ -188,6 +191,7 @@ class _DevicePopupBody extends StatefulWidget {
   const _DevicePopupBody({
     required this.presentation,
     required this.video,
+    required this.talk,
     required this.controller,
     required this.snapshots,
     required this.dismissAfter,
@@ -197,6 +201,7 @@ class _DevicePopupBody extends StatefulWidget {
 
   final DevicePresentation presentation;
   final VideoConfig video;
+  final TalkConfig talk;
   final HubController? controller;
   final SnapshotConfig? snapshots;
   final Duration? dismissAfter;
@@ -255,7 +260,27 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   bool get _isDoorbell =>
       widget.presentation.device.kind == DeviceKind.doorbell;
 
-  var _talking = false;
+  /// What the button and its caption may claim. Set once in [initState] to
+  /// [TalkPhase.unconfigured] or [TalkPhase.idle] — whether this build was
+  /// told where go2rtc is, and whether this Device has a `talk:` binding, are
+  /// both knowable before anyone touches the glass.
+  var _talk = TalkPhase.idle;
+
+  /// The talk calls, chained so they reach go2rtc in the order the thumb made
+  /// them.
+  ///
+  /// A press and a quick release are two calls a few milliseconds apart, and
+  /// `POST src=` racing ahead of the `POST src=rtsp://…` it is meant to undo
+  /// would leave the microphone open with nothing left to close it — the
+  /// exact wedged-mic state `hub/talk-watchdog/` exists to catch, arrived at
+  /// by the Panel's own hand. Chaining is cheaper than reasoning about the
+  /// race, and stop is idempotent so a redundant link costs one 200.
+  Future<void> _talkOps = Future.value();
+
+  /// Which press a completing call belongs to. A START that returns after its
+  /// own release must not light the button back up, and this is how a late
+  /// answer knows it is stale.
+  var _talkPress = 0;
 
   /// The push-to-talk pulse ring's clock. Declared for every Popup — a
   /// mixin is per-class, not per-condition — but only ever started while a
@@ -270,26 +295,107 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// widget is still mounted.
   late final AnimationController _pulse;
 
-  /// **Stub.** No audio is captured or sent — Ring's two-way-audio API is a
-  /// separate piece of work from this button's layout, tracked in TODO.md.
-  /// What is real: the gesture, the pressed-state colour change, and the
-  /// pulse — the same kind of press feedback any button gives, not a claim
-  /// about what is happening at the door. What is deliberately *not* said
-  /// is "Talking…": ADR-0007's rule that a reading which is not live may
-  /// not be dressed as one applies here just as it does to the still photo
-  /// below the video — this button must not tell anyone at the wall that
-  /// their voice is reaching the porch when it is not. [_TalkCaption] is
-  /// where that stays said, always, not just while pressed.
+  /// Opens the microphone at the door: one POST, per ADR-0011.
+  ///
+  /// The phase moves to [TalkPhase.opening] on the frame the thumb lands and
+  /// only to [TalkPhase.open] when go2rtc has said 200. That gap is real —
+  /// go2rtc has to dial Ring's backchannel — and the button spends it looking
+  /// pressed rather than looking live. ADR-0007's rule that a reading which is
+  /// not live may not be dressed as one applies to a control just as it does
+  /// to the still photo below the video: nobody at the wall may be told their
+  /// voice is reaching the porch until something has said so.
+  ///
+  /// Even [TalkPhase.open] claims no more than the status code backs — see
+  /// [_TalkCaption], which says the microphone is open and stops there.
   void _startTalking() {
-    setState(() => _talking = true);
-    _pulse.repeat();
-    Log.debug('popup', 'talk_start', {'device': widget.presentation.device.id});
+    final device = widget.presentation.device;
+    final url = widget.talk.startUrl(device.talkStream);
+    // Reachable, and the only thing standing in the way: the button is drawn
+    // on every doorbell Popup, including the ones with no `talk:` binding and
+    // no `GO2RTC_URL` — the layout is the doorbell's, and hiding the control
+    // would leave nothing on screen to carry the caption that explains why it
+    // cannot work. So a press on an unconfigured door lands here and stops
+    // here, posting nothing.
+    if (url == null) return;
+    final press = ++_talkPress;
+    setState(() => _talk = TalkPhase.opening);
+    Log.debug('popup', 'talk_start', {'device': device.id});
+    _talkOps = _talkOps.then((_) async {
+      final result = await widget.talk.post(url);
+      if (!result.ok) {
+        // The status, never the URL: `talk.dart` keeps this to an HTTP code
+        // or an exception's bare type name, because a fat-fingered
+        // `GO2RTC_URL` can carry a password (log.dart: **Never log a
+        // secret**).
+        Log.warn('popup', 'talk_failed', {
+          'device': device.id,
+          'phase': 'start',
+          'status': result.status,
+        });
+      }
+      // A release that landed while this was in flight already queued its own
+      // stop behind this link, so there is nothing to undo here — only a
+      // stale answer to decline to render.
+      if (!mounted || press != _talkPress) return;
+      setState(() => _talk = result.ok ? TalkPhase.open : TalkPhase.failed);
+      if (result.ok) _pulse.repeat();
+      // Each link swallows its own faults rather than passing them down. A
+      // `.then` chain propagates an error past every later link, so one
+      // throw here — a poster breaking its no-throw contract, a `setState`
+      // on a torn-down tree — would silently cancel the STOP queued behind
+      // it and leave the microphone open. That is the one failure this
+      // design exists to prevent, so it may not be reachable through a bug
+      // in the link before it.
+    }).catchError((Object error) {
+      Log.warn('popup', 'talk_failed', {
+        'device': device.id,
+        'phase': 'start',
+        'status': error.runtimeType.toString(),
+      });
+    });
   }
 
+  /// Closes it again. Fired on release, on a cancelled gesture, and once more
+  /// from [dispose] — liberally rather than carefully, because stop is
+  /// idempotent (ADR-0011: 40/40 returning 200) and the thing it prevents is
+  /// a doorbell held live on somebody's battery.
   void _stopTalking() {
-    setState(() => _talking = false);
+    final device = widget.presentation.device;
+    if (_talk == TalkPhase.unconfigured || _talk == TalkPhase.idle) return;
+    ++_talkPress;
     _pulse.stop();
-    Log.debug('popup', 'talk_stop', {'device': widget.presentation.device.id});
+    // A failure stays on screen past the release that follows it. A press is
+    // over in a moment, and a caption nobody has time to read reports the
+    // fault to no one; the next press is what clears it.
+    if (_talk != TalkPhase.failed) setState(() => _talk = TalkPhase.idle);
+    Log.debug('popup', 'talk_stop', {'device': device.id});
+    _queueStop(device.id);
+  }
+
+  /// The stop half, shared with [dispose] — which cannot `setState`, cannot
+  /// await, and must still get the call out.
+  void _queueStop(String deviceId) {
+    final url = widget.talk.stopUrl(widget.presentation.device.talkStream);
+    if (url == null) return;
+    _talkOps = _talkOps.then((_) async {
+      final result = await widget.talk.post(url);
+      if (result.ok) return;
+      // Worth a line even though nothing here can retry: the watchdog is the
+      // backstop, and this is the log entry that explains why it had to be.
+      Log.warn('popup', 'talk_failed', {
+        'device': deviceId,
+        'phase': 'stop',
+        'status': result.status,
+      });
+      // Swallowed here for the reason the START link gives: a poisoned chain
+      // is a stop that never fires.
+    }).catchError((Object error) {
+      Log.warn('popup', 'talk_failed', {
+        'device': deviceId,
+        'phase': 'stop',
+        'status': error.runtimeType.toString(),
+      });
+    });
   }
 
   @override
@@ -299,6 +405,14 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    // Decided here rather than on the first press: "nobody told the Panel
+    // where go2rtc is" and "this door has no `talk:` binding" are both facts
+    // knowable at open, and the caption is more use before the press than
+    // after it. Same argument [LiveVideoPhase.unconfigured] makes one field
+    // up.
+    if (widget.talk.startUrl(widget.presentation.device.talkStream) == null) {
+      _talk = TalkPhase.unconfigured;
+    }
     _session = _openVideo();
     _fetchStill();
     // Checked immediately as well as on change: an opener can answer
@@ -347,6 +461,23 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     if (gone) _showing.remove(id);
     _deadline?.cancel();
     _ceiling?.cancel();
+    // The one route out the gesture cannot cover. `onTapUp` and `onTapCancel`
+    // between them catch a thumb that lifts or slides off, but a Popup can
+    // also be dismissed *while held* — the barrier, the deadline's own pop,
+    // kiosk shutdown — and every one of those unmounts this State with the
+    // microphone open and no release ever coming. Fire-and-forget, chained
+    // behind whatever is still in flight so it cannot overtake the START it
+    // is undoing; `dispose` may not await, and the watchdog is the backstop
+    // if the process dies before this lands.
+    // Also from `failed`, and that is not belt-and-braces: a refused START is
+    // not proof the producer never opened. go2rtc may have accepted the
+    // microphone and had its answer lost to a timeout or a dropped socket,
+    // which looks identical from here. Stop is idempotent, so the redundant
+    // call this costs on a genuinely-failed press is one 200.
+    if (_talk != TalkPhase.idle && _talk != TalkPhase.unconfigured) {
+      ++_talkPress;
+      _queueStop(id);
+    }
     _pulse.dispose();
     final session = _session;
     if (session != null) {
@@ -704,13 +835,13 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
         if (isDoorbell) ...[
           const SizedBox(height: 6),
           _PushToTalkButton(
-            talking: _talking,
+            phase: _talk,
             pulse: _pulse,
             onStart: _startTalking,
             onStop: _stopTalking,
           ),
           const SizedBox(height: 6),
-          const _TalkCaption(),
+          _TalkCaption(_talk),
         ],
       ],
     );
@@ -927,24 +1058,34 @@ class _VideoNotice extends StatelessWidget {
 /// trace to point to — what is here is the whole record of the comparison
 /// now. A's bigger card, kept, with B's circular mic swapped in for A's
 /// full-width pill. [pulse] is owned by the caller, not this widget: it
-/// lives beside [talking] in [_DevicePopupBodyState] so a rebuild here (the
+/// lives beside [phase] in [_DevicePopupBodyState] so a rebuild here (the
 /// ring's own `AnimatedBuilder`) never restarts or re-creates the ticker
 /// driving it.
+///
+/// Three looks, not two, and the middle one is the point: pressed-but-not-yet
+/// -open wears the mic icon (the press was registered) in the resting colour
+/// (nothing is live yet). Only [TalkPhase.open] — go2rtc having answered —
+/// turns the button red and starts the ring.
 class _PushToTalkButton extends StatelessWidget {
   const _PushToTalkButton({
-    required this.talking,
+    required this.phase,
     required this.pulse,
     required this.onStart,
     required this.onStop,
   });
 
-  final bool talking;
+  final TalkPhase phase;
   final AnimationController pulse;
   final VoidCallback onStart;
   final VoidCallback onStop;
 
+  /// Whether a thumb is on the glass — press feedback, and nothing about
+  /// whether a microphone is open.
+  bool get _held => phase == TalkPhase.opening || phase == TalkPhase.open;
+
   @override
   Widget build(BuildContext context) {
+    final live = phase == TalkPhase.open;
     return Center(
       child: GestureDetector(
         key: const ValueKey('push-to-talk'),
@@ -957,7 +1098,7 @@ class _PushToTalkButton extends StatelessWidget {
           child: Stack(
             alignment: Alignment.center,
             children: [
-              if (talking)
+              if (live)
                 AnimatedBuilder(
                   animation: pulse,
                   builder: (context, _) => Container(
@@ -976,12 +1117,12 @@ class _PushToTalkButton extends StatelessWidget {
                 height: 96,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: talking ? const Color(0xFFE05252) : PanelTheme.accent,
+                  color: live ? const Color(0xFFE05252) : PanelTheme.accent,
                   border: Border.all(color: PanelTheme.surfaceRaised, width: 3),
                   boxShadow: PanelTheme.raised(10),
                 ),
                 child: Icon(
-                  talking ? Icons.mic : Icons.mic_none,
+                  _held ? Icons.mic : Icons.mic_none,
                   color: Colors.white,
                   size: 40,
                 ),
@@ -994,20 +1135,51 @@ class _PushToTalkButton extends StatelessWidget {
   }
 }
 
-/// The honest label under the button, always on screen and never dependent
-/// on [_DevicePopupBodyState._talking] — see [_DevicePopupBodyState._startTalking]
-/// for why the button itself never claims "Talking…". Same rule ADR-0007
-/// applies to the still photo below the video, applied to a control instead
-/// of a reading: a thing that is not happening yet may not look like it is.
+/// The honest label under the button — the one place that says what is and
+/// is not actually happening, in every phase.
+///
+/// Same rule ADR-0007 applies to the still photo below the video, applied to
+/// a control instead of a reading: a thing that is not happening may not look
+/// like it is. Three of these five sentences exist only because collapsing
+/// them would put one caption under problems with different fixes — a missing
+/// `GO2RTC_URL`, a missing `talk:` binding and a go2rtc that refused all read
+/// as "it doesn't work" otherwise.
+///
+/// Two things it deliberately keeps saying:
+///   - it never claims the door **heard** anyone. A 200 means go2rtc took the
+///     microphone as a producer, and that is the strongest claim this API
+///     affords ([TalkPhase.open]);
+///   - it keeps saying that audio **from** the door is not wired up, because
+///     it is not: the Panel plays MJPEG, which carries no audio by
+///     construction, and whichever process ends up playing inbound audio is
+///     still an open owner decision. Half a duplex working is not two-way
+///     audio, and the wall should not imply it is.
 class _TalkCaption extends StatelessWidget {
-  const _TalkCaption();
+  const _TalkCaption(this.phase);
+
+  final TalkPhase phase;
+
+  static const _wording = {
+    TalkPhase.unconfigured: 'Two-way audio isn\'t configured for this door',
+    TalkPhase.idle: 'Hold to speak — you won\'t hear the door back yet',
+    TalkPhase.opening: 'Opening the microphone…',
+    TalkPhase.open: 'Microphone open — speak now',
+    TalkPhase.failed: 'Couldn\'t open the microphone — nothing was sent',
+  };
 
   @override
   Widget build(BuildContext context) {
-    return const Text(
-      'Push to talk — two-way audio isn\'t wired up yet',
+    return Text(
+      _wording[phase]!,
       textAlign: TextAlign.center,
-      style: TextStyle(fontSize: 11, color: PanelTheme.inkFaint),
+      style: TextStyle(
+        fontSize: 11,
+        // The one phase that is a fault rather than a state. Same red as the
+        // live button, which is not a collision: nothing shows both.
+        color: phase == TalkPhase.failed
+            ? const Color(0xFFE05252)
+            : PanelTheme.inkFaint,
+      ),
     );
   }
 }

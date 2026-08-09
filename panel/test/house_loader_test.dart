@@ -226,6 +226,55 @@ bindings:
       expect(doorbell.snapshotEntityId, 'camera.front_door_snapshot');
     });
 
+    test('a doorbell carries both stream names, and they stay different '
+        'things', () {
+      // The Front Door's real shape (ADR-0011): it PLAYS ring-mqtt's RTSP
+      // restream and TALKS INTO go2rtc's native `ring:` source. Two streams,
+      // neither derivable from the other, so the join has to carry both —
+      // this is the case that would silently regress into `dst=ring_doorbell`
+      // if anyone ever decided one could be spelled from the other.
+      final doorbell = loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: doorbell
+    name: "Front Door"
+    kind: doorbell
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  doorbell:
+    stream: ring_doorbell
+    talk: ring
+    connectivity: cloud
+''').floors.single.rooms.single.devices.single;
+      expect(doorbell.streamName, 'ring_doorbell');
+      expect(doorbell.talkStream, 'ring');
+    });
+
+    test('a talk on a camera is refused: it plays video, but there is no '
+        'speaker at the far end to push into', () {
+      // Narrower than the video gate one test up, and deliberately so: a
+      // camera passes `stream:` and must still fail `talk:`. Getting this
+      // wrong would leave the author sure a camera can be talked through.
+      expect(
+        () => loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: cam-den
+    name: "Den Camera"
+    kind: camera
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  cam-den:
+    stream: den_cam
+    talk: den_cam_talk
+    connectivity: cloud
+'''),
+        _rejects('only a doorbell has a speaker to talk out of'),
+      );
+    });
+
     test('a snapshot on a light is refused: nothing would ever fetch it', () {
       // The same wrong-belief failure as a stream on a light: the author
       // thinks a still face is wired up, and nothing will ever read it.

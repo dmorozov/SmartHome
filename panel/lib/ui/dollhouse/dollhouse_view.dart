@@ -5,6 +5,7 @@ import '../../domain/house.dart';
 import '../device_popup.dart';
 import '../device_presentation.dart';
 import '../hub_controller.dart';
+import '../audio/talk.dart';
 import '../video/live_video.dart';
 import '../video/snapshot.dart';
 import 'floor_arrangement.dart';
@@ -23,6 +24,7 @@ class DollhouseView extends StatefulWidget {
     required this.controller,
     required this.video,
     this.snapshots,
+    this.talk = const TalkConfig(),
   });
 
   final HubController controller;
@@ -38,6 +40,12 @@ class DollhouseView extends StatefulWidget {
   /// optional for the reason `showDevicePopup`'s copy is: a suite that stages
   /// a tap on a camera pin should not have to stage a Hub REST endpoint too.
   final SnapshotConfig? snapshots;
+
+  /// Where the doorbell's push-to-talk pushes, forwarded for [video]'s reason.
+  /// Defaulted rather than required, like `showDevicePopup`'s copy: a suite
+  /// staging a tap on a *camera* pin has no talkback to stage, and an
+  /// unconfigured default is the honest thing for it to get.
+  final TalkConfig talk;
 
   @override
   State<DollhouseView> createState() => _DollhouseViewState();
@@ -146,6 +154,7 @@ class _DollhouseViewState extends State<DollhouseView> {
       showDevicePopup(context,
           presentation: presentation,
           video: widget.video,
+          talk: widget.talk,
           controller: widget.controller,
           snapshots: widget.snapshots);
     }

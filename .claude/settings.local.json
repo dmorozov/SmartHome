@@ -114,7 +114,9 @@
       "Bash(SH_REPO_ROOT=/home/dmorozov/Work/SmartHome ./run.sh up)",
       "Bash(echo \"EXIT=$?\")",
       "Bash(break)",
-      "Bash(SH_REPO_ROOT=/home/dmorozov/Work/SmartHome ./run.sh reset)"
+      "Bash(SH_REPO_ROOT=/home/dmorozov/Work/SmartHome ./run.sh reset)",
+      "Bash(echo \"launched $!\")",
+      "Bash(kill -0 130999)"
     ]
   },
   "enabledMcpjsonServers": [

@@ -14,6 +14,7 @@ import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/doorbell_popup_host.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
+import 'ui/audio/talk.dart';
 import 'ui/video/live_video.dart';
 import 'ui/video/live_video_keepalive.dart';
 import 'ui/video/snapshot.dart';
@@ -120,6 +121,12 @@ Future<void> main() async {
     // REST fetch authenticated exactly like the socket. The token travels
     // in this object to become a header — never a URL part (snapshot.dart).
     snapshots: SnapshotConfig(haUrl: config.url, token: config.token),
+    // The same go2rtc, reached over the same address, for the other half of
+    // the doorbell: `video` plays what the camera sees, `talk` pushes a
+    // microphone back into it. Two configs and not one because every camera
+    // Popup in the house carries the first and only a doorbell can use the
+    // second (ADR-0011; `ui/audio/talk.dart`).
+    talk: TalkConfig(go2rtcUrl: config.go2rtcUrl),
   ));
 }
 
@@ -152,6 +159,7 @@ class PanelApp extends StatelessWidget {
     required this.hubLabel,
     required this.video,
     required this.snapshots,
+    required this.talk,
   });
 
   final HubController controller;
@@ -173,6 +181,12 @@ class PanelApp extends StatelessWidget {
   /// test-fixture fact wearing a Panel costume — `test/fixtures.dart` is
   /// where it defaults, and it defaults to unconfigured.
   final SnapshotConfig snapshots;
+
+  /// Where the doorbell's push-to-talk pushes. Required for [video]'s reason:
+  /// an unconfigured default here would be a fact about test fixtures wearing
+  /// the costume of a fact about the Panel. `test/fixtures.dart` is where it
+  /// defaults, and it defaults to unconfigured.
+  final TalkConfig talk;
 
   /// Whether the House has anything the Cameras view could show. Decides
   /// the tab's existence, not its behaviour: a tab onto an empty grid is
@@ -196,6 +210,7 @@ class PanelApp extends StatelessWidget {
           controller: controller,
           video: video,
           snapshots: snapshots,
+          talk: talk,
           child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
@@ -236,7 +251,8 @@ class PanelApp extends StatelessWidget {
                             builder: (context, _) => DollhouseView(
                                 controller: controller,
                                 video: video,
-                                snapshots: snapshots),
+                                snapshots: snapshots,
+                                talk: talk),
                           ),
                         ),
                         // The right-edge tab (phase-7 §B2). Outside the

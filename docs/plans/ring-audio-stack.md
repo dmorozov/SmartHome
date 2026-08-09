@@ -532,7 +532,7 @@ stdlib-only Python file, wired into `hub/dev/compose.yaml` as `talk-watchdog`,
 | Stop once at startup, to clear what a crash left open | ✅ |
 | Absolute talk cap (30–60 s) | ✅ `TALK_CAP_S`, default 45 |
 | Monitor the **consumer list**, not the process list | ✅ |
-| Stop unconditionally on popup close **and** app shutdown | ⬜ Panel-side, item 4 below |
+| Stop unconditionally on popup close **and** app shutdown | ✅ Panel-side, item 4 below (`dispose`, 2026-08-09) |
 | Reap **orphaned consumers** | 🔴 **impossible as specified** — see below |
 
 🔴 **"Reap orphaned consumers" cannot be met over HTTP, and this requirement
@@ -566,10 +566,39 @@ AEC belongs with inbound playback, not ahead of it. When it lands:
   and **do not transfer** to different Appliance hardware.
 - **Double-talk was never tested** — and is exactly what half-duplex avoids.
 
-### 4. Panel wiring
-`panel/lib/ui/device_popup.dart` — `_startTalking` / `_stopTalking` become the two
-HTTP calls in §1, and `_TalkCaption` (currently "isn't wired up yet") needs real
-state. Two behaviours the measurements demand:
+### 4. Panel wiring — 🟢 **outbound built 2026-08-09**; inbound is a separate, blocked piece
+
+**The outbound half is done and tested.** `_startTalking` / `_stopTalking` are the
+two HTTP calls in §1, and `_TalkCaption` has real state.
+
+| Piece | Where |
+|---|---|
+| The seam (`TalkConfig`, `TalkPhase`, `TalkResult`, two posters) | `panel/lib/ui/audio/talk.dart` + `talk_io.dart` / `talk_web.dart` |
+| `talk:` binding → `Device.talkStream` | `bindings_parser.dart`, `house_loader.dart`, `assets/house/bindings.yaml` |
+| Button + caption | `device_popup.dart` |
+| Tests | `panel/test/talk_test.dart` (incl. a real socket), the `push-to-talk` group in `device_popup_test.dart` |
+
+Three things worth knowing about the implementation, each of which was a decision:
+
+- **`dst` is its own binding, not derived from `stream:`.** The Front Door plays
+  `ring_doorbell` and talks into `ring`; a suffix convention would have invented a
+  rule the house's configuration does not have. `talk:` is legal only on a
+  doorbell, and the loader refuses it anywhere else.
+- **`src=` is spelled by hand.** Dart's `Uri.replace(queryParameters:)` renders an
+  empty value as a bare `src` with no `=`. Go's `net/url` almost certainly reads
+  the two alike — but "almost certainly" is the wrong standard for the call that
+  closes a live microphone, and §1's `src=` is what was verified 40/40.
+- **Stop fires from `dispose`, not just from the gesture.** `onTapUp` and
+  `onTapCancel` miss the case that matters: a Popup dismissed *while held* — the
+  barrier, the deadline's own pop, kiosk shutdown. Calls are also chained, so a
+  fast tap cannot land its stop ahead of the start it undoes.
+
+🔴 **Inbound playback is not built, and none of the three bullets below were
+addressed, because all three are about inbound.** The Panel plays MJPEG, which
+carries no audio by construction, so today talkback is genuinely one-way and the
+caption says so ("you won't hear the door back yet") rather than implying a duplex
+that does not exist. Inbound is blocked on the open owner decision in §5 — who
+owns the inbound player — and until it is answered these stay open:
 
 - **Silence is normal.** Ring transmits near-digital-silence (~−90 dBFS) when the
   street is quiet. The UI must not report a broken stream, and must not use audio

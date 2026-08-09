@@ -167,6 +167,7 @@ class Device {
     required this.position,
     this.entityId,
     this.streamName,
+    this.talkStream,
     this.snapshotEntityId,
   });
 
@@ -190,6 +191,18 @@ class Device {
   /// contract is pure *answers* about how a Device looks and behaves, and a
   /// stream name is neither — it is a fact the House Plan states.
   final String? streamName;
+
+  /// The go2rtc stream this Device's push-to-talk button pushes into, e.g.
+  /// `ring`. Null on everything that is not a doorbell, and null on those too
+  /// until somebody wires talkback up — the button's caption then says so
+  /// rather than the button pretending.
+  ///
+  /// **Not derivable from [streamName], and the Front Door is the proof**: it
+  /// plays `ring_doorbell` and talks into `ring`, two different go2rtc streams
+  /// because only the native `ring:` source carries a backchannel (ADR-0011).
+  /// On the Device for [streamName]'s reason: a House Plan fact, not a
+  /// presentation answer.
+  final String? talkStream;
 
   /// The HA camera entity whose still image faces this Device's tile in the
   /// Cameras view while it is not live, e.g. `camera.front_door_snapshot`.

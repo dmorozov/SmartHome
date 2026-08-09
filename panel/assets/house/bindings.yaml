@@ -51,6 +51,19 @@
 #   nothing would ever read, and the Panel refuses to start rather than
 #   leave you believing a feed is wired up. Two Devices MAY name the same
 #   stream: nothing here writes to a camera, so they cannot fight.
+# talk: the go2rtc stream the push-to-talk button pushes INTO. Held to the
+#   same name-not-a-URL rule as stream:, and refused the same way, for a
+#   sharper reason: this name reaches go2rtc as the `dst=` of a call that
+#   pushes a live microphone into it.
+#
+#   It is NOT the same value as stream:, and the Front Door is the proof —
+#   it plays `ring_doorbell` (ring-mqtt's RTSP restream) and talks into
+#   `ring` (go2rtc's native `ring:` source). Only the second carries a
+#   backchannel, which is the whole of ADR-0011. Nothing derives one from
+#   the other; both are named here.
+#
+#   Legal only on a doorbell: a camera has no speaker at the other end.
+#   Omit it until talkback exists — the button's caption then says so.
 # connectivity: local | cloud — not derivable from the Hub, and there is
 #   no honest default (planned cloud hardware is cloud before it binds),
 #   so it is declared here and the Popup shows it (CONTEXT.md).
@@ -187,6 +200,12 @@ bindings:
     # (Ch. 5 §1.3 records the burial).
     entity: event.front_door_ding
     stream: ring_doorbell
+    # Two-way audio (ADR-0011). A DIFFERENT go2rtc stream from `stream:`
+    # above, not a variant spelling of it: `ring_doorbell` is ring-mqtt's
+    # RTSP restream, which has no backchannel and never could carry talk;
+    # `ring` is go2rtc's own native `ring:` source, which does. Pushing to
+    # this name is what opens the microphone at the door.
+    talk: ring
     # The tile's still face in the Cameras view (phase 7 §B4): the ding
     # entity above is the doorbell's STATE and this is its PICTURE — two
     # different HA entities, underivable from each other, so the binding

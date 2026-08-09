@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
+import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/snapshot.dart';
 
@@ -59,6 +60,7 @@ Future<void> pumpPanel(
   String hubLabel = 'FAKE HUB',
   VideoConfig video = const VideoConfig(),
   SnapshotConfig snapshots = const SnapshotConfig(),
+  TalkConfig talk = const TalkConfig(),
 }) async {
   tester.view
     ..physicalSize = size
@@ -70,7 +72,8 @@ Future<void> pumpPanel(
       controller: controller,
       hubLabel: hubLabel,
       video: video,
-      snapshots: snapshots));
+      snapshots: snapshots,
+      talk: talk));
   await tester.pumpAndSettle();
 }
 

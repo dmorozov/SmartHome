@@ -99,6 +99,7 @@ House loadHouse({required String houseYaml, required String bindingsYaml}) {
       position: _point(p['position'], 'the position: on $device'),
       entityId: binding.entityId,
       streamName: binding.streamName,
+      talkStream: binding.talkStream,
       snapshotEntityId: binding.snapshotEntity,
     );
     final room = p['room'] as String;
@@ -294,6 +295,18 @@ void _checkPin(Room shape, Device device, String room, String label) {
 /// has the file open at the line, and "delete the stream: line" needs no
 /// value to act on.
 void _checkStream(ParsedBinding binding, DeviceKind kind) {
+  // Narrower than the video test below, because two-way audio is narrower:
+  // a camera plays video and a doorbell plays video, but only a doorbell has
+  // a speaker at the other end. `_PushToTalkButton` is gated on exactly this
+  // kind, so a `talk:` on a camera would be a name nothing ever posts.
+  if (kind != DeviceKind.doorbell && binding.talkStream != null) {
+    throw FormatException(
+        'bindings.yaml: ${binding.label} is a ${specOf(kind).slug} and has a '
+        'talk: — only a doorbell has a speaker to talk out of, so nothing '
+        'would ever push to it; delete the line, or fix the marker\'s kind in '
+        'the drawing and re-run the converter. The name is not echoed, for '
+        "the stream: message's reason below.");
+  }
   if (specOf(kind).video) return;
   if (binding.streamName != null) {
     throw FormatException(

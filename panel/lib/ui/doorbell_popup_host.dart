@@ -6,6 +6,7 @@ import '../diagnostics/log.dart';
 import '../domain/house.dart';
 import 'device_popup.dart';
 import 'hub_controller.dart';
+import 'audio/talk.dart';
 import 'video/live_video.dart';
 import 'video/snapshot.dart';
 
@@ -83,6 +84,7 @@ class DoorbellPopupHost extends StatefulWidget {
     required this.video,
     this.snapshots,
     required this.child,
+    this.talk = const TalkConfig(),
     this.dismissAfter = kDoorbellPopupDeadline,
     this.dismissCeiling = kDoorbellPopupCeiling,
   });
@@ -102,6 +104,12 @@ class DoorbellPopupHost extends StatefulWidget {
   /// likeliest to arrive mid-GOP — and the ones where somebody wants to see
   /// the porch right now rather than read why they cannot.
   final SnapshotConfig? snapshots;
+
+  /// Where the doorbell's push-to-talk pushes. Forwarded for [video]'s reason
+  /// and mattering here more than anywhere: the Popups this host pushes are
+  /// the ones a visitor is standing in front of, so they are the ones whose
+  /// talk button is actually going to be pressed.
+  final TalkConfig talk;
 
   final Widget child;
 
@@ -276,6 +284,7 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
       presentation: widget.controller.presentationOf(doorbell),
       video: widget.video,
       snapshots: widget.snapshots,
+      talk: widget.talk,
       dismissAfter: widget.dismissAfter,
       dismissCeiling: widget.dismissCeiling,
       onGone: () => _onPopupGone(doorbell),

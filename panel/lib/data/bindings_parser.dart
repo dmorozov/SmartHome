@@ -21,6 +21,7 @@ class ParsedBinding {
     required this.ordinal,
     required this.entityId,
     required this.streamName,
+    required this.talkStream,
     required this.snapshotEntity,
     required this.connectivity,
   });
@@ -48,6 +49,18 @@ class ParsedBinding {
   /// may carry one; the loader is what enforces that, because only it knows
   /// the Device's kind.
   final String? streamName;
+
+  /// The go2rtc stream this Device's push-to-talk button pushes **into**, e.g.
+  /// `ring`. Null is the normal case and stays normal — a doorbell with no
+  /// talkback wired up still draws its button's absence honestly.
+  ///
+  /// A separate key from [streamName] because they are separate go2rtc
+  /// streams and neither derives from the other: the Front Door *plays*
+  /// `ring_doorbell` (ring-mqtt's RTSP restream) and *talks into* `ring`
+  /// (go2rtc's native `ring:` source, the only one of the two carrying a
+  /// backchannel — ADR-0011). Only a doorbell may carry one; the loader
+  /// enforces that, as with [streamName], because only it knows the kind.
+  final String? talkStream;
 
   /// The HA camera entity whose still image faces this Device's tile in the
   /// Cameras view while it is not live, e.g. `camera.front_door_snapshot`.
@@ -384,6 +397,18 @@ Map<String, ParsedBinding> parseBindings(String yaml) {
     // One camera watched from two rooms is a house this must not refuse;
     // the `streams=` count on `house.loaded` is the copy-paste safety net.
 
+    // Held to exactly [_streamName]'s rule, and refused with the same
+    // reasoning: a URL here would tell go2rtc to go and dial it, and this key
+    // reaches go2rtc as a `dst=` that go2rtc pushes a live microphone into.
+    final talkStream = _text(binding, key, ordinal, 'talk');
+    if (talkStream != null && !_streamName.hasMatch(talkStream)) {
+      throw _refuses(key, ordinal, 'talk',
+          'is not a go2rtc stream name (one or more of letters, digits, dot, '
+          'dash and underscore, and nothing else) — name the stream in '
+          'go2rtc.yaml and put that name here; a URL here would tell go2rtc '
+          'to go and dial it');
+    }
+
     final snapshotEntity = _text(binding, key, ordinal, 'snapshot');
     if (snapshotEntity != null &&
         (!_entityId.hasMatch(snapshotEntity) ||
@@ -406,6 +431,7 @@ Map<String, ParsedBinding> parseBindings(String yaml) {
       ordinal: ordinal,
       entityId: entityId,
       streamName: streamName,
+      talkStream: talkStream,
       snapshotEntity: snapshotEntity,
       // Deliberately no default: a planned Ring camera is a Cloud Device
       // before it is ever bound, so guessing `local` would mislabel it.

@@ -868,6 +868,47 @@ an HA restart, and it is owner work at the door. Until it runs, treat the
 classifier as argued-for and not observed. See
 [phase-7 §A4](../docs/plans/device-integrations/phase-7-doorbell-events-and-cameras.md).
 
+### Push-to-talk — one direction, and the caption says so
+
+Held on the doorbell Popup, the button posts
+[ADR-0011](../docs/adr/0011-ring-two-way-audio-via-go2rtc-half-duplex.md)'s two
+calls to go2rtc and nothing else: `POST /api/streams?dst=<talk>&src=rtsp://…/mic`
+on press, the same URL with an **empty `src`** on release. No audio crosses the
+Panel — go2rtc captures the microphone and pushes it to Ring, which is what keeps
+`flutter_webrtc` (Linux UI freeze, issue #2070) out of the tree and stop authority
+on the server, where it has to be: a process cannot promise to clean up after its
+own death.
+
+**Speaking works. Hearing does not.** The Panel plays MJPEG, which carries no
+audio by construction, so there is no inbound path yet and the caption says
+"you won't hear the door back yet" rather than implying a duplex that does not
+exist. Who owns the inbound player is an open owner decision
+([ring-audio-stack.md](../docs/plans/ring-audio-stack.md) §5).
+
+**`dst` is its own binding.** `talk:` in `bindings.yaml`, separate from
+`stream:`, because the front door plays `ring_doorbell` (ring-mqtt's RTSP
+restream) and talks into `ring` (go2rtc's native source) — only the second has a
+backchannel, and no suffix rule connects them. Legal on doorbells only; the
+loader refuses it anywhere else.
+
+**Five captions, for [`LiveVideoPhase`](#five-answers-because-one-grey-rectangle-would-be-a-lie)'s
+reason.** A missing `GO2RTC_URL`, a missing `talk:` and a go2rtc that refused have
+three different fixes, so they get three different sentences. The button looks
+*pressed* the moment a thumb lands and only looks **live** once go2rtc has
+answered — that gap is real, because go2rtc has to dial Ring's backchannel. And
+`open` claims no more than the status code backs: "Microphone open", never
+"the door heard you", which no `200` can support.
+
+**Stop is fired liberally**, because it is idempotent (40/40 → 200) and what it
+prevents is a doorbell held live on a battery (#177014). It goes out on release,
+on a cancelled gesture, after a failed start, and again from `dispose` — that
+last one covering the case no gesture callback can: a Popup dismissed *while
+held*, by the barrier, the deadline's own pop, or kiosk shutdown. Calls are
+chained, so a fast tap cannot land its stop ahead of the start it undoes.
+
+Backstop, independent of all of the above: [`hub/talk-watchdog/`](../hub/talk-watchdog/README.md),
+which caps a hot microphone whether or not the Panel is still running.
+
 ## The Cameras view
 
 The Panel's **second full-screen surface**, and until 2026-08-07 this README
@@ -1150,6 +1191,16 @@ flutter test --platform chrome \
   test/live_video_keepalive_test.dart test/live_video_mse_web_test.dart \
   test/log_test.dart test/url_redaction_test.dart
 ```
+
+⚠️ **The count below is stale as of 2026-08-09** — push-to-talk added cases to
+three files in this list (`device_popup_test.dart`, `bindings_parser_test.dart`,
+`house_loader_test.dart`) and the new number was **not measured**, because the
+Chrome runner hangs at `loading …` in this devcontainer and never starts a suite.
+It is not a regression from that work: a suite untouched by it
+(`url_redaction_test.dart`) hangs identically, and stale `chrome_crashpad`
+zombies are left behind. The web *branch* is still verified — `flutter build web`
+compiles it through dart2js in ~19 s — but re-measure this figure on a machine
+where the runner starts.
 
 **237 pass** in the devcontainer (Chrome 151, `CHROME_EXECUTABLE` already set
 by the image). The list is explicit rather than `flutter test --platform

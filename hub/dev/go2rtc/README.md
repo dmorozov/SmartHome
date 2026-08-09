@@ -439,12 +439,21 @@ consequence for Ring talkback — see *Troubleshooting*, *version skew*.
 
 ### On the name `mic`, since it looks inconsistent beside the others
 
-Nothing binds it. Grepped 2026-08-08: the string appears in ADR-0011, the two
-plan documents, these two config files and this README — and **in no code at
-all** (`panel/`'s `mic` hits are `Icons.mic`, the push-to-talk button's Flutter
-icon; `_startTalking` is still a stub and has never named a stream). Renaming is a
-docs-only sweep across five files, one of which is an accepted ADR and would want
-a dated amendment rather than a silent edit.
+Grepped 2026-08-08 the string appeared in no code at all. **That changed on
+2026-08-09**: the Panel's push-to-talk now names this stream, as the `src=` of
+ADR-0011's START call — `defaultTalkMicSource` in `panel/lib/ui/audio/talk.dart`,
+`rtsp://127.0.0.1:8554/mic`. It is a *constant with a default*, not a binding:
+the Panel never dials it, it hands the string to go2rtc, which resolves it
+against its own loopback. So renaming the stream now also means editing that
+constant and the two tests that spell the URL out
+(`panel/test/talk_test.dart`, the `push-to-talk` group in `device_popup_test.dart`)
+on top of the docs-only sweep across ADR-0011, the two plan documents, these two
+config files and this README — one of which is an accepted ADR and would want a
+dated amendment rather than a silent edit.
+
+⚠️ **The `dst` half is a binding and is not affected**: `talk: ring` in
+`panel/assets/house/bindings.yaml` names the *destination*, and renaming `ring`
+means editing that line too.
 
 Worth keeping anyway, for a reason beyond inertia: **`mic` is a role, not a
 device.** The naming here is not one scheme — `ring` and `ring_doorbell` name

@@ -3,6 +3,7 @@ import 'package:panel/data/fake_hub.dart';
 import 'package:panel/domain/house.dart';
 import 'package:panel/main.dart';
 import 'package:panel/ui/hub_controller.dart';
+import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/snapshot.dart';
 
@@ -92,9 +93,11 @@ Widget panelApp(
   String hubLabel = 'FAKE HUB',
   VideoConfig video = const VideoConfig(),
   SnapshotConfig snapshots = const SnapshotConfig(),
+  TalkConfig talk = const TalkConfig(),
 }) =>
     PanelApp(
         controller: controller,
         hubLabel: hubLabel,
         video: video,
-        snapshots: snapshots);
+        snapshots: snapshots,
+        talk: talk);

@@ -202,24 +202,29 @@ watchdog:
   `source` rather than `url`. RESULTS.md's rendering of the leaked consumer was
   a summary, not the JSON.
 
-### 3. Panel wiring
-`panel/lib/ui/device_popup.dart` — `_startTalking`/`_stopTalking` become the two
-HTTP calls; `_TalkCaption` (currently "isn't wired up yet") needs real state. Two
-behaviours the measurements demand:
+### 3. Panel wiring — 🟢 **outbound done 2026-08-09**; inbound untouched and blocked
+`_startTalking`/`_stopTalking` are now ADR-0011's two HTTP calls and `_TalkCaption`
+has real state. New seam at `panel/lib/ui/audio/talk.dart` (+ `talk_io.dart` /
+`talk_web.dart`), modelled on the snapshot seam; new `talk:` binding carried
+through `bindings_parser` → `house_loader` → `Device.talkStream`, because `dst`
+is `ring` while `stream:` is `ring_doorbell` and nothing derives one from the
+other. Full detail in [`ring-audio-stack.md`](ring-audio-stack.md) §6 item 4.
 
-- **Silence is normal.** Never report a broken stream because the line is quiet,
-  and never use audio presence as a health check — a watchdog restarting on "no
-  audio" would restart constantly. A level meter communicates honestly where a
-  boolean cannot.
-- **Startup can fail at the wrong moment.** A consumer attaching before H.264
-  parameter sets arrive dies with `non-existing PPS 0 referenced`. Warm the
-  producer first, or retry.
-- 🔴 **Check this before writing any audio code:** `cage@.service` is a *system*
-  unit running as `kiosk_user`, and systemd sets no `XDG_RUNTIME_DIR` for system
-  units. Every client in §4.5 was handed one explicitly. Whichever process plays
-  inbound audio needs `XDG_RUNTIME_DIR=/run/user/<uid>` or `PULSE_SERVER=…`
-  passed to it — probably one `Environment=` line in `cage@.service.j2`. It is
-  cheap to test and it decides the shape of everything after it.
+**Verified:** 457 VM tests + the Chrome subset, `flutter analyze` clean. The
+doorbell golden was re-baked (the caption text changed) and shows the
+unconfigured wording, which is correct — the golden rig names no go2rtc.
+
+🔴 **The three bullets this item used to carry were all about inbound playback,
+and none of them were addressed.** That is deliberate, not an oversight: the
+Panel plays MJPEG, which carries no audio, so there is no inbound player to
+attach a level meter to, no consumer to lose a PPS race, and no process needing
+`XDG_RUNTIME_DIR`. They are restated in `ring-audio-stack.md` §6 item 4 and stay
+open. **Whoever picks inbound up must answer the owner decision below first** —
+who owns the inbound player — because it decides whether any of this lives in
+the Panel at all.
+
+Today's honest state, and the caption says exactly this: **talkback is one-way.**
+You can speak to the door; you cannot hear it back.
 
 ### 4. The ffmpeg bug — 🔴 **not fileable**, and this changed
 Do **not** file the report that the previous version of this brief asked for. Its

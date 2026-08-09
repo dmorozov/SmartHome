@@ -6,12 +6,14 @@ import 'package:panel/diagnostics/log.dart';
 import 'package:panel/diagnostics/url_redaction.dart';
 import 'package:panel/domain/house.dart';
 import 'package:panel/ui/device_popup.dart';
+import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/device_presentation.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/live_video_keepalive.dart';
 import 'package:panel/ui/video/snapshot.dart';
 
 import 'support/fake_go2rtc.dart';
+import 'support/fake_talk.dart';
 
 /// The Popup's three honest bodies, and the promise that goes with the one
 /// that plays: a live session opened when the Popup opens and closed when it
@@ -73,6 +75,7 @@ void main() {
     Device device = camera,
     required VideoConfig video,
     SnapshotConfig? snapshots,
+    TalkConfig talk = const TalkConfig(),
     Duration? dismissAfter,
     Duration? dismissCeiling,
   }) async {
@@ -85,6 +88,7 @@ void main() {
               presentation: DevicePresentation(device, null),
               video: video,
               snapshots: snapshots,
+              talk: talk,
               dismissAfter: dismissAfter,
               dismissCeiling: dismissCeiling,
             ),
@@ -966,6 +970,10 @@ void main() {
       connectivity: Connectivity.cloud,
       position: Offset.zero,
       streamName: 'ring_doorbell',
+      // Not a variant spelling of the line above it. `ring_doorbell` is what
+      // the Popup plays (ring-mqtt's RTSP restream, no backchannel); `ring`
+      // is what it talks into (go2rtc's native source). ADR-0011.
+      talkStream: 'ring',
     );
 
     const thermostat = Device(
@@ -976,6 +984,10 @@ void main() {
       position: Offset.zero,
     );
 
+    /// A `TalkConfig` pointed at [talk], with the doorbell's own mic source.
+    TalkConfig talkVia(FakeTalk talk) =>
+        TalkConfig(go2rtcUrl: 'http://hub:1984', post: talk.post);
+
     testWidgets('the doorbell Popup grows the button and its caption', (
       tester,
     ) async {
@@ -984,14 +996,89 @@ void main() {
         tester,
         device: doorbell,
         video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: talkVia(FakeTalk()),
       );
 
       expect(find.byKey(const ValueKey('push-to-talk')), findsOneWidget);
       expect(
-        find.text('Push to talk — two-way audio isn\'t wired up yet'),
+        find.text('Hold to speak — you won\'t hear the door back yet'),
         findsOneWidget,
       );
     });
+
+    testWidgets(
+      'a Panel that was never told where go2rtc is says exactly that, and '
+      'does not offer a button that could only fail',
+      (tester) async {
+        // The real Panel's size: at the 800x600 default the button is below
+        // the fold of the scrollable middle, and a tap there lands on the
+        // scroll region instead — which would make the assertion below pass
+        // for the wrong reason.
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk();
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          // Video configured, talk not: the two are separate settings and
+          // this is the scene that proves the caption tells them apart.
+          talk: TalkConfig(post: talk.post),
+        );
+
+        expect(
+          find.text('Two-way audio isn\'t configured for this door'),
+          findsOneWidget,
+        );
+
+        // The button is still drawn — the layout is the doorbell's — but
+        // pressing it must not post to an address nobody named.
+        await tester.tap(find.byKey(const ValueKey('push-to-talk')));
+        await tester.pump();
+        expect(talk.posts, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'a doorbell with no talk: binding is unconfigured too — a stream: is '
+      'not a talkback, and nothing may guess one from the other',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk();
+        await openPopup(
+          tester,
+          // `stream:` present, `talk:` absent — the state every doorbell is
+          // in until somebody wires ADR-0011 up.
+          device: const Device(
+            id: 'doorbell',
+            name: 'Ring Doorbell',
+            kind: DeviceKind.doorbell,
+            connectivity: Connectivity.cloud,
+            position: Offset.zero,
+            streamName: 'ring_doorbell',
+          ),
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: talkVia(talk),
+        );
+
+        expect(
+          find.text('Two-way audio isn\'t configured for this door'),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('push-to-talk')));
+        await tester.pump();
+        expect(talk.posts, isEmpty);
+      },
+    );
 
     testWidgets(
       'a camera Popup renders exactly what it always has — Ring is the '
@@ -1025,8 +1112,8 @@ void main() {
     );
 
     testWidgets(
-      'holding the button swaps the mic icon and logs the press — and '
-      'never says "Talking…", which nothing here can back up yet',
+      'holding the button posts ADR-0011\'s two calls — a START into the '
+      'talk: stream on press, an empty src on release',
       (tester) async {
         // The real Panel's size, not the 800×600 test default: at 800×600
         // the button sits below the fold of the scrollable middle (the very
@@ -1040,10 +1127,12 @@ void main() {
         addTearDown(tester.view.reset);
 
         final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk();
         await openPopup(
           tester,
           device: doorbell,
           video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: talkVia(talk),
         );
 
         expect(find.byIcon(Icons.mic_none), findsOneWidget);
@@ -1057,11 +1146,26 @@ void main() {
         expect(find.byIcon(Icons.mic), findsOneWidget);
         expect(find.byIcon(Icons.mic_none), findsNothing);
         // ADR-0007's rule, applied to a control instead of a reading: a thing
-        // that is not happening yet may not look like it is. The caption says
-        // "not wired up yet" whether or not a thumb is on the glass — the
-        // button itself must not contradict it by claiming "Talking…".
+        // that is not happening yet may not look like it is. "Talking" would
+        // be a claim about a person at the door hearing something, which no
+        // status code here backs — the caption tops out at "microphone open".
         expect(find.textContaining('Talking'), findsNothing);
         expect(popupLines('talk_start').single.fields, {'device': 'doorbell'});
+
+        // The whole of ADR-0011's START, spelled out once: the `talk:`
+        // stream as `dst`, the RTSP passthrough as `src`. `dst=ring` and not
+        // `dst=ring_doorbell` is the assertion that matters most — the
+        // Device carries both names and only one of them has a backchannel.
+        expect(
+          talk.posts.single.toString(),
+          'http://hub:1984/api/streams'
+          '?dst=ring&src=rtsp%3A%2F%2F127.0.0.1%3A8554%2Fmic',
+        );
+
+        // Only once the post has answered may the button go live. Until
+        // then it is pressed-looking, not live-looking.
+        await tester.pump();
+        expect(find.text('Microphone open — speak now'), findsOneWidget);
 
         await gesture.up();
         await tester.pump();
@@ -1069,6 +1173,230 @@ void main() {
         expect(find.byIcon(Icons.mic_none), findsOneWidget);
         expect(find.byIcon(Icons.mic), findsNothing);
         expect(popupLines('talk_stop').single.fields, {'device': 'doorbell'});
+        expect(talk.sources, ['rtsp://127.0.0.1:8554/mic', '']);
+        expect(talk.destinations, ['ring', 'ring']);
+      },
+    );
+
+    testWidgets(
+      'the button looks pressed but not live while the START is in flight — '
+      'go2rtc has to dial Ring, and that gap may not be dressed as open',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk()..holdNext = true;
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: talkVia(talk),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+        );
+        await tester.pump();
+
+        expect(find.text('Opening the microphone…'), findsOneWidget);
+        // Pressed, so the icon has swapped; not open, so nothing claims it is.
+        expect(find.byIcon(Icons.mic), findsOneWidget);
+        expect(find.text('Microphone open — speak now'), findsNothing);
+
+        talk.releaseHeld();
+        // Twice, and never `pumpAndSettle`: the answer lands in a microtask,
+        // and settling would wait on a pulse ring that repeats forever by
+        // design.
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('Microphone open — speak now'), findsOneWidget);
+
+        await gesture.up();
+        await tester.pump();
+      },
+    );
+
+    testWidgets(
+      'a release during an in-flight START still stops, and stops after it: '
+      'a stop that overtakes its start leaves the microphone open forever',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk()..holdNext = true;
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: talkVia(talk),
+        );
+
+        // A tap: down and up inside one frame, which is what a nervous thumb
+        // on a wall panel actually does.
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+        );
+        await tester.pump();
+        await gesture.up();
+        await tester.pump();
+
+        // The STOP has not been posted yet — it is queued behind the START,
+        // which is the entire point. Posting it now would race.
+        expect(talk.sources, ['rtsp://127.0.0.1:8554/mic']);
+
+        talk.releaseHeld();
+        await tester.pumpAndSettle();
+
+        expect(talk.sources, ['rtsp://127.0.0.1:8554/mic', '']);
+        // And the late START answer does not light a button whose press is
+        // already over.
+        expect(find.text('Microphone open — speak now'), findsNothing);
+        expect(find.byIcon(Icons.mic_none), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'a refused START says so and says nothing was sent — and the message '
+      'survives the release, which is over before anyone could read it',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk()..answer = const TalkResult.refused('500');
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: talkVia(talk),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          find.text('Couldn\'t open the microphone — nothing was sent'),
+          findsOneWidget,
+        );
+        expect(find.byIcon(Icons.mic_none), findsOneWidget);
+
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        // Still on screen: a press is over in a moment, and a fault the
+        // person at the wall never gets to read is reported to nobody.
+        expect(
+          find.text('Couldn\'t open the microphone — nothing was sent'),
+          findsOneWidget,
+        );
+        // The status, never a URL — a fat-fingered GO2RTC_URL can carry a
+        // password (log.dart: Never log a secret).
+        expect(popupLines('talk_failed').first.fields, {
+          'device': 'doorbell',
+          'phase': 'start',
+          'status': '500',
+        });
+        for (final line in popupLines('talk_failed')) {
+          expect(line.fields?.values.join(' ') ?? '', isNot(contains('http')));
+        }
+      },
+    );
+
+    testWidgets(
+      'a START that throws still lets the STOP through — a poisoned chain '
+      'is a microphone nothing closes',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        // A poster that breaks its own no-throw contract. `talk.dart` says an
+        // implementation may not throw, but "the contract says so" is not a
+        // mechanism — and a `.then` chain propagates one error past every
+        // later link, so a throwing START would cancel the STOP behind it and
+        // leave the door live with nothing left to close it.
+        final posted = <String>[];
+        var first = true;
+        Future<TalkResult> brittle(Uri url) async {
+          posted.add(url.queryParameters['src'] ?? '');
+          if (first) {
+            first = false;
+            throw StateError('the poster misbehaved');
+          }
+          return const TalkResult.ok();
+        }
+
+        final go2rtc = FakeGo2rtc();
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: TalkConfig(go2rtcUrl: 'http://hub:1984', post: brittle),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+        );
+        await tester.pump();
+        await tester.pump();
+        await gesture.up();
+        await tester.pumpAndSettle();
+
+        expect(posted, ['rtsp://127.0.0.1:8554/mic', '']);
+        // And the throw is reported rather than swallowed silently.
+        expect(
+          popupLines('talk_failed').map((l) => l.fields?['status']),
+          contains('StateError'),
+        );
+      },
+    );
+
+    testWidgets(
+      'a Popup dismissed mid-press still closes the microphone — the one '
+      'route out no gesture callback can cover',
+      (tester) async {
+        tester.view
+          ..physicalSize = const Size(1280, 800)
+          ..devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        final go2rtc = FakeGo2rtc();
+        final talk = FakeTalk();
+        await openPopup(
+          tester,
+          device: doorbell,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+          talk: talkVia(talk),
+        );
+
+        await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+        );
+        await tester.pump();
+        await tester.pump();
+        expect(talk.sources, ['rtsp://127.0.0.1:8554/mic']);
+
+        // Dismissed with the thumb still down: no onTapUp, no onTapCancel,
+        // and the State unmounts holding an open microphone. #177014 — a Ring
+        // session left running can suppress a real ding.
+        tester
+            .state<NavigatorState>(find.byType(Navigator).first)
+            .pop();
+        await tester.pumpAndSettle();
+
+        expect(talk.sources, ['rtsp://127.0.0.1:8554/mic', '']);
       },
     );
 

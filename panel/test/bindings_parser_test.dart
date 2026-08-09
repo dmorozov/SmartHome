@@ -47,6 +47,32 @@ bindings:
     );
   });
 
+  test('a talk names a go2rtc key, not a URL — and this one is sharper than '
+      'stream:, because go2rtc pushes a live microphone into it', () {
+    expect(
+      () => parseBindings('''
+bindings:
+  doorbell:
+    talk: rtsp://user:hunter2@192.168.1.9/live
+    connectivity: cloud
+'''),
+      _rejects('not a go2rtc stream name'),
+    );
+  });
+
+  test('talk: and stream: are carried separately — the doorbell plays one '
+      'stream and talks into another', () {
+    final binding = parseBindings('''
+bindings:
+  doorbell:
+    stream: ring_doorbell
+    talk: ring
+    connectivity: cloud
+''')['doorbell']!;
+    expect(binding.streamName, 'ring_doorbell');
+    expect(binding.talkStream, 'ring');
+  });
+
   test('a rejected stream is not echoed back — the line that reports it is '
       'logged, and would otherwise publish the camera password', () {
     // boot.dart hands this FormatException to Log.error(error:), and on a
