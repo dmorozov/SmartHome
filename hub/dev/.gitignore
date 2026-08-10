@@ -22,3 +22,4 @@ mosquitto/data/
 go2rtc/*
 !go2rtc/go2rtc.example.yaml
 !go2rtc/README.md
+!go2rtc/DEBUGGING.md

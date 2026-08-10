@@ -9,6 +9,12 @@ Steps 1–9 in order, then run the **Verification** section. Steps 10–11 add
 talkback and are optional. **Troubleshooting** is at the end, indexed by the
 error you actually see.
 
+🔬 **Already configured, and something is wrong with the picture or the sound?**
+This file will not help — go to **[`DEBUGGING.md`](DEBUGGING.md)**. It holds the
+confirmed causes (go2rtc under-reporting the H.264 level; malformed sample
+durations on a warm join; the PulseAudio mount going stale after a host reboot)
+and, just as importantly, the **six theories that turned out to be wrong**.
+
 Everything here was measured on this machine or is cited to the document that
 measured it.
 
@@ -519,6 +525,7 @@ recorded beside it in `RESULTS.md`.
 
 | Document | What it is for |
 |---|---|
+| [`DEBUGGING.md`](DEBUGGING.md) | **Read before forming a theory.** Every confirmed cause and every *disproven* one for Ring video and audio, plus copy-paste diagnostics. Six explanations died in this work; they are recorded so nobody re-derives them. |
 | [ADR-0011](../../../docs/adr/0011-ring-two-way-audio-via-go2rtc-half-duplex.md) | The decision: go2rtc's `ring:` as shipped, two HTTP calls, half-duplex echo control. What was rejected, and why. |
 | [`docs/plans/ring-audio-stack.md`](../../../docs/plans/ring-audio-stack.md) | The spec — packages, the Appliance's audio stack, verification procedure. §0 is a status table. |
 | [`docs/plans/ring-audio-next-session.md`](../../../docs/plans/ring-audio-next-session.md) | The work queue, in priority order, with what is blocked on whom. |

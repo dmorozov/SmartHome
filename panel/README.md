@@ -633,6 +633,11 @@ README and Ch. 6 tell an operator to run.
 The `selftest` stream in `hub/go2rtc/go2rtc.example.yaml` is written this way
 and is what every check in this README was run against.
 
+> 🔬 The three video sections below record what the **Panel** does about each
+> fault. The full investigation — including the six theories that were wrong,
+> the audio findings, and copy-paste diagnostics — is in
+> [`hub/dev/go2rtc/DEBUGGING.md`](../hub/dev/go2rtc/DEBUGGING.md).
+
 ### 🔴 go2rtc advertises a lower H.264 level than the stream really has
 
 **Symptom:** the doorbell's live view freezes, or fills half the box with
