@@ -215,6 +215,90 @@ class VideoConfig {
   }
 }
 
+/// The H.264 level this Panel asks a browser decoder to be ready for: `0x33`,
+/// level 5.1, which allows 36 864 macroblocks per frame.
+///
+/// Chosen as a ceiling rather than a fit. The level in a MIME type is a
+/// *capability hint* — it tells the decoder what to be prepared for, and the
+/// bitstream's own SPS still governs what is actually decoded — so declaring
+/// more than a stream needs costs nothing, while declaring less is fatal.
+const kMseH264Level = 0x33;
+
+/// Raises the H.264 level in a `video/mp4; codecs="avc1.…"` MIME type, or
+/// returns null when it is already high enough (or is not H.264 at all).
+///
+/// Works around go2rtc advertising a level below the stream's real one.
+///
+/// **This exists because of a go2rtc bug, and it was measured.** The first
+/// diagnosis here blamed Ring's encoder for declaring a level its own frames
+/// exceed. That was **wrong**, and the bitstream disproves it — read off the
+/// live init segment on 2026-08-10:
+///
+/// | source | level |
+/// |---|---|
+/// | SPS in the bitstream | **50 (0x32) — Level 5.0** |
+/// | `avcC` box in the init segment | **50 (0x32) — Level 5.0** |
+/// | go2rtc's MIME answer | **41 (0x29) — Level 4.1** |
+///
+/// Ring is conformant: Level 5.0 permits 22 080 macroblocks and a 1536×1536
+/// frame is 9216. **go2rtc understates it.** `pkg/h264/h264.go`'s
+/// `GetProfileLevelID` sanitises the level it parses against a whitelist:
+///
+/// ```go
+/// level := byte(41)                 // default
+/// switch conf[2] {
+/// case 30, 31, 40:                  // 3.0, 3.1, 4.0 only
+///     level = conf[2]
+/// }
+/// ```
+///
+/// 50 is not in that list, so the real level is discarded and the default 41
+/// stands. Every stream above Level 4.0 is advertised as 4.1 — which is below
+/// what this frame size needs (9216 > 4.1's 8192), so a decoder that believes
+/// the MIME cannot allocate for the picture it is about to receive.
+///
+/// Chrome does believe it. `MediaSource.isTypeSupported` returns **true**,
+/// because all it does is parse the string; the decoder is then configured for
+/// level 4.1 and rejects the first keyframe outright:
+///
+/// ```text
+/// PIPELINE_ERROR_DECODE: Failed to send video packet for decoding:
+///   {timestamp=0 duration=1011 size=93997 is_key_frame=1 encrypted=0}
+/// ```
+///
+/// Measured against the live doorbell, same stream, same socket, one byte
+/// different:
+///
+/// | declared | totalVideoFrames | readyState | error |
+/// |---|---|---|---|
+/// | `avc1.640029` (4.1) | **0** | 1 | `PIPELINE_ERROR_DECODE` |
+/// | `avc1.640033` (5.1) | **180+** | 4 | none, full picture decoded |
+///
+/// **The fault is not in this Panel** — go2rtc's own reference player at
+/// `/stream.html` fails identically on the same stream, which is how it was
+/// localised. This is a client-side workaround for an upstream defect, applied
+/// at the one place that can see the MIME before the decoder is built, and it
+/// is worth filing: the reproduction is one `GET` and four bytes.
+///
+/// Only `avc1` is touched. H.265 (`hvc1.…`) uses a different string grammar and
+/// no Ring stream produces it, so guessing at it would be inventing a rule for
+/// a case nobody has seen.
+String? raiseH264Level(String mime) {
+  // `avc1.PPCCLL` — profile_idc, constraint flags, level_idc, each one hex
+  // byte. Only the last is rewritten; the profile must survive untouched or
+  // the decoder is told to expect the wrong syntax entirely.
+  final match = RegExp(r'avc1\.([0-9A-Fa-f]{4})([0-9A-Fa-f]{2})').firstMatch(mime);
+  if (match == null) return null;
+  final level = int.parse(match.group(2)!, radix: 16);
+  if (level >= kMseH264Level) return null;
+  final raised = kMseH264Level.toRadixString(16).padLeft(2, '0');
+  return mime.replaceRange(
+    match.start,
+    match.end,
+    'avc1.${match.group(1)}$raised',
+  );
+}
+
 /// A session that was over before it began: one phase, forever, and closing
 /// it does nothing.
 ///

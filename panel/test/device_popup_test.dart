@@ -957,6 +957,190 @@ void main() {
     });
   });
 
+
+  /// The idle bound on a Popup a person opened — [kDevicePopupIdleReturn].
+  ///
+  /// Not the D14 countdown, and the difference is the prompt: a deliberate
+  /// long watch costs one tap, a forgotten one costs nothing because nobody
+  /// is there to pay it. Measured 2026-08-10: a doorbell Popup left open in a
+  /// browser tab held a live Ring session while it pulled 357 MB, and nothing
+  /// in the stack closed it — the watchdog watches `ring`/`mic`, not
+  /// `ring_doorbell`, and go2rtc has no consumer-kill endpoint.
+  group('the idle bound', () {
+    testWidgets('a forgotten Popup warns, then returns and closes the stream',
+        (tester) async {
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+
+      // Right up to the warning it says nothing — silence is the whole point
+      // of a bound nobody is meant to notice.
+      await tester.pump(kDevicePopupIdleReturn - kDevicePopupIdleWarning -
+          const Duration(seconds: 1));
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsNothing);
+      expect(find.byType(Dialog), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsOneWidget);
+      // Warned, not gone: the prompt is a question, not a countdown display.
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(go2rtc.only.closes, 0);
+
+      await tester.pump(kDevicePopupIdleWarning);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+      // The whole reason the bound exists: the go2rtc session goes with it.
+      expect(go2rtc.only.closes, 1);
+      expect(popupLines('idle_return').single.fields, {
+        'device': 'cam-porch',
+        'reason': 'unanswered',
+      });
+    });
+
+    testWidgets('a touch re-arms it, and the prompt goes away', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+
+      await tester.pump(kDevicePopupIdleReturn - kDevicePopupIdleWarning);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsOneWidget);
+
+      // "Tap anywhere" — so the Device's own name is a legitimate target,
+      // and answering needs no aim.
+      await tester.tap(find.text('Porch Camera'));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsNothing);
+
+      // And the clock really restarted: the original deadline passes with the
+      // Popup still up.
+      await tester.pump(kDevicePopupIdleWarning + const Duration(seconds: 1));
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(go2rtc.only.closes, 0);
+
+      await tester.pump(kDevicePopupIdleReturn);
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+    });
+
+    testWidgets('a Popup a ding opened is left alone — it already has a '
+        'deadline, and two clocks would be two answers', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        dismissAfter: const Duration(seconds: 30),
+        dismissCeiling: const Duration(minutes: 2),
+      );
+
+      // Its own deadline takes it long before the idle bound would have.
+      await tester.pump(const Duration(seconds: 30));
+      await tester.pumpAndSettle();
+      expect(find.byType(Dialog), findsNothing);
+      // Never warned: the idle bound never armed at all.
+      expect(popupLines('idle_return'), isEmpty);
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsNothing);
+    });
+
+    testWidgets('a Popup that dialled nothing is never timed out — there is '
+        'no session to release', (tester) async {
+      // A thermostat: no video body, no go2rtc session. Closing it on a timer
+      // would be tidiness dressed as safety, and it would take a card
+      // somebody opened deliberately.
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        device: const Device(
+          id: 'thermostat',
+          name: 'Hallway Thermostat',
+          kind: DeviceKind.thermostat,
+          connectivity: Connectivity.local,
+          position: Offset.zero,
+        ),
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+
+      await tester.pump(kDevicePopupIdleReturn + kDevicePopupIdleWarning);
+      await tester.pump();
+
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsNothing);
+      expect(popupLines('idle_return'), isEmpty);
+    });
+
+    testWidgets('"tap anywhere" means anywhere — including the card\'s empty '
+        'padding, where a thumb most easily lands', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+
+      await tester.pump(kDevicePopupIdleReturn - kDevicePopupIdleWarning);
+      await tester.pump();
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsOneWidget);
+
+      // Inside the card's own padding, where no child widget lives: this
+      // only reaches the listener when it is `opaque`. With `deferToChild`
+      // the prompt would sit there unanswerable and the caption would be a
+      // lie.
+      //
+      // The left edge at mid-height, deliberately not a corner. The card is
+      // a 24 px `RoundedRectangleBorder`, so a point 6 px in from the corner
+      // is outside the painted shape and falls through to the modal barrier
+      // — which dismisses the whole Popup. Measured while writing this test,
+      // and it is worth knowing: "tap anywhere" has four small dead zones,
+      // and tapping one of them closes the Popup rather than keeping it.
+      final card = tester.getRect(find.byKey(const ValueKey('popup-card')));
+      await tester.tapAt(Offset(card.left + 6, card.center.dy));
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('popup-idle-prompt')), findsNothing);
+      expect(find.byType(Dialog), findsOneWidget);
+    });
+
+    testWidgets('holding push-to-talk still reaches the button — the idle '
+        'listener never enters the gesture arena', (tester) async {
+      tester.view
+        ..physicalSize = const Size(1280, 800)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final go2rtc = FakeGo2rtc();
+      final talk = FakeTalk();
+      await openPopup(
+        tester,
+        device: const Device(
+          id: 'doorbell',
+          name: 'Ring Doorbell',
+          kind: DeviceKind.doorbell,
+          connectivity: Connectivity.cloud,
+          position: Offset.zero,
+          streamName: 'ring_doorbell',
+          talkStream: 'ring',
+        ),
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: TalkConfig(go2rtcUrl: 'http://hub:1984', post: talk.post),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+      );
+      await tester.pump();
+      await tester.pump();
+      // The press was not swallowed by the ancestor Listener.
+      expect(talk.sources, ['rtsp://127.0.0.1:8554/mic']);
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+  });
+
   /// Variant D's pick, folded in: A's bigger card kept, B's circular
   /// call-style mic standing in for A's full-width pill. The A/B/C/D
   /// prototype it was chosen from was never committed and is gone —

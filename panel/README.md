@@ -633,6 +633,194 @@ README and Ch. 6 tell an operator to run.
 The `selftest` stream in `hub/go2rtc/go2rtc.example.yaml` is written this way
 and is what every check in this README was run against.
 
+### 🔴 go2rtc advertises a lower H.264 level than the stream really has
+
+**Symptom:** the doorbell's live view freezes, or fills half the box with
+green, while go2rtc happily reports a healthy consumer pulling hundreds of
+megabytes. Measured 2026-08-10, and the numbers are the whole story:
+
+```
+videoWidth: 1536, videoHeight: 1536      ← Ring's square sensor
+totalVideoFrames: 0
+error: PIPELINE_ERROR_DECODE: Failed to send video packet for decoding:
+       {timestamp=0 duration=1011 size=93997 is_key_frame=1 encrypted=0}
+```
+
+**The first diagnosis here blamed Ring's encoder. That was wrong**, and the
+bitstream disproves it — read off the live init segment on 2026-08-10:
+
+| source | level |
+|---|---|
+| SPS in the bitstream | **50 (0x32) — Level 5.0** |
+| `avcC` box in the init segment | **50 (0x32) — Level 5.0** |
+| go2rtc's MIME answer | **41 (0x29) — Level 4.1** |
+
+Ring is conformant. Level 5.0 permits **22 080** macroblocks and a 1536×1536
+frame is 96×96 = **9216**. go2rtc is what understates it, in
+`pkg/h264/h264.go`'s `GetProfileLevelID`, which sanitises the level it parsed
+against a whitelist:
+
+```go
+level := byte(41)                 // default
+switch conf[2] {
+case 30, 31, 40:                  // 3.0, 3.1, 4.0 only
+    level = conf[2]
+}
+```
+
+50 is not in that list, so the real level is thrown away and the default 41
+stands. **Every stream above Level 4.0 is advertised as 4.1** — and 4.1 permits
+only 8192 macroblocks, fewer than this frame needs.
+
+Chrome believes the declaration. `MediaSource.isTypeSupported` returns `true`
+— all it does is parse the string — and the decoder is then built for level
+4.1 and rejects the very first keyframe. Bytes keep arriving, so every
+transport-level signal looks healthy; nothing decodes.
+
+**The fault is not in this Panel.** go2rtc's own reference player at
+`/stream.html` fails identically on the same stream, which is how it was
+localised. Same socket, same stream, one byte different:
+
+| declared | `totalVideoFrames` | `readyState` | error |
+|---|---|---|---|
+| `avc1.640029` (4.1) | **0** | 1 | `PIPELINE_ERROR_DECODE` |
+| `avc1.640033` (5.1) | **180+** | 4 | none, full picture decoded |
+
+**The workaround** is `raiseH264Level` in `live_video.dart`: rewrite the level
+byte to 5.1 before `addSourceBuffer`, leaving profile and constraint bytes
+untouched. A level in a MIME type is a *capability hint* — the bitstream's own
+SPS still governs what is decoded — so declaring more than a stream needs
+costs nothing, while declaring less is fatal. It is applied only when the
+browser also claims the raised type, so a genuinely limited decoder is never
+handed a promise nothing can keep, and it logs `popup.mse_level_raised` when
+it fires.
+
+The decision logic is pure and unit-tested on the VM
+(`test/live_video_test.dart`), deliberately: the bug is only reachable in a
+browser, but the Chrome runner is the one thing here that cannot be relied on
+(see [Tests](#the-web-half-runs-nowhere-unless-you-ask-for-it)).
+
+⚠️ **This is a client-side workaround for an upstream defect, not a fix**, and
+it is worth filing — the reproduction is one `GET` and four bytes, unlike the
+ffmpeg Opus corruption which has never had a shareable repro. If go2rtc ever
+widens that whitelist, this becomes a no-op rather than a hazard: the guard
+returns null once the declared level is already sufficient.
+
+### 🔴 go2rtc emits samples with sub-millisecond durations, and the decoder quits
+
+**The fault is upstream, and go2rtc's own player proves it**: pointed at the
+same stream on the same machine, `/stream.html` fails identically — and
+*recovers*, because it reconnects. This session used to stop for good. That
+difference was the whole gap.
+
+Measured repeatedly on the live doorbell, 2026-08-10:
+
+```text
+mse_media_error code=3 detail="PIPELINE_ERROR_DECODE: Failed to send video
+  packet for decoding: {timestamp=124911 duration=11 size=20425 is_key_frame=0}"
+  buffered_s=0.2 appends_failed=0 segments_dropped=0
+```
+
+Four separate failures, four different timestamps, always the same two things:
+**`duration=11`** — one tick at 90 kHz, where a real frame is ~33 000 µs — and
+**`is_key_frame=0`**. `appends_failed=0 segments_dropped=0` says the Panel
+delivered every byte intact; the samples themselves are malformed.
+
+`pkg/mp4/muxer.go` computes each sample's duration as
+`packet.Timestamp - m.pts[trackID]`, and `AddTrack` starts every **new
+consumer's** `pts` at zero. Join a stream that is already running and the first
+delta is the whole RTP timestamp, which trips `duration > codec.ClockRate` and
+falls back to a placeholder. That is why a cold open works and a
+refresh-and-reopen does not: a fresh producer starts its timestamps near zero,
+a warm one does not.
+
+**The Panel cannot fix malformed samples.** What it can do — and what go2rtc's
+client already did — is dial again: `_reconnect` rebuilds the MediaSource and
+the socket against the same `<video>`, bounded to three attempts because every
+retry is another consumer on a doorbell (#177014). A fresh muxer re-rolls the
+dice, and empirically that is enough, because the anomaly is in the first
+samples a consumer is handed rather than in the stream as a whole. After three,
+it fails honestly and the still photo comes back under its caption.
+
+⚠️ **A reconnect keeps the session undecided**, which means the discarded
+socket's own `close` event would otherwise settle the *new* attempt as "go2rtc
+closed the socket". `_unwireSocket` runs before the close — and the handlers are
+converted to JS **once and stored**, because `.toJS` mints a fresh function per
+call and a listener removed with a different one is never removed at all.
+
+### 🔴 The segment pump: three defects that all read as a decoder fault
+
+Found 2026-08-10 while chasing an *intermittent* half-green picture — sometimes
+fine, sometimes half green, sometimes "Live view unavailable" across plain
+refreshes. Intermittency was the clue: a static codec problem does not come and
+go, but a race does. Three defects, all in `live_video_mse.dart`, all of which
+looked exactly like a decoder fault because bytes kept arriving throughout.
+
+**The one that caused the symptom is the third.** The first two are real and
+were fixed on the way past, but neither was what the wall was showing:
+
+**0. The `<video>` leaves the document, and appends throw.** `_LiveVideoBox`
+renders `session.view` only while the phase is `LiveVideoPhase.playing`, so any
+flip away from it unmounts the platform view and takes the `<video>` element
+with it. An HTML media element outside a document re-runs its load algorithm,
+which aborts the in-flight resource, and `appendBuffer` then throws
+`InvalidStateError`. Measured on the live doorbell:
+
+```text
+mse_append_failed error=InvalidStateError bytes=201169 buffered_s=0.3
+  updating=false media_state=open source_buffers=1
+  video_connected=false video_ready=4
+```
+
+MediaSource open, SourceBuffer attached, nothing updating — the **element** had
+left the document. And it is self-sustaining, which is why it looked random:
+the throw loses segments, lost segments stall decoding, a stalled decode knocks
+the phase off `playing`, and that unmounts the view again. From the wall it is
+a picture that appears, greys out, and comes back.
+
+The pump now stages through that window instead of throwing (`_detached`), and
+`_resume` drains the backlog when the element returns. The distinction that
+matters is between "not attached yet" and "attached and then taken away":
+before the first mount the element is *supposed* to be detached, and refusing
+to append then would deadlock — no append, no `loadeddata`, no `playing`, so
+the view never mounts and the element never attaches.
+
+The other two, fixed on the way:
+
+**1. `_trim` was starved by its own backlog.** `_onUpdateEnd` returned early
+whenever staged segments were waiting, and `_trim` ran only on the path it
+never reached under load. So the SourceBuffer was never trimmed, grew without
+bound, and `appendBuffer` eventually threw `QuotaExceededError`. Trim now runs
+first and reports whether it started a removal; the removal's own `updateend`
+re-enters with the backlog still waiting, so the two alternate instead of
+starving each other.
+
+**2. One throw killed the pump for good.** `appendBuffer` throwing means no
+update *started*, so no `updateend` ever fires — and `_onUpdateEnd` was the
+only thing that drained the backlog. After a single throw the player was dead
+while every liveness signal stayed healthy: segments arriving, `bytes_send`
+climbing, go2rtc reporting a happy consumer. `_onSegment` now drains a backlog
+itself when it finds the buffer idle, so the next segment restarts a dead pump.
+
+Both paths were **silent**, which is what made this undiagnosable from the log —
+a dropped segment is a hole in the picture, and a hole in the picture renders as
+uninitialised YUV, which is green. They now log once with a running count:
+`video.mse_segment_dropped` and `video.mse_append_failed`.
+
+⚠️ **A lesson about the log line itself, which cost three round trips.** The
+first version reported `error=JSObject`, because `runtimeType` is `JSObject` for
+everything thrown across the interop boundary — as useful as no line at all.
+Naming the DOM exception gave `InvalidStateError`, which killed the
+`QuotaExceededError` theory. Only adding `media_state`, `source_buffers`,
+`updating` and `video_connected` located it, because `InvalidStateError` has
+several causes and only those four tell them apart. **A diagnostic that names
+the error without naming the state around it is half a diagnostic.** Still never
+the `message`, which can quote the URL.
+
+⚠️ Two theories died here and are recorded so nobody re-runs them: the SPS is
+*not* non-conformant (it declares Level 5.0 correctly — see above), and this is
+*not* a hardware-decoder fault (it reproduces with GPU acceleration disabled).
+
 ### Not finished: what stands between this and a picture
 
 **1. One player has met a real camera; the other has not.** This item used to
@@ -796,6 +984,34 @@ once its `dispose` has closed the session, because pushing during the ~150 ms
 exit animation would put a second consumer on a stream the first Popup still
 holds.
 
+**A Popup a person opened is bounded too, since 2026-08-10 — but by an idle
+timer, not a countdown.** D14's rule still holds: nobody's live view gets
+snatched away on a clock they never asked for. What changed is that the
+*forgotten* case now ends. `kDevicePopupIdleReturn` is **5 minutes** without a
+touch, of which the last `kDevicePopupIdleWarning` (**30 s**) shows "Still
+watching? Tap anywhere to stay". Answer it and the clock restarts; ignore it
+and the Popup returns to the Dollhouse, taking its go2rtc session with it and
+logging `popup.idle_return reason=unanswered`.
+
+This exists because it was measured happening: a doorbell Popup left open in a
+browser tab held a live Ring session while it pulled **357 MB**, unnoticed,
+until an `/api/streams` dump found it. That is the leaked-`curl` incident
+([talk-watchdog](../hub/talk-watchdog/README.md)) reached through the product
+instead of a debugging session — and nothing else in the stack closes it: the
+watchdog watches `ring` and `mic`, not `ring_doorbell`, and go2rtc has no
+consumer-kill endpoint at all. Deliberately the same five minutes the Cameras
+view uses, because it is the same trade for the same reason.
+
+It arms only where it can do something: `dismissAfter == null` (a ding Popup
+already has a deadline and a ceiling — two clocks would be two answers) **and**
+a go2rtc session was actually opened. A thermostat Popup dialled nothing, so it
+has nothing to release and is never timed out.
+
+⚠️ "Tap anywhere" has four small dead zones. The card is a 24 px
+`RoundedRectangleBorder`, so a tap in a rounded corner misses the surface and
+reaches the modal barrier — which dismisses the Popup rather than keeping it.
+Measured, harmless, and worth knowing before somebody reports it as a bug.
+
 ```
 [panel] I ui.ding device=doorbell entity_state=on
 [panel] I popup.doorbell device=doorbell reason=ding
@@ -804,6 +1020,7 @@ holds.
 [panel] D popup.doorbell_deferred device=doorbell reason=stream_closing
 [panel] W popup.doorbell_dropped device=doorbell reason=popup_never_closed waited_s=30
 [panel] I popup.deadline_ceiling device=doorbell open_s=120
+[panel] I popup.idle_return device=cam-porch reason=unanswered
 [panel] W popup.dismiss_blocked device=doorbell retry_s=1
 [panel] I popup.doorbell_dismissed device=doorbell
 [panel] W ui.ding_unreadable device=doorbell state=ringing expected=on|off|<iso8601>
@@ -900,7 +1117,8 @@ answered — that gap is real, because go2rtc has to dial Ring's backchannel. An
 "the door heard you", which no `200` can support.
 
 **Stop is fired liberally**, because it is idempotent (40/40 → 200) and what it
-prevents is a doorbell held live on a battery (#177014). It goes out on release,
+prevents is a doorbell left in live view — not a battery cost (the Front Door is
+hardwired) but #177014, where an open session suppresses a real ding. It goes out on release,
 on a cancelled gesture, after a failed start, and again from `dispose` — that
 last one covering the case no gesture callback can: a Popup dismissed *while
 held*, by the barrier, the deadline's own pop, or kiosk shutdown. Calls are

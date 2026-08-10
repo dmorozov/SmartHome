@@ -154,7 +154,9 @@ services:
   talk-watchdog:
     # Dead-man switch for Ring talkback. go2rtc has no idle timeout on internal
     # producers, so nothing reaps a wedged microphone — and a wedged microphone
-    # holds a battery doorbell in live view. Stop authority has to be here
+    # holds the doorbell in live view, where #177014 says it can suppress a
+    # real ding. (Not a battery cost: this doorbell is hardwired.)
+    # Stop authority has to be here
     # rather than in the Panel, because the Panel is the thing that might crash
     # mid-press. See ../talk-watchdog/README.md.
     #

@@ -79,6 +79,70 @@ void main() {
     });
   });
 
+  /// go2rtc under-reporting the stream's H.264 level, and the one byte that
+  /// works around it. Pure string logic on purpose: the bug is only reachable
+  /// in a browser, but the *decision* must be testable on a machine that has
+  /// none — the Chrome runner is exactly the thing that cannot be relied on
+  /// here.
+  ///
+  /// Measured against the live doorbell 2026-08-10. The bitstream's SPS says
+  /// level **50 (5.0)** and so does the `avcC` box, but go2rtc answers
+  /// `avc1.640029` — level **41 (4.1)** — because `GetProfileLevelID` only
+  /// accepts 30, 31 and 40 and falls back to 41 for anything else. 4.1 permits
+  /// 8192 macroblocks; a 1536x1536 frame is 9216. Chrome believes the MIME and
+  /// decoded 0 frames at 4.1, 180+ at 5.1.
+  group('raiseH264Level', () {
+    test('raises the doorbell\'s level-4.1 answer to 5.1, profile intact', () {
+      expect(
+        raiseH264Level('video/mp4; codecs="avc1.640029"'),
+        'video/mp4; codecs="avc1.640033"',
+      );
+    });
+
+    test('leaves the profile and constraint bytes alone', () {
+      // 4D = Main, not High. Rewriting those would tell the decoder to expect
+      // a different bitstream syntax entirely, which is a worse bug than the
+      // one being worked around.
+      expect(
+        raiseH264Level('video/mp4; codecs="avc1.4D401E"'),
+        'video/mp4; codecs="avc1.4D4033"',
+      );
+    });
+
+    test('answers null when the level is already sufficient', () {
+      // Nothing to do is reported as nothing to do, so the caller can keep
+      // go2rtc's own answer rather than re-deriving an identical string.
+      expect(raiseH264Level('video/mp4; codecs="avc1.640033"'), isNull);
+      expect(raiseH264Level('video/mp4; codecs="avc1.640034"'), isNull);
+    });
+
+    test('does not touch H.265 or anything that is not avc1', () {
+      // `hvc1` has a different string grammar and no Ring stream produces it.
+      // Guessing at it would be inventing a rule for a case nobody has seen.
+      expect(raiseH264Level('video/mp4; codecs="hvc1.1.6.L153.B0"'), isNull);
+      expect(raiseH264Level('video/mp4; codecs="mp4a.40.2"'), isNull);
+      expect(raiseH264Level(''), isNull);
+    });
+
+    test('rewrites only the avc1 entry in a multi-codec type', () {
+      expect(
+        raiseH264Level('video/mp4; codecs="avc1.640029,mp4a.40.2"'),
+        'video/mp4; codecs="avc1.640033,mp4a.40.2"',
+      );
+    });
+
+    test('the level it raises to clears the doorbell\'s frame size', () {
+      // The arithmetic the whole workaround rests on, pinned so nobody
+      // "tidies" the constant downward: 1536x1536 is 96x96 = 9216 macroblocks;
+      // level 4.1 allows 8192, level 5.1 allows 36 864.
+      const macroblocks = (1536 ~/ 16) * (1536 ~/ 16);
+      expect(macroblocks, 9216);
+      expect(macroblocks, greaterThan(8192)); // why 4.1 fails
+      expect(kMseH264Level, 0x33); // 51 -> level 5.1
+      expect(macroblocks, lessThan(36864)); // why 5.1 is enough
+    });
+  });
+
   group('the seam', () {
     test('both branches carry a real player: neither platform is a stub', () {
       // This was `expect(liveVideoIsAvailable, isFalse)` on everything that

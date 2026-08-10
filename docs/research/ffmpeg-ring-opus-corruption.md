@@ -151,8 +151,8 @@ deltas against the frame duration they claim, replay the exact packet sequence
 into both depacketisers, and bisect. That is also the material an upstream report
 needs — a packet trace and a byte-exact input, not a doorbell.
 
-**It costs one live view of ~20 s.** That is a household device on somebody's
-battery, and HA core #177014 means an open stream can suppress a real ding, so it
+**It costs one live view of ~20 s.** Not battery — the Front Door is hardwired
+— but HA core #177014 means an open stream can suppress a real ding, so it
 is the owner's call to make, not an agent's.
 
 ---

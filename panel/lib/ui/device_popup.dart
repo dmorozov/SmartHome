@@ -76,6 +76,33 @@ Future<void> showDevicePopup(
   );
 }
 
+/// How long a Popup **a person opened** stays up with nobody touching it
+/// before it returns to the Dollhouse, releasing its go2rtc session.
+///
+/// D14 says a Popup somebody tapped a pin for gets no countdown, and that
+/// stands: a countdown yanks the camera away from whoever went and asked for
+/// it. This is not that. It bounds the *forgotten* case, and it was measured
+/// happening — on 2026-08-10 a doorbell Popup left open in a browser tab held
+/// a live Ring session while it pulled **357 MB**, unnoticed, until an
+/// `/api/streams` dump found it. That is the leaked-`curl` incident
+/// (`hub/talk-watchdog/README.md`) reached through the product rather than
+/// through a debugging session, and nothing else in the stack closes it:
+/// the watchdog watches `ring` and `mic`, not `ring_doorbell`, and go2rtc has
+/// no consumer-kill endpoint at all.
+///
+/// Deliberately the same five minutes the Cameras view uses
+/// (`kCamerasIdleReturn`), because it is the same trade for the same reason —
+/// an open Ring session suppresses dings (#177014), and one tap per five
+/// minutes is the price of holding one open on purpose. Not shared as a
+/// single constant: the two surfaces have different lifetimes and a future
+/// reason to diverge, and importing the Cameras view's vocabulary into the
+/// Popup to save one `Duration` would be the wrong dependency.
+const kDevicePopupIdleReturn = Duration(minutes: 5);
+
+/// How long "Still watching?" is on screen before an unanswered prompt
+/// returns the Popup. **Part of [kDevicePopupIdleReturn], not added to it.**
+const kDevicePopupIdleWarning = Duration(seconds: 30);
+
 /// What asking an already-showing Popup to stay up actually did.
 enum DevicePopupExtension {
   /// No Popup for that Device is on the wall. The caller has to push one.
@@ -238,6 +265,14 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   Timer? _ceiling;
 
   var _ceilingReached = false;
+
+  /// The idle bound's two halves — see [kDevicePopupIdleReturn]. Null on every
+  /// Popup that does not need one, which is most of them: see [_boundsIdle].
+  Timer? _idleWarn;
+  Timer? _idleFire;
+
+  /// Whether "Still watching?" is on screen.
+  var _promptingIdle = false;
   var _loggedBlockedDismiss = false;
   var _announcedOpen = false;
   var _reportedFailure = false;
@@ -358,7 +393,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// Closes it again. Fired on release, on a cancelled gesture, and once more
   /// from [dispose] — liberally rather than carefully, because stop is
   /// idempotent (ADR-0011: 40/40 returning 200) and the thing it prevents is
-  /// a doorbell held live on somebody's battery.
+  /// a doorbell left in live view. Not a battery cost — the Front Door is
+  /// hardwired (`appliance/commissioning/05-devices-cloud.md`: no battery
+  /// entity) — but HA core #177014 still stands: an open session can
+  /// suppress a real ding, which is the failure nobody notices.
   void _stopTalking() {
     final device = widget.presentation.device;
     if (_talk == TalkPhase.unconfigured || _talk == TalkPhase.idle) return;
@@ -422,6 +460,9 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     _reportFailure();
     _restartDeadline();
     _armCeiling();
+    // After [_openVideo], because [_boundsIdle] asks whether a session was
+    // opened at all.
+    _rearmIdle();
     // Registered last, once nothing left in this method can throw. `_showing`
     // is module-level and `dispose` never runs for a State whose `initState`
     // threw, so an entry claimed before the risky part outlives the widget
@@ -461,6 +502,8 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     if (gone) _showing.remove(id);
     _deadline?.cancel();
     _ceiling?.cancel();
+    _idleWarn?.cancel();
+    _idleFire?.cancel();
     // The one route out the gesture cannot cover. `onTapUp` and `onTapCancel`
     // between them catch a thumb that lifts or slides off, but a Popup can
     // also be dismissed *while held* — the barrier, the deadline's own pop,
@@ -672,6 +715,47 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     return route == null || !route.isActive;
   }
 
+  /// Whether this Popup owes anyone an idle bound.
+  ///
+  /// Two conditions, and both are the point:
+  ///
+  /// - **`dismissAfter == null`** — a Popup opened by a ding already has a
+  ///   deadline and a ceiling. Adding a second clock would give it two
+  ///   answers to one question.
+  /// - **`_session != null`** — the bound exists to release a go2rtc session,
+  ///   so a Popup that never opened one has nothing to release. A thermostat
+  ///   Popup left open costs nothing and is closed by the person who opened
+  ///   it; timing it out would be tidiness dressed as safety.
+  ///
+  /// Keyed on the session rather than on the Device's kind on purpose: "did
+  /// this Popup dial something" is the question that matters, and it stays
+  /// correct on its own if a future kind grows or loses a live view.
+  bool get _boundsIdle => widget.dismissAfter == null && _session != null;
+
+  /// Restarts the idle bound. Called once at open and on every touch.
+  void _rearmIdle() {
+    if (!_boundsIdle) return;
+    _idleWarn?.cancel();
+    _idleFire?.cancel();
+    // The tap that answers the prompt needs no special case: it re-arms like
+    // any other, and clearing the flag here is what takes the prompt away.
+    if (_promptingIdle) setState(() => _promptingIdle = false);
+    _idleWarn = Timer(kDevicePopupIdleReturn - kDevicePopupIdleWarning, () {
+      if (!mounted) return;
+      setState(() => _promptingIdle = true);
+      _idleFire = Timer(kDevicePopupIdleWarning, () {
+        // Logged before the attempt, not after: `_dismiss` may find the route
+        // obstructed and retry, and a line written only on success would make
+        // a Popup that took three tries look like one that never fired.
+        Log.info('popup', 'idle_return', {
+          'device': widget.presentation.device.id,
+          'reason': 'unanswered',
+        });
+        _dismiss();
+      });
+    });
+  }
+
   void _restartDeadline() {
     final after = widget.dismissAfter;
     // Nothing to restart for a Popup a person opened (D14), and nothing to
@@ -877,6 +961,14 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
         else
           middle,
         SizedBox(height: isDoorbell ? 8 : 12),
+        // Outside the scrollable region, with Close, and for the same reason:
+        // a prompt that has scrolled under the fold is a prompt nobody can
+        // answer, and the answer here is the difference between the view
+        // staying and going.
+        if (_promptingIdle) ...[
+          const _IdlePrompt(),
+          const SizedBox(height: 8),
+        ],
         closeRow,
       ],
     );
@@ -885,8 +977,52 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: isDoorbell ? 760 : 420),
-        child: Padding(padding: const EdgeInsets.all(24), child: content),
+        child: Listener(
+          // A stable handle for the card itself. `find.byType(Dialog)` is not
+          // one: Material's `insetPadding` puts the Dialog's rect outside the
+          // visible surface, so a test aiming at "just inside the card" by
+          // that rect lands on the barrier instead.
+          key: const ValueKey('popup-card'),
+          // Any touch anywhere is "still watching". A [Listener], not a
+          // [GestureDetector]: listeners never enter the gesture arena, so
+          // this cannot compete with — or steal a press from — the
+          // push-to-talk button inside it.
+          // `opaque`, not `deferToChild`, because the prompt says "tap
+          // anywhere" and that has to be true: the padding around the card's
+          // contents and the gaps between rows are the easiest places for a
+          // thumb to land, and none of them hold a child that hit-tests.
+          // Opaque still hit-tests children first, so nothing inside loses
+          // its events — see the push-to-talk case in the suite.
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (_) => _rearmIdle(),
+          child:
+              Padding(padding: const EdgeInsets.all(24), child: content),
+        ),
       ),
+    );
+  }
+}
+
+/// "Still watching?" — the softening on [kDevicePopupIdleReturn].
+///
+/// The Popup asks before it acts, which is what keeps the idle bound from
+/// being the countdown D14 rejected: a deliberate long watch costs one tap,
+/// and a forgotten one costs nothing because nobody is there to pay it.
+///
+/// Says "tap anywhere", and means it — the whole Dialog is under a `Listener`,
+/// so there is no target to find and nothing to aim at. Deliberately not a
+/// button: a button implies the rest of the card is not an answer, which
+/// would make the easy action the wrong one.
+class _IdlePrompt extends StatelessWidget {
+  const _IdlePrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Text(
+      'Still watching? Tap anywhere to stay',
+      key: ValueKey('popup-idle-prompt'),
+      textAlign: TextAlign.center,
+      style: TextStyle(fontSize: 12, color: PanelTheme.inkFaint),
     );
   }
 }

@@ -2,8 +2,10 @@
 """Dead-man switch for Ring talkback.
 
 go2rtc has no idle timeout on internal producers. Nothing reaps a wedged
-microphone or an orphaned consumer, and both hold the doorbell in live view on
-somebody's battery — a leaked `curl` once did it for ~30 minutes and 160 MB
+microphone or an orphaned consumer, and both hold the doorbell in live view,
+where HA core #177014 says it can suppress a real ding — this doorbell is
+hardwired, so a silently un-ringing bell is the ONLY symptom. A leaked `curl`
+once held it for ~30 minutes and 160 MB
 before a routine `/api/streams` dump found it (README.md, "Appendix — the
 incident this service exists for").
 

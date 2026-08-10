@@ -2,8 +2,10 @@
 
 go2rtc has **no idle timeout on internal producers**. Nothing in the stack
 reaps a wedged microphone or an orphaned consumer, and either one holds the
-doorbell in live view — on a battery device, over somebody's bandwidth, and
-suppressing real dings while it lasts. A leaked `curl` once did exactly that
+doorbell in live view — over somebody's bandwidth, and **suppressing real dings
+while it lasts** (HA core #177014). That last one is the whole cost, and it is
+the kind nobody notices: this doorbell is hardwired, so there is no battery to
+drain and no visible symptom at all — just a bell that quietly stopped ringing. A leaked `curl` once did exactly that
 for **~30 minutes and 160 MB** before a routine `/api/streams` dump found it —
 [the incident record](#appendix--the-incident-this-service-exists-for) is at the
 bottom of this file.

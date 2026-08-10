@@ -99,8 +99,11 @@ GStreamer path does not have, and now only cost fidelity.
 - **Teardown checks must inspect the go2rtc consumer list, not just the process
   list.** `pgrep -a -x ffmpeg` would never have caught that stray `curl`.
   (`pgrep -fa <pattern>` also self-matches its own command line — use `-x`.)
-- **Do not dial the doorbell casually.** Every live view costs battery and can
-  suppress a real ding (HA core #177014). Ask first.
+- **Do not dial the doorbell casually.** Not for battery — the Front Door is
+  **hardwired** (corrected 2026-08-10; `appliance/commissioning/05-devices-cloud.md`
+  records no battery entity). The reason that survives is HA core #177014: an
+  open live session can suppress a real ding, and nobody notices a doorbell
+  that silently stopped ringing. Ask first.
 - **Audio verification needs real speech at the door.** Ring transmits digital
   silence (~−90 dBFS) on a quiet street, so a silent capture passes every test
   while proving nothing. Assert `speech > 5s` before trusting a pass.
@@ -155,22 +158,32 @@ error, not bad audio. (One 1.9.10-only defect exists and is inert here: the
 `#backchannel=1&audio=…` channel-count typo in `pkg/core/codec.go`, fixed in
 1.9.14. `mic` uses the RTSP-output `exec:` form and never touches it.)
 
-🔴 **What is left: README Step 10 was skipped while Step 11 was applied.**
-`mic` is enabled in `go2rtc.yaml`, but the container had no `PULSE_SERVER` and
-no PulseAudio socket — the exact failure the README warns about, one that
-surfaces *only* when somebody presses talk. The compose fix is applied and
-unstaged (`hub/dev/compose.yaml`); it needs a **recreate from a host shell**,
-because mounts and environment are fixed at create time and `docker compose`
-from the devcontainer resolves relative bind mounts against a path the host
-daemon does not have (confirmed: `docker compose config` in here resolves the
-mount to `/tmp/user/1000/pulse`, the devcontainer's own `XDG_RUNTIME_DIR`):
+✅ **V6 PASSED 2026-08-10 — item 1 is complete.** Verified at the door, twice:
+once by `curl` (isolating the mechanism) and once through the Panel's own
+push-to-talk button. Speech from this machine's microphone was heard from the
+doorbell's speaker both times. The compose fix (Step 10) was committed in
+`39c8365`, and the outbound path is now proven end to end on go2rtc 1.9.10.
+**Item 5 is unblocked.**
+
+🔴 **One trap this uncovered, and it will recur.** `/run/user/1000` is a
+systemd tmpfs. When the host's user session is recreated (logout, reboot), the
+`pulse` directory inside it gets a **new inode**, and any container that bound
+the old one keeps mounting a directory that is now empty. The symptom is
+maximally confusing: `PULSE_SERVER` is set, `docker inspect` shows the bind
+present and correct, and `/run/user/1000/pulse/` inside the container is simply
+empty — no socket, so `mic` cannot capture and talkback fails only at the
+moment somebody presses the button.
+
+It bit on 2026-08-10 and would have wasted the trip to the door. The fix is
+cheap and needs no compose:
 
 ```sh
-cd hub/dev && docker compose up -d go2rtc talk-watchdog     # HOST shell
+docker restart go2rtc-dev      # re-takes the bind; safe from anywhere
 ```
 
-Then **V6 (talkback) is the only unrun check** — it needs somebody at the door.
-Item 5 stays blocked until it passes.
+**Run that after any host reboot or re-login, before trusting talkback.**
+Confirm with `docker exec go2rtc-dev ls /run/user/1000/pulse/` — expect
+`native` and `pid`, not an empty listing.
 
 ### 2. Watchdog / dead-man switch — 🟢 **built 2026-08-09**, with one gap it cannot close
 [`hub/talk-watchdog/`](../../hub/talk-watchdog/README.md) — one stdlib-only
@@ -236,7 +249,8 @@ is an owner decision** — see below.
 
 ### 5. Delete the lab directories — 🟡 **prepared 2026-08-09, still gated**
 `hub/dev/ring-twoway-lab/` and `hub/dev/ring-audio-test/` — **only after item 1**,
-i.e. after V6 proves talkback on the dev Hub's own go2rtc. Deleting the
+i.e. after V6 proves talkback on the dev Hub's own go2rtc — **✅ V6 passed
+2026-08-10, so this is now unblocked and is ready agent work.** Deleting the
 environment that produced every number ADR-0011 rests on, *before* reproducing it
 on the real stack, is backwards. The cost of waiting is 228 KB and 9 tracked files.
 

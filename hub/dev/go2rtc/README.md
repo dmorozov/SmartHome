@@ -50,8 +50,9 @@ one is the most common mistake in this repo.
 3. **Time-bound every stream probe inside the container that runs it.** Killing
    the caller does not kill the work.
 4. **Check the consumer list, not the process list**, when confirming teardown.
-5. **Do not dial the doorbell casually.** Every live view costs battery and can
-   suppress a real ding (HA core #177014).
+5. **Do not dial the doorbell casually.** Not for battery — the Front Door is
+   **hardwired** (corrected 2026-08-10). The reason that survives is HA core
+   #177014: an open live session can suppress a real ding.
 
 ---
 
@@ -683,9 +684,9 @@ un-sessioned `GET /clients_api/ring_devices` per dial, and pings gated on
 `PeerConnectionStateConnected`. So a 1.9.10 failure would surface as a
 dial/auth error, not as bad audio.
 
-⚠️ **V6 (talkback) has still not been run on 1.9.10** — it needs Step 10
-applied and somebody at the door. Given the byte-identical code the risk is
-low, but "low" is not "measured". The pin does **not** need bumping.
+✅ **V6 (talkback) PASSED on 1.9.10, 2026-08-10** — verified at the door twice,
+by `curl` and through the Panel's push-to-talk button. What was "low risk but
+not measured" is now measured. The pin does **not** need bumping.
 
 ⚠️ One real 1.9.10-only defect, harmless today: the `#backchannel=1&audio=…`
 channel-count typo in `pkg/core/codec.go` (fixed in 1.9.14). `mic` uses the
