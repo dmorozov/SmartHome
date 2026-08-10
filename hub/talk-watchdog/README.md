@@ -23,13 +23,34 @@ thing in the stack to break.
 | | Trigger | Action |
 |---|---|---|
 | **Talk cap** | the `mic` stream's producer has been live for `TALK_CAP_S` | `POST /api/streams?dst=ring&src=` |
-| **Startup stop** | process start, *before* the first poll | same |
+| **Startup stop** | process start, *before* the first poll — retried until go2rtc answers | same |
 | **Shutdown stop** | `SIGTERM` / `SIGINT` | same |
 | **Orphaned producer** | `ring` producer live, no consumers, nobody talking, for `STALE_POLLS` polls | same, plus a log line |
 | **Stalled consumer** | a consumer's `bytes_send` has not moved for `STALE_POLLS` polls | **log only** — see below |
 
 The stop call is idempotent (verified 40/40 returning 200), so it is fired
 liberally rather than carefully.
+
+**The startup stop retries, and a cold boot is why.** `depends_on:` in compose
+waits for go2rtc's *container* to start, not for its HTTP listener to bind, so
+this service wins that race and used to spend its one attempt on
+`ECONNREFUSED` — observed live at 2026-08-10T03:25:53Z, `starting` and
+`stop_failed reason=startup` in the same second. It now retries for
+`STARTUP_GRACE_S`, logs only the first failure (fifteen identical lines per
+boot is a log nobody skims) and writes one `startup_stop_gave_up` carrying the
+attempt count if it never lands. The bound is as important as the retry: an
+unbounded one would turn a permanently-down go2rtc into a watchdog that never
+reaches its poll loop and therefore never reports anything.
+
+What that bug actually cost is smaller than it sounds, and worth stating so
+nobody over-reads the fix: the poll loop already caught both leak shapes on its
+own — an orphaned producer after `STALE_POLLS`, a wedged microphone within
+`TALK_CAP_S`. A lost startup stop made cleanup **slower, not absent**.
+
+The **shutdown** stop is deliberately not retried. It fails for a different
+reason — `Temporary failure in name resolution`, the compose network already
+torn down — and retrying into a dead network would only delay shutdown to reach
+a go2rtc that is itself going away.
 
 ## 🔴 What this cannot do
 
@@ -111,6 +132,7 @@ to Ring. The code tests for `id`.
 | `POLL_S` | `2` | |
 | `STALE_POLLS` | `5` | consecutive polls before a condition is believed |
 | `HTTP_TIMEOUT_S` | `5` | |
+| `STARTUP_GRACE_S` | `30` | how long the startup stop keeps retrying a go2rtc that has not bound its listener yet; `0` means a single attempt |
 
 Logs are one JSON object per line on stdout. **Every line passes through a
 redaction filter first** — `/api/streams` responses embed the live Ring refresh
@@ -143,7 +165,7 @@ records every request.
 cd hub/talk-watchdog && python3 -m unittest discover -s tests -t tests
 ```
 
-24 tests. The ones worth knowing about, because each encodes something that was
+29 tests. The ones worth knowing about, because each encodes something that was
 learned the hard way:
 
 - a consumer advertising `sendonly` audio is **not** talk in progress;
@@ -155,7 +177,10 @@ learned the hard way:
 - the cap **re-arms** if a stop does not take, so a silently-failing stop cannot
   leave the microphone hot indefinitely;
 - no log line can carry a refresh token;
-- `PUT`/`DELETE` never reach the wire.
+- `PUT`/`DELETE` never reach the wire;
+- the startup stop **retries** a go2rtc that has not bound its listener yet,
+  and **gives up bounded** rather than blocking the poll loop for ever — both
+  halves are asserted, because either one alone is a different bug.
 
 ## What it does not know about
 

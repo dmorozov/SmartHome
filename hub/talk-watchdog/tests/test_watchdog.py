@@ -19,7 +19,16 @@ from contextlib import redirect_stdout
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fake_go2rtc import FakeGo2rtc  # noqa: E402
-from watchdog import Client, Config, Watchdog, log, redact, run, stream_live  # noqa: E402
+from watchdog import (  # noqa: E402
+    Client,
+    Config,
+    Watchdog,
+    _startup_stop,
+    log,
+    redact,
+    run,
+    stream_live,
+)
 
 FAKE_TOKEN = "eyJhbGciOi" + "x" * 1194
 
@@ -293,12 +302,101 @@ class LoopBehaviour(unittest.TestCase):
         self.assertGreater(len(fake.posts()), 2)  # more than startup + shutdown
 
     def test_a_dead_api_does_not_kill_the_loop(self):
-        c = cfg(GO2RTC="http://127.0.0.1:9")  # nothing listens on discard
+        # STARTUP_GRACE_S=0 keeps this about the poll loop: without it the
+        # startup stop would spend the whole grace retrying a port that is
+        # never going to answer, and this suite would take 30 s to say
+        # something it can say instantly.
+        c = cfg(GO2RTC="http://127.0.0.1:9", STARTUP_GRACE_S=0)  # discard port
         buf = io.StringIO()
         with redirect_stdout(buf):
             run(c, Client(c), Watchdog(c), sleep=lambda _s: None, forever=3)
         self.assertEqual(buf.getvalue().count('"event": "poll_failed"'), 3)
         self.assertIn('"event": "stopped"', buf.getvalue())
+
+
+class StartupStop(unittest.TestCase):
+    """The startup stop has to survive go2rtc not being up yet.
+
+    Compose's `depends_on:` waits for go2rtc's *container*, not for its HTTP
+    listener to bind, so on a cold boot this service wins the race. Measured on
+    a real one, 2026-08-10T03:25:53Z: `starting` and `stop_failed reason=startup
+    detail="[Errno 111] Connection refused"` in the same second, the single
+    attempt spent for nothing.
+    """
+
+    class _Client:
+        """Refuses `fails` times with ECONNREFUSED, then answers 200."""
+
+        def __init__(self, fails):
+            self._left = fails
+            self.attempts = 0
+
+        def stop_talk(self):
+            self.attempts += 1
+            if self._left > 0:
+                self._left -= 1
+                raise urllib.error.URLError("[Errno 111] Connection refused")
+            return 200
+
+    def _startup(self, client, **over):
+        c = cfg(**over)
+        slept = []
+        clock = iter(float(i) for i in range(0, 10_000))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            ok = _startup_stop(c, client, slept.append, lambda: next(clock))
+        return ok, buf.getvalue(), slept
+
+    def test_retries_until_go2rtc_answers(self):
+        client = self._Client(fails=3)
+        ok, out, slept = self._startup(client)
+        self.assertTrue(ok)
+        self.assertEqual(client.attempts, 4)
+        self.assertIn('"reason": "startup"', out)
+        self.assertIn('"status": 200', out)
+        self.assertNotIn("startup_stop_gave_up", out)
+        # Waited the poll interval between tries rather than spinning.
+        self.assertEqual(slept, [2.0, 2.0, 2.0])
+
+    def test_a_go2rtc_already_up_costs_exactly_one_attempt(self):
+        client = self._Client(fails=0)
+        ok, out, slept = self._startup(client)
+        self.assertTrue(ok)
+        self.assertEqual(client.attempts, 1)
+        self.assertEqual(slept, [])
+        # Byte-identical to the log this wrote before the retry existed: no
+        # `attempts` key on the path where it would only ever say 1.
+        self.assertNotIn("attempts", out)
+        self.assertNotIn("stop_failed", out)
+
+    def test_gives_up_after_the_grace_rather_than_blocking_for_ever(self):
+        # The failure mode this guards: an unbounded retry turns a permanently
+        # down go2rtc into a watchdog that never reaches its poll loop and so
+        # never reports anything at all.
+        client = self._Client(fails=10_000)
+        ok, out, _ = self._startup(client, STARTUP_GRACE_S=6)
+        self.assertFalse(ok)
+        self.assertIn('"event": "startup_stop_gave_up"', out)
+        self.assertIn('"attempts": 6', out)
+
+    def test_only_the_first_failure_is_logged(self):
+        # Fifteen identical lines every cold boot is a log nobody skims. The
+        # give-up line carries the count, so nothing is hidden by this.
+        client = self._Client(fails=10_000)
+        _, out, _ = self._startup(client, STARTUP_GRACE_S=6)
+        self.assertEqual(out.count('"event": "stop_failed"'), 1)
+
+    def test_a_startup_that_gave_up_still_enters_the_poll_loop(self):
+        # The whole point of bounding it. A watchdog that died at startup
+        # because go2rtc was down is worse than one that starts late.
+        c = cfg(GO2RTC="http://127.0.0.1:9", STARTUP_GRACE_S=0)  # discard port
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            run(c, Client(c), Watchdog(c), sleep=lambda _s: None, forever=2)
+        out = buf.getvalue()
+        self.assertIn('"event": "startup_stop_gave_up"', out)
+        self.assertEqual(out.count('"event": "poll_failed"'), 2)
+        self.assertIn('"event": "stopped"', out)
 
 
 if __name__ == "__main__":

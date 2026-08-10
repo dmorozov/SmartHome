@@ -524,12 +524,12 @@ live view for ~30 minutes and pulled 160 MB before anyone noticed
 
 Shipped as [`hub/talk-watchdog/`](../../hub/talk-watchdog/README.md) — one
 stdlib-only Python file, wired into `hub/dev/compose.yaml` as `talk-watchdog`,
-24 tests against a scripted fake go2rtc. Against the requirements as written:
+29 tests against a scripted fake go2rtc. Against the requirements as written:
 
 | Requirement | Status |
 |---|---|
 | Fire `dst=ring&src=` liberally — idempotent (40/40 → 200) | ✅ |
-| Stop once at startup, to clear what a crash left open | ✅ |
+| Stop once at startup, to clear what a crash left open | ✅ — **retried since 2026-08-10**, see below |
 | Absolute talk cap (30–60 s) | ✅ `TALK_CAP_S`, default 45 |
 | Monitor the **consumer list**, not the process list | ✅ |
 | Stop unconditionally on popup close **and** app shutdown | ✅ Panel-side, item 4 below (`dispose`, 2026-08-09) |
@@ -549,6 +549,26 @@ accept it.
 *into* `ring`, so it reliably closes a wedged microphone. Whether it clears a
 ghost `ring:` producer — go2rtc#1961, which never reproduced in the lab — is
 **unverified**.
+
+⚠️ **The startup stop was not as reliable as this table claimed, and a cold boot
+proved it.** `depends_on:` waits for go2rtc's *container* to start, not for its
+HTTP listener to bind, so the watchdog wins that race and used to spend its one
+attempt on `ECONNREFUSED`. Observed live, 2026-08-10T03:25:53Z — `starting` and
+`stop_failed reason=startup` in the same second. Fixed by retrying for
+`STARTUP_GRACE_S` (default 30 s, one attempt when 0), logging only the first
+failure and a `startup_stop_gave_up` line carrying the count. The bound matters
+as much as the retry: an unbounded one would turn a permanently-down go2rtc into
+a watchdog that never reaches its poll loop and so never reports anything.
+
+Worth being precise about what the bug cost, because it is less than it sounds:
+the poll loop already caught both leak shapes unaided — an orphaned producer
+after `stale_polls`, a wedged microphone within `cap_s`. A lost startup stop made
+cleanup **slower, not absent**. It is fixed because a restart is exactly when a
+crash's leftovers are most likely to exist.
+
+Not applied to the **shutdown** stop, which fails for an unrelated reason
+(`Temporary failure in name resolution` — the compose network already torn down)
+where retrying would only delay shutdown to reach a go2rtc that is also leaving.
 
 ### 3. Echo cancellation — only once inbound playback ships
 There is **no echo path today** (the Panel plays MJPEG, which carries no audio).

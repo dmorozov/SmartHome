@@ -63,6 +63,11 @@ class Config:
         # Consecutive polls a condition must hold before it is believed.
         self.stale_polls = int(env.get("STALE_POLLS", "5"))
         self.timeout_s = float(env.get("HTTP_TIMEOUT_S", "5"))
+        # How long the startup stop keeps retrying a go2rtc that is not
+        # answering yet. See _startup_stop() for why one attempt is not enough.
+        # 0 means a single attempt, which is what the tests that are about the
+        # poll loop rather than about startup use.
+        self.startup_grace_s = float(env.get("STARTUP_GRACE_S", "30"))
 
 
 # --- reading go2rtc -------------------------------------------------------
@@ -231,10 +236,9 @@ def run(cfg, client, watchdog, sleep=time.sleep, now=time.monotonic, forever=Non
         poll_s=cfg.poll_s,
     )
 
-    # Fire once before polling anything: a previous run may have died holding
-    # the microphone open, and this is the cheapest way to find out it did not
-    # matter.
-    _stop(client, {"reason": "startup"})
+    # Before polling anything: a previous run may have died holding the
+    # microphone open, and this is the cheapest way to find out it did not.
+    _startup_stop(cfg, client, sleep, now)
 
     running = {"go": True}
 
@@ -267,6 +271,69 @@ def run(cfg, client, watchdog, sleep=time.sleep, now=time.monotonic, forever=Non
 
     _stop(client, {"reason": "shutdown"})
     log("stopped")
+
+
+def _startup_stop(cfg, client, sleep, now):
+    """The startup stop, retried until go2rtc answers or the grace runs out.
+
+    One un-retried attempt was not enough, and the live logs are what proved
+    it. Compose's `depends_on:` waits for go2rtc's *container* to start, not
+    for its HTTP listener to bind, so on a cold boot this service reliably
+    wins the race and spends its only attempt on ECONNREFUSED:
+
+        {"event": "starting",    ..., "ts": "2026-08-10T03:25:53Z"}
+        {"event": "stop_failed", "reason": "startup",
+         "detail": "<urlopen error [Errno 111] Connection refused>", ...}
+
+    What that costs is worth stating exactly, because it is smaller than it
+    looks: the poll loop still catches both leak shapes on its own — an
+    orphaned producer after `stale_polls` polls, a wedged microphone within
+    `cap_s`. So a lost startup stop makes cleanup *slower*, not absent. It is
+    fixed here anyway because a restart is the one moment a crash's leftovers
+    are most likely to exist, and because the requirement table in
+    `docs/plans/ring-audio-stack.md` claims this call is reliable.
+
+    Failures are logged once rather than per attempt: at a 2 s poll and a 30 s
+    grace this would otherwise write fifteen identical lines every cold boot,
+    and a log nobody can skim is a log nobody reads. The give-up line carries
+    the attempt count, so nothing is hidden.
+
+    Deliberately **not** applied to the shutdown stop. That one fails for a
+    different reason — `Temporary failure in name resolution`, the compose
+    network already torn down — and retrying into a dead network would only
+    delay shutdown to reach a go2rtc that is itself going away.
+    """
+    deadline = None
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            status = client.stop_talk()
+            # `attempts` only once it means something, so the happy path logs
+            # byte-identically to before this retry existed.
+            extra = {"attempts": attempt} if attempt > 1 else {}
+            log("stop", status=status, reason="startup", **extra)
+            return True
+        except (urllib.error.URLError, OSError) as exc:
+            if deadline is None:
+                # Read the clock only on the failure path — the happy path must
+                # not consume a tick, or every injected-clock test that times
+                # the cap would shift by one.
+                deadline = now() + cfg.startup_grace_s
+                log(
+                    "stop_failed",
+                    error=type(exc).__name__,
+                    detail=str(exc),
+                    reason="startup",
+                )
+            if now() >= deadline:
+                log(
+                    "startup_stop_gave_up",
+                    attempts=attempt,
+                    grace_s=cfg.startup_grace_s,
+                )
+                return False
+            sleep(cfg.poll_s)
 
 
 def _stop(client, detail):
