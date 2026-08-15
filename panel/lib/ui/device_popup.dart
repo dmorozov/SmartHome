@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -361,10 +362,11 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// answer knows it is stale.
   var _talkPress = 0;
 
-  /// The push-to-talk pulse ring's clock. Declared for every Popup — a
-  /// mixin is per-class, not per-condition — but only ever started while a
-  /// doorbell Popup's button is actually held, so a thermostat Popup pays
-  /// nothing for it beyond one idle controller. See [_startTalking].
+  /// The clock behind the button's sweeping segment — the one phase that is a
+  /// thing *in progress* rather than a settled state. Declared for every
+  /// Popup (a mixin is per-class, not per-condition) but only ever started
+  /// while go2rtc is being dialled, so a thermostat Popup pays nothing for it
+  /// beyond one idle controller. See [_startTalking].
   ///
   /// Built in [initState], not as a `late final` field initializer: a field
   /// initializer runs lazily on first read, and for every non-doorbell
@@ -398,6 +400,11 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     if (url == null) return;
     final press = ++_talkPress;
     setState(() => _talk = TalkPhase.opening);
+    // Started here rather than on success: the sweeping segment *is* the
+    // opening phase, and that phase begins the moment the thumb lands. It is
+    // stopped again below, whichever way go2rtc answers — `open` and `failed`
+    // are both settled states and neither of them moves.
+    _pulse.repeat();
     Log.debug('popup', 'talk_start', {'device': device.id});
     _talkOps = _talkOps.then((_) async {
       final result = await widget.talk.post(url);
@@ -417,7 +424,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       // stale answer to decline to render.
       if (!mounted || press != _talkPress) return;
       setState(() => _talk = result.ok ? TalkPhase.open : TalkPhase.failed);
-      if (result.ok) _pulse.repeat();
+      _pulse.stop();
       // Each link swallows its own faults rather than passing them down. A
       // `.then` chain propagates an error past every later link, so one
       // throw here — a poster breaking its no-throw contract, a `setState`
@@ -1146,8 +1153,8 @@ class _DockedTalk extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(
-      // The pulse ring overflows the button's own box while the microphone is
-      // open, and it is allowed to: see [_PushToTalkButton].
+      // The button's face fits its own box, but [PanelTheme.raised]'s soft
+      // shadows reach past it — see [_PushToTalkButton].
       clipBehavior: Clip.none,
       children: [
         Padding(
@@ -1429,19 +1436,44 @@ class _VideoNotice extends StatelessWidget {
 /// [_DevicePopupBodyState] so a rebuild here (the ring's own
 /// `AnimatedBuilder`) never restarts or re-creates the ticker driving it.
 ///
-/// Three looks, not two, and the middle one is the point: pressed-but-not-yet
-/// -open wears the mic icon (the press was registered) in the resting colour
-/// (nothing is live yet). Only [TalkPhase.open] — go2rtc having answered —
-/// turns the button red and starts the ring.
+/// **Five looks, one per phase, and the border is what carries them.** The
+/// body is the owner's neumorphic reference (`docs/button.png`, 2026-08-14):
+/// a flat outer rim in the card's own grey with a raised inner disc, lit from
+/// the top-left like everything else the Panel draws. The reference's thin
+/// dark arc is promoted from decoration to the **state channel**, because
+/// after the same redesign dropped the resting caption there is no text under
+/// the button in the ordinary case, so the button owes the wall the whole
+/// answer by itself:
 ///
-/// The box is exactly [kTalkButtonDiameter], and the ring is deliberately
-/// allowed to overflow it (`Clip.none`, here and in [_DockedTalk]). Docked,
-/// that means ~14 px of translucent red lands on the picture at full
-/// expansion. Accepted, and looked at: clipping the ring to the card would
-/// give it a flat top, which reads as a rendering fault rather than as a
-/// halo. Sizing the box to the ring instead would make the button's rect —
-/// the thing the geometry tests and the touch target are both about — a
-/// number about an animation.
+/// | phase          | ring                        | glyph      |
+/// |----------------|-----------------------------|------------|
+/// | `unconfigured` | faint grey, thin            | `mic_none` |
+/// | `idle`         | accent blue, thin           | `mic_none` |
+/// | `opening`      | blue **segment, sweeping**  | `mic`      |
+/// | `open`         | red, **thick**              | `mic`      |
+/// | `failed`       | red, thin, **broken**       | `mic_off`  |
+///
+/// Only `opening` moves, and that is deliberate: it is the one phase that is
+/// a thing *in progress* rather than a settled state, and it is exactly the
+/// gap ADR-0007 says may not be dressed up — go2rtc has been asked and has
+/// not answered, so the control may look busy but not live.
+///
+/// **`failed` is broken-and-`mic_off` rather than simply red**, which is the
+/// one thing here the A/B/C/D comparison did not settle. A solid red ring in
+/// both `open` and `failed` would put a refused microphone and a live one in
+/// the same clothes — the most consequential confusion this control can
+/// produce, and the exact shape ADR-0007 forbids. The gap and the struck-
+/// through glyph cost nothing and cannot be misread.
+///
+/// The chosen face from a four-variant throwaway prototype (issue #3): A over
+/// B (press-to-inset), C (recessed well) and D (rim-lit ring). B, C and D each
+/// left `unconfigured`, `idle` and `failed` visually identical, which the
+/// caption used to cover for and no longer does.
+///
+/// The whole face fits inside [kTalkButtonDiameter] — the ring is inset, not
+/// overflowing — so the old expanding halo, and the ~14 px of red it used to
+/// spill onto the picture, are both gone. `Clip.none` stays only because
+/// [PanelTheme.raised]'s soft shadows still reach past the box.
 class _PushToTalkButton extends StatelessWidget {
   const _PushToTalkButton({
     required this.phase,
@@ -1459,55 +1491,135 @@ class _PushToTalkButton extends StatelessWidget {
   /// whether a microphone is open.
   bool get _held => phase == TalkPhase.opening || phase == TalkPhase.open;
 
+  /// The fault red, shared with [_TalkCaption]. Not a collision: the caption
+  /// and the ring are saying the same thing about the same phase.
+  static const _fault = Color(0xFFE05252);
+
+  Color get _ringColour => switch (phase) {
+        TalkPhase.open || TalkPhase.failed => _fault,
+        TalkPhase.opening => PanelTheme.accent,
+        TalkPhase.idle => PanelTheme.accent.withValues(alpha: .75),
+        TalkPhase.unconfigured => PanelTheme.inkFaint.withValues(alpha: .3),
+      };
+
+  IconData get _glyph => switch (phase) {
+        // Struck through, and only here: a microphone go2rtc refused is the
+        // one phase where the control looks like the live one otherwise.
+        TalkPhase.failed => Icons.mic_off,
+        _ => _held ? Icons.mic : Icons.mic_none,
+      };
+
+  Color get _glyphColour => switch (phase) {
+        TalkPhase.open => _fault,
+        TalkPhase.unconfigured => PanelTheme.inkFaint.withValues(alpha: .5),
+        _ => PanelTheme.ink,
+      };
+
   @override
   Widget build(BuildContext context) {
-    final live = phase == TalkPhase.open;
+    const d = kTalkButtonDiameter;
+    final opening = phase == TalkPhase.opening;
     return GestureDetector(
       key: const ValueKey('push-to-talk'),
       onTapDown: (_) => onStart(),
       onTapUp: (_) => onStop(),
       onTapCancel: onStop,
       child: SizedBox(
-        width: kTalkButtonDiameter,
-        height: kTalkButtonDiameter,
+        width: d,
+        height: d,
         child: Stack(
           alignment: Alignment.center,
+          // Only for [PanelTheme.raised]'s shadows, which reach past the box.
           clipBehavior: Clip.none,
           children: [
-            if (live)
-              AnimatedBuilder(
-                animation: pulse,
-                builder: (context, _) => Container(
-                  width: kTalkButtonDiameter + 44 * pulse.value,
-                  height: kTalkButtonDiameter + 44 * pulse.value,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(
-                      0xFFE05252,
-                    ).withValues(alpha: .35 * (1 - pulse.value)),
-                  ),
-                ),
-              ),
+            // The outer rim: the card's own colour, raised off it. The
+            // reference's flat collar, and what the ring is drawn on.
             Container(
-              width: kTalkButtonDiameter,
-              height: kTalkButtonDiameter,
+              width: d,
+              height: d,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: live ? const Color(0xFFE05252) : PanelTheme.accent,
-                border: Border.all(color: PanelTheme.surfaceRaised, width: 3),
-                boxShadow: PanelTheme.raised(10),
+                color: PanelTheme.surface,
+                boxShadow: PanelTheme.raised(d * .14),
               ),
-              child: Icon(
-                _held ? Icons.mic : Icons.mic_none,
-                color: Colors.white,
-                size: 40,
+            ),
+            AnimatedBuilder(
+              animation: pulse,
+              builder: (context, _) => CustomPaint(
+                size: const Size.square(d),
+                painter: _RimArc(
+                  colour: _ringColour,
+                  // `opening` is a segment chasing its own tail; `failed` is
+                  // a ring with a gap at the top; everything else is closed.
+                  start: opening ? pulse.value - .25 : -.25 + _gap / 2,
+                  sweep: opening ? .3 : 1 - _gap,
+                  width: d * (phase == TalkPhase.open ? .042 : .028),
+                  inset: d * .014,
+                ),
               ),
+            ),
+            // The raised inner disc, and the glyph on it.
+            Container(
+              width: d * .78,
+              height: d * .78,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: PanelTheme.surfaceRaised,
+                boxShadow: PanelTheme.raised(d * .10),
+              ),
+              child: Icon(_glyph, color: _glyphColour, size: d * .34),
             ),
           ],
         ),
       ),
     );
   }
+
+  /// How much of the ring is missing, in turns. Only [TalkPhase.failed] has a
+  /// gap, and it is centred on the top so it cannot be mistaken for a segment
+  /// that happens to have stopped there.
+  double get _gap => phase == TalkPhase.failed ? .10 : 0;
+}
+
+/// One stroked arc around a circle's rim, in turns rather than radians
+/// because every angle this button uses is a fraction of a full turn.
+class _RimArc extends CustomPainter {
+  const _RimArc({
+    required this.colour,
+    required this.start,
+    required this.sweep,
+    required this.width,
+    required this.inset,
+  });
+
+  final Color colour;
+  final double start;
+  final double sweep;
+  final double width;
+  final double inset;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawArc(
+      Rect.fromLTWH(
+          inset, inset, size.width - inset * 2, size.height - inset * 2),
+      start * 2 * math.pi,
+      sweep * 2 * math.pi,
+      false,
+      Paint()
+        ..color = colour
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..strokeWidth = width,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RimArc old) =>
+      old.colour != colour ||
+      old.start != start ||
+      old.sweep != sweep ||
+      old.width != width;
 }
 
 /// The honest label under the button — the one place that says what is and

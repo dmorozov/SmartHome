@@ -1475,7 +1475,12 @@ void main() {
           find.text('Couldn\'t open the microphone — nothing was sent'),
           findsOneWidget,
         );
-        expect(find.byIcon(Icons.mic_none), findsOneWidget);
+        // Struck through, not merely un-held. A refused microphone wears a red
+        // ring exactly like an open one does, so the glyph is the whole of
+        // what tells the two apart on the glass — and ADR-0007's rule is that
+        // a thing which is not happening may not look like it is.
+        expect(find.byIcon(Icons.mic_off), findsOneWidget);
+        expect(find.byIcon(Icons.mic), findsNothing);
 
         await gesture.up();
         await tester.pumpAndSettle();
