@@ -67,3 +67,7 @@ A transient full-or-partial-screen overlay on the Panel, e.g. live doorbell vide
 **Cameras**:
 The Panel's full-screen grid of camera tiles, slid out from a right-edge tab on the Dollhouse. Tiles start and stop their own live streams (the doorbell's is off by default — an open Ring session suppresses dings); closing the view stops them all.
 _Avoid_: dashboard, camera wall, NVR view
+
+**Talk**:
+Speaking from the Panel to a Device that has a speaker — today the doorbell alone. Held, never toggled, and **one direction only**: the door cannot yet be heard back, so Talk is not a conversation and the Panel never implies one.
+_Avoid_: two-way audio (that is the thing this is half of), intercom, talkback (the vendor's word for the whole duplex)

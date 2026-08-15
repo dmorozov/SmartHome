@@ -200,7 +200,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('setpoint-plus')));
     await tester.pump();
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     // The glass said 21.5 when the thumb left it; the command must not die
@@ -308,7 +308,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('setpoint-plus')));
     await tester.pump(const Duration(milliseconds: 800));
     await tester.tap(find.byKey(const ValueKey('setpoint-minus')));
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     // The flush must make the same in-flight-aware comparison the debounce

@@ -13,6 +13,7 @@ import 'package:panel/ui/video/live_video_keepalive.dart';
 import 'package:panel/ui/video/snapshot.dart';
 
 import 'support/fake_go2rtc.dart';
+import 'support/fake_snapshots.dart';
 import 'support/fake_talk.dart';
 
 /// The Popup's three honest bodies, and the promise that goes with the one
@@ -120,7 +121,7 @@ void main() {
   testWidgets('closing the Popup closes the stream — once, and by every '
       'route out', (tester) async {
     final routesOut = <String, Future<void> Function(WidgetTester)>{
-      'the Close button': (t) => t.tap(find.text('Close')),
+      'the Close button': (t) => t.tap(find.byKey(const ValueKey('popup-close'))),
       // showDialog's barrierDismissible defaults true and nothing overrides
       // it, so the wall's most likely dismissal is a stray tap beside the
       // Dialog.
@@ -202,7 +203,7 @@ void main() {
     // The Dialog still has the Device's name and a way out of itself — the
     // whole reason urlFor returns null instead of throwing.
     expect(find.text('Porch Camera'), findsOneWidget);
-    expect(find.text('Close'), findsOneWidget);
+    expect(find.byKey(const ValueKey('popup-close')), findsOneWidget);
     expect(popupLines('stream_skipped').single.fields, {
       'device': 'cam-porch',
       'reason': 'bad_go2rtc_url',
@@ -309,7 +310,7 @@ void main() {
 
     expect(popupLines('stream_open'), isEmpty);
 
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     expect(popupLines('stream_closed'), isEmpty);
@@ -324,7 +325,7 @@ void main() {
       dismissAfter: const Duration(seconds: 30),
     );
 
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     // flutter_test fails the test itself if a Timer is still pending when
@@ -556,7 +557,7 @@ void main() {
     // Still a Dialog: the Device's name and a way out of it, which is the
     // whole reason `urlFor` returns null rather than throwing one layer up.
     expect(find.text('Porch Camera'), findsOneWidget);
-    expect(find.text('Close'), findsOneWidget);
+    expect(find.byKey(const ValueKey('popup-close')), findsOneWidget);
     expect(find.text('Live view unavailable'), findsOneWidget);
     // The type, never the message: a SyntaxError quotes the URL it refused,
     // and that URL is the one string here that can carry a password.
@@ -571,7 +572,7 @@ void main() {
     // Nothing was ever opened, so nothing may claim to have been.
     expect(popupLines('stream_open'), isEmpty);
 
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     expect(popupLines('stream_closed'), isEmpty);
@@ -640,7 +641,7 @@ void main() {
     // not open a second session on the stream it is already playing.
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.held);
 
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     expect(go2rtc.opened.first.closes, 1);
@@ -657,7 +658,7 @@ void main() {
       dismissCeiling: const Duration(minutes: 2),
     );
 
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     // One frame in: the pop has been requested, the exit animation is
     // running, and the old body is still mounted with its session open.
     await tester.pump(const Duration(milliseconds: 20));
@@ -703,7 +704,7 @@ void main() {
       expect(find.textContaining('Live view placeholder'), findsNothing);
       expect(go2rtc.only.url.toString(), 'ws://hub:1984/api/ws?src=porch');
 
-      await tester.tap(find.text('Close'));
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
       await tester.pumpAndSettle();
       // The Popup still closes its own session — its half of the contract is
       // unchanged, and `popup.stream_closed` is still honest about it.
@@ -717,7 +718,7 @@ void main() {
         hasLength(1),
         reason: 'a second dial is the relaunch that loses the IDR race',
       );
-      expect(find.text('Close'), findsOneWidget);
+      expect(find.byKey(const ValueKey('popup-close')), findsOneWidget);
 
       // Inside the body, not `addTearDown`: the tree is disposed — and its
       // "no Timer left pending" invariant checked — before tear-downs run,
@@ -756,7 +757,7 @@ void main() {
       }
       await tester.pumpAndSettle();
 
-      expect(find.text('Close'), findsNothing, reason: 'the ceiling popped it');
+      expect(find.byKey(const ValueKey('popup-close')), findsNothing, reason: 'the ceiling popped it');
       expect(
         go2rtc.only.closes,
         1,
@@ -775,7 +776,7 @@ void main() {
         tester,
         video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: keepAlive.open),
       );
-      await tester.tap(find.text('Close'));
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
       await tester.pumpAndSettle();
       await tester.pump(kLiveVideoLinger + const Duration(seconds: 1));
 
@@ -951,7 +952,7 @@ void main() {
           reason: scene.key,
         );
 
-        await tester.tap(find.text('Close'));
+        await tester.tap(find.byKey(const ValueKey('popup-close')));
         await tester.pumpAndSettle();
       }
     });
@@ -1172,9 +1173,8 @@ void main() {
     TalkConfig talkVia(FakeTalk talk) =>
         TalkConfig(go2rtcUrl: 'http://hub:1984', post: talk.post);
 
-    testWidgets('the doorbell Popup grows the button and its caption', (
-      tester,
-    ) async {
+    testWidgets('the doorbell Popup grows the button, and the line under it '
+        'stays empty until there is something to report', (tester) async {
       final go2rtc = FakeGo2rtc();
       await openPopup(
         tester,
@@ -1184,10 +1184,12 @@ void main() {
       );
 
       expect(find.byKey(const ValueKey('push-to-talk')), findsOneWidget);
-      expect(
-        find.text('Hold to speak — you won\'t hear the door back yet'),
-        findsOneWidget,
-      );
+      // The resting hint went with the 2026-08-14 redesign (issue #2): a mic
+      // docked under a live picture says "hold this to speak" without help,
+      // and at rest there is nothing yet to be honest or dishonest about.
+      // Every phase that reports a *fault* or a live state still speaks —
+      // three tests below this one, and the `docked microphone` group.
+      expect(find.textContaining('Hold to speak'), findsNothing);
     });
 
     testWidgets(
@@ -1585,14 +1587,20 @@ void main() {
     );
 
     testWidgets(
-      'Close stays reachable even at a window short enough to make the '
+      'the way out stays reachable even at a window short enough to make the '
       'card scroll — it never lives inside the region that scrolls',
       (tester) async {
         // The default test surface (800×600) is exactly the case that first
-        // exposed this as a real bug: with Close inside the scrollable
-        // middle, a tap at the on-screen "Close" position missed — the
+        // exposed this as a real bug: with the old `Close` text button inside
+        // the scrollable middle, a tap at its on-screen position missed — the
         // Dialog stayed up, silently, on any window shorter than the real
         // Panel's 1280×800.
+        //
+        // Kept after the redesign moved the control into the header, where it
+        // cannot scroll by construction. That makes this test cheap to pass
+        // and expensive to lose: it is what would catch somebody putting the
+        // way out back inside the scroll view, and it is the reason to notice
+        // if the header ever becomes scrollable itself.
         final go2rtc = FakeGo2rtc();
         await openPopup(
           tester,
@@ -1600,11 +1608,242 @@ void main() {
           video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
         );
 
-        await tester.tap(find.text('Close'));
+        await tester.tap(find.byKey(const ValueKey('popup-close')));
         await tester.pumpAndSettle();
 
         expect(find.byType(Dialog), findsNothing);
       },
     );
+  });
+
+  /// The redesign of 2026-08-14, drawn by the owner and settled in issue #2 —
+  /// the microphone docked into a notch carved out of the video's bottom edge,
+  /// and the Close button moved into the header as an X.
+  ///
+  /// These are *geometry* assertions, which this suite otherwise avoids. They
+  /// earn their place because the notch and the button are two separately
+  /// positioned widgets that only read as one shape while their numbers agree:
+  /// nothing about a button drawn 20 px too low would fail a behavioural test,
+  /// or a golden anybody re-bakes to make green.
+  ///
+  /// **Variant D**, from an A/B/C/D throwaway prototype that was never
+  /// committed and is gone — issue #2 holds the comparison table. Against a
+  /// synthetic 1:1 porch, D removed the least picture of the centred options
+  /// while keeping the full-size button; its cost is that it lands on exactly
+  /// the height a Dialog gets on the 1280×800 wall, which is why the two gaps
+  /// around the video are 6 px rather than 12 and 8.
+  group('the docked microphone', () {
+    const doorbell = Device(
+      id: 'doorbell',
+      name: 'Ring Doorbell',
+      kind: DeviceKind.doorbell,
+      connectivity: Connectivity.cloud,
+      position: Offset.zero,
+      streamName: 'ring_doorbell',
+      talkStream: 'ring',
+    );
+
+    const thermostat = Device(
+      id: 'thermostat',
+      name: 'Hallway Thermostat',
+      kind: DeviceKind.thermostat,
+      connectivity: Connectivity.local,
+      position: Offset.zero,
+    );
+
+    /// The wall's own size. Geometry read at the 800×600 default would be
+    /// geometry read through the scroll view the short-window fallback puts
+    /// in the way.
+    void onTheWall(WidgetTester tester) {
+      tester.view
+        ..physicalSize = const Size(1280, 800)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+    }
+
+    Rect videoRect(WidgetTester tester) =>
+        tester.getRect(find.byKey(const ValueKey('popup-video')));
+
+    testWidgets('the button docks two-thirds out of the video\'s bottom edge, '
+        'centred — a third of it over the picture, the rest below it',
+        (tester) async {
+      onTheWall(tester);
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: const TalkConfig(go2rtcUrl: 'http://hub:1984'),
+      );
+
+      final video = videoRect(tester);
+      final button = tester.getRect(find.byKey(const ValueKey('push-to-talk')));
+
+      expect(button.width, kTalkButtonDiameter);
+      expect(button.height, kTalkButtonDiameter);
+      expect(button.center.dx, closeTo(video.center.dx, 0.5),
+          reason: 'centred on the picture, as drawn');
+      expect(button.center.dy, closeTo(video.bottom + kTalkButtonDrop, 0.5),
+          reason: 'variant D: the centre sits below the edge, not on it');
+      // The whole of D in one number: 32 of the button's 96 overlap.
+      expect(video.bottom - button.top, closeTo(32, 0.5));
+    });
+
+    testWidgets('a doorbell\'s video box is 4:3 — its frame is natively 1:1 — '
+        'and every other camera keeps 16:9', (tester) async {
+      onTheWall(tester);
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+      final door = videoRect(tester);
+      expect(door.width / door.height, closeTo(4 / 3, 0.01));
+
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
+      await tester.pumpAndSettle();
+
+      await openPopup(
+        tester,
+        device: camera,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      );
+      final porch = videoRect(tester);
+      expect(porch.width / porch.height, closeTo(16 / 9, 0.01));
+    });
+
+    testWidgets('the still\'s caption band sits at the top of the video — the '
+        'bottom edge is where the notch is', (tester) async {
+      onTheWall(tester);
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        device: const Device(
+          id: 'doorbell',
+          name: 'Ring Doorbell',
+          kind: DeviceKind.doorbell,
+          connectivity: Connectivity.cloud,
+          position: Offset.zero,
+          streamName: 'ring_doorbell',
+          snapshotEntityId: 'camera.front_door_snapshot',
+        ),
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        snapshots: SnapshotConfig(
+          haUrl: 'http://hub:8123',
+          token: 'shhh',
+          fetch: (url, {required token}) async =>
+              SnapshotResult.ok(kOnePixelImage),
+        ),
+      );
+
+      final video = videoRect(tester);
+      final band = tester.getRect(find.textContaining('Still'));
+      expect(band.center.dy, lessThan(video.center.dy),
+          reason: 'above the middle of the picture, not below it');
+      expect(band.top - video.top, lessThan(24),
+          reason: 'flush against the top edge');
+    });
+
+    testWidgets('every Popup closes by an X in the header — one idiom on a '
+        'wall with no keyboard, and no Close button left anywhere',
+        (tester) async {
+      onTheWall(tester);
+      for (final device in [doorbell, camera, thermostat]) {
+        final go2rtc = FakeGo2rtc();
+        await openPopup(
+          tester,
+          device: device,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        );
+
+        expect(find.byKey(const ValueKey('popup-close')), findsOneWidget,
+            reason: '${device.kind} has no way out');
+        expect(find.text('Close'), findsNothing,
+            reason: 'the old text button survived somewhere');
+
+        // In the header, above the body — never a row that can scroll away.
+        final close = tester.getRect(find.byKey(const ValueKey('popup-close')));
+        final name = tester.getRect(find.text(device.name));
+        expect(close.center.dy, closeTo(name.center.dy, 40));
+        expect(close.center.dx, greaterThan(name.center.dx));
+
+        await tester.tap(find.byKey(const ValueKey('popup-close')));
+        await tester.pumpAndSettle();
+        expect(find.byType(Dialog), findsNothing);
+      }
+    });
+
+    testWidgets('the card is the same height at rest and with the microphone '
+        'open — a card that resizes under a thumb moves the target',
+        (tester) async {
+      onTheWall(tester);
+      final go2rtc = FakeGo2rtc();
+      final talk = FakeTalk();
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: TalkConfig(go2rtcUrl: 'http://hub:1984', post: talk.post),
+      );
+
+      final resting =
+          tester.getRect(find.byKey(const ValueKey('popup-card'))).height;
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.getRect(find.byKey(const ValueKey('popup-card'))).height,
+          resting);
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('at rest a working door says nothing — the caption speaks only '
+        'when it has something to report', (tester) async {
+      onTheWall(tester);
+      final go2rtc = FakeGo2rtc();
+      final talk = FakeTalk();
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: TalkConfig(go2rtcUrl: 'http://hub:1984', post: talk.post),
+      );
+
+      // The resting hint is gone: the button is legibly a microphone, and the
+      // slot below it is reserved rather than filled.
+      expect(find.textContaining('Hold to speak'), findsNothing);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+      );
+      await tester.pump();
+      await tester.pump();
+      // But every phase that reports something still does. ADR-0007 is
+      // untouched by the redesign: what is not happening may not look like
+      // it is.
+      expect(find.text('Microphone open — speak now'), findsOneWidget);
+      await gesture.up();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a door nobody wired talkback to still says so at rest — that '
+        'is a fault, not a hint', (tester) async {
+      onTheWall(tester);
+      final go2rtc = FakeGo2rtc();
+      await openPopup(
+        tester,
+        device: doorbell,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: const TalkConfig(),
+      );
+
+      expect(find.text('Two-way audio isn\'t configured for this door'),
+          findsOneWidget);
+    });
   });
 }

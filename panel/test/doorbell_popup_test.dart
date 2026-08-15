@@ -200,7 +200,7 @@ void main() {
     hub.pushState(const StatusState('doorbell', 'on'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     // ~150 ms of exit animation follow the pop, and for all of it the old
     // Popup is still mounted with its session open. The host used to clear
     // its bookkeeping from `showDialog`'s future, which completes at the
@@ -248,7 +248,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('pin-doorbell')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Close'));
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
     // Inside the ~150 ms exit animation, where the old Popup is still mounted
     // with its session open and a second one would be a second consumer.
     await tester.pump(const Duration(milliseconds: 20));

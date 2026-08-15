@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
@@ -102,6 +103,49 @@ const kDevicePopupIdleReturn = Duration(minutes: 5);
 /// How long "Still watching?" is on screen before an unanswered prompt
 /// returns the Popup. **Part of [kDevicePopupIdleReturn], not added to it.**
 const kDevicePopupIdleWarning = Duration(seconds: 30);
+
+/// The push-to-talk button's diameter, and the two numbers that decide where
+/// it sits in the doorbell's video — the whole of the 2026-08-14 redesign,
+/// drawn by the owner and settled in issue #2, which holds the sketch and the
+/// A/B/C/D comparison the numbers came out of. Cited by issue rather than by
+/// path: the sketch was a photo in the working tree and was never committed.
+///
+/// Public because they are a *contract between two widgets*, not a style: the
+/// notch is carved by [_NotchClipper] out of the video box, the button is laid
+/// out by [_DockedTalk] on top of it, and the two only read as one shape while
+/// their numbers agree. A test that could not name them could only assert the
+/// look through a golden, which anybody can re-bake to make green.
+const kTalkButtonDiameter = 96.0;
+
+/// The gap between the carved arc and the button's outer ring, so the card's
+/// surface colour shows as an even collar around it.
+const kTalkButtonMoat = 8.0;
+
+/// How far **below** the video's bottom edge the button's centre sits.
+///
+/// Zero would be the sketch read literally — half the button over the picture.
+/// This is variant D of the A/B/C/D prototype behind issue #2: 16 px lower, so
+/// only a third of the button overlaps. A doorbell's frame is 1:1 and the
+/// bottom of it is the ground at the door, which is where a parcel sits — the
+/// one thing on that step somebody opens this Popup to look for. D removed the
+/// least of it while keeping the full-size button and the sketch's centred
+/// composition.
+///
+/// Its cost is height: D lands on exactly the 752 px a Dialog gets on the
+/// 1280×800 wall, which is why [_kPopupGap] is 6 rather than the 12 and 8 the
+/// gaps around the video used to be.
+const kTalkButtonDrop = 16.0;
+
+/// How far the button hangs below the video box, and therefore how much taller
+/// than its picture the doorbell's video area is.
+const _kTalkOverhang = kTalkButtonDiameter / 2 + kTalkButtonDrop;
+
+/// The reserved line under the video — see [_DevicePopupBodyState._captionSlot].
+const _kCaptionSlot = 22.0;
+
+/// The gaps above and below the doorbell's video. Six, not twelve — see
+/// [kTalkButtonDrop].
+const _kPopupGap = 6.0;
 
 /// What asking an already-showing Popup to stay up actually did.
 enum DevicePopupExtension {
@@ -831,7 +875,14 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   Widget _body() {
     final presentation = widget.presentation;
     if (presentation.isVideo) {
-      return _LiveVideoBox(session: _session, still: _still);
+      return _LiveVideoBox(
+        session: _session,
+        still: _still,
+        // A doorbell is the only kind with a microphone to dock, so it is the
+        // only kind whose box is carved for one — and the only one whose 4:3
+        // is right, its frame being natively 1:1.
+        docked: _isDoorbell,
+      );
     }
     final controller = widget.controller;
     if (controller != null &&
@@ -845,6 +896,35 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       presentation.statusText,
       style: const TextStyle(fontSize: 15, color: PanelTheme.ink),
     );
+  }
+
+  /// The one line under the video, and the fixed space it lives in.
+  ///
+  /// **Reserved even when empty**, and that is the point: the talk caption
+  /// comes and goes with the phase (see [_TalkCaption]) and the idle prompt
+  /// appears 30 s before the Popup would close itself, so a slot that hugged
+  /// its contents would resize the card under a thumb — growing on the frame
+  /// the microphone opens, shrinking on release, moving the button somebody is
+  /// still pressing. 22 px of white space is the cheaper of the two.
+  ///
+  /// One slot for both, because only one of them ever has anything to say at
+  /// once: the idle prompt belongs to a Popup a person opened and left alone,
+  /// and nobody who is holding the microphone down is idle. The prompt wins if
+  /// they ever do collide — it is the one with a consequence attached.
+  ///
+  /// Present on any Popup that opened a stream rather than on the doorbell
+  /// alone: a plain camera has no caption but it does get the idle prompt, and
+  /// its card must not jump either.
+  Widget _captionSlot() {
+    final Widget child;
+    if (_promptingIdle) {
+      child = const _IdlePrompt();
+    } else if (_isDoorbell && _TalkCaption.wordingFor(_talk) != null) {
+      child = _TalkCaption(_talk);
+    } else {
+      child = const SizedBox.shrink();
+    }
+    return SizedBox(height: _kCaptionSlot, child: Center(child: child));
   }
 
   @override
@@ -904,72 +984,51 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
             ],
           ),
         ),
+        _CloseButton(onPressed: () => Navigator.of(context).pop()),
       ],
     );
-    // Everything that can grow tall: the video and, on a doorbell, its
-    // button. Kept apart from [header] and the Close row below so those two
-    // can be wrapped in [Flexible] + `SingleChildScrollView` *without*
-    // taking the Close button down with them — see the doorbell branch
-    // below for why that matters.
-    final middle = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _body(),
-        if (isDoorbell) ...[
-          const SizedBox(height: 6),
-          _PushToTalkButton(
+    // The one thing that can grow tall: the picture, plus — on a doorbell —
+    // the button docked into its bottom edge. The caption slot is deliberately
+    // *not* in here; see [content].
+    final Widget middle = isDoorbell
+        ? _DockedTalk(
+            video: _body(),
             phase: _talk,
             pulse: _pulse,
             onStart: _startTalking,
             onStop: _stopTalking,
-          ),
-          const SizedBox(height: 6),
-          _TalkCaption(_talk),
-        ],
-      ],
-    );
-    final closeRow = Align(
-      alignment: Alignment.centerRight,
-      child: TextButton(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Close'),
-      ),
-    );
+          )
+        : _body();
     final content = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         header,
-        SizedBox(height: isDoorbell ? 12 : 18),
-        // Doorbell only: the bigger card plus its button is tall enough to
-        // outgrow a short window (a resized dev browser, a widget test's
-        // default surface) — and, measured, tall enough to graze even the
-        // Panel's real 1280×800 by a few px once the header, the two gaps
-        // around the button and the Close row are all accounted for. Every
-        // px trimmed from those gaps above and in [middle] pays down that
-        // margin directly. `Flexible` + a scroll view is what makes the
-        // remainder harmless: the last few px of the caption scroll under
-        // the fold on the tightest windows rather than throwing a render
-        // overflow. Stops at the middle on purpose — Close sits *outside*
-        // the scrollable region, always at a fixed spot, never the thing
-        // that scrolls out of reach behind content nobody asked to see more
-        // of. Every other kind is unchanged — its card has never come close
-        // to overflowing, so it keeps hugging its content exactly as before.
+        SizedBox(height: isDoorbell ? _kPopupGap : 18),
+        // Doorbell only: the bigger card is tall enough to outgrow a short
+        // window (a resized dev browser, a widget test's default surface),
+        // and — measured — it now lands within 8 px of the Panel's real
+        // 1280×800 once the header, the two gaps around the video, the
+        // button's overhang and the caption slot are all accounted for. That
+        // margin is what [kTalkButtonDrop] spent and [_kPopupGap] bought
+        // back. `Flexible` + a scroll view makes the remainder harmless: the
+        // last few px of the picture scroll under the fold on the tightest
+        // windows rather than throwing a render overflow. Every other kind is
+        // unchanged — its card has never come close to overflowing, so it
+        // keeps hugging its content exactly as before.
         if (isDoorbell)
           Flexible(child: SingleChildScrollView(child: middle))
         else
           middle,
-        SizedBox(height: isDoorbell ? 8 : 12),
-        // Outside the scrollable region, with Close, and for the same reason:
-        // a prompt that has scrolled under the fold is a prompt nobody can
-        // answer, and the answer here is the difference between the view
-        // staying and going.
-        if (_promptingIdle) ...[
-          const _IdlePrompt(),
-          const SizedBox(height: 8),
+        // Outside the scrollable region on purpose, and it is the last thing
+        // left that needs to be: a prompt scrolled under the fold is a prompt
+        // nobody can answer, and the answer is the difference between the
+        // view staying and going. Close no longer needs the same protection —
+        // it lives in [header] now, which never scrolls at all.
+        if (presentation.isVideo) ...[
+          const SizedBox(height: _kPopupGap),
+          _captionSlot(),
         ],
-        closeRow,
       ],
     );
     return Dialog(
@@ -1001,6 +1060,146 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       ),
     );
   }
+}
+
+/// The way out of every Popup: a small raised puck with an X, top-right of
+/// the header row.
+///
+/// One idiom for every kind — doorbell, camera, thermostat, washer — because
+/// the Panel has no keyboard and no Escape, so "how do I get out of this" must
+/// have exactly one answer wherever somebody is standing. It replaced a
+/// `Close` text button in a row of its own at the bottom of the card, which
+/// cost a row of height and, on a short window, had to be deliberately kept
+/// outside the scrollable region to stay reachable at all. The header never
+/// scrolls, so that whole class of bug is gone rather than guarded against.
+///
+/// A [GestureDetector] rather than an [IconButton]: the card is wrapped in a
+/// [Listener] that re-arms the idle bound on any touch, and listeners never
+/// enter the gesture arena — so this cannot lose a press to it, exactly as
+/// [_PushToTalkButton] does not. 48 px of target around a 36 px puck, because
+/// the thing pressing it is a thumb.
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Close',
+      button: true,
+      child: GestureDetector(
+        key: const ValueKey('popup-close'),
+        onTap: onPressed,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          height: 48,
+          child: Center(
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: PanelTheme.surfaceRaised,
+                shape: BoxShape.circle,
+                boxShadow: PanelTheme.raised(8),
+              ),
+              child: const Icon(Icons.close, color: PanelTheme.ink, size: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The doorbell's picture with its microphone docked into the notch cut out
+/// of the bottom edge.
+///
+/// Two separately positioned widgets that have to read as one shape: the hole
+/// is carved by [_NotchClipper] inside [_VideoFrame], the button is laid out
+/// here, and neither knows about the other except through [kTalkButtonDrop]
+/// and [kTalkButtonMoat]. `device_popup_test.dart`'s `the docked microphone`
+/// group is what keeps them agreeing.
+///
+/// The [Stack] takes its height from the padded video, so the picture's own
+/// aspect ratio still decides how tall this is; [_kTalkOverhang] is the strip
+/// below it the button hangs into. `Positioned.fill` + [Align] rather than a
+/// [Positioned] with a bottom offset, because a Positioned with no height
+/// gives its child unbounded vertical constraints — which a [Center] answers
+/// by throwing.
+class _DockedTalk extends StatelessWidget {
+  const _DockedTalk({
+    required this.video,
+    required this.phase,
+    required this.pulse,
+    required this.onStart,
+    required this.onStop,
+  });
+
+  final Widget video;
+  final TalkPhase phase;
+  final AnimationController pulse;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      // The pulse ring overflows the button's own box while the microphone is
+      // open, and it is allowed to: see [_PushToTalkButton].
+      clipBehavior: Clip.none,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: _kTalkOverhang),
+          child: video,
+        ),
+        Positioned.fill(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: _PushToTalkButton(
+              phase: phase,
+              pulse: pulse,
+              onStart: onStart,
+              onStop: onStop,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The bite taken out of the video's bottom edge for the microphone.
+///
+/// The circle is centred [kTalkButtonDrop] *below* the box, so what it removes
+/// is a shallow arc rather than a half-moon — variant D of issue #2's
+/// comparison. Its radius clears the button by [kTalkButtonMoat] on every
+/// side, which is what makes the card's surface colour read as a collar around
+/// the button instead of the picture running up against its ring.
+///
+/// Carved on every doorbell Popup, including the ones showing the unconfigured
+/// or failed placeholder: the button is drawn there too (see [_startTalking]),
+/// and a notch that came and went with go2rtc's health would make the card's
+/// shape a status display.
+class _NotchClipper extends CustomClipper<Path> {
+  const _NotchClipper();
+
+  @override
+  Path getClip(Size size) {
+    final frame = Path()
+      ..addRRect(RRect.fromRectAndRadius(
+          Offset.zero & size, const Radius.circular(16)));
+    final bite = Path()
+      ..addOval(Rect.fromCircle(
+        center: Offset(size.width / 2, size.height + kTalkButtonDrop),
+        radius: kTalkButtonDiameter / 2 + kTalkButtonMoat,
+      ));
+    return Path.combine(ui.PathOperation.difference, frame, bite);
+  }
+
+  @override
+  bool shouldReclip(_NotchClipper oldClipper) => false;
 }
 
 /// "Still watching?" — the softening on [kDevicePopupIdleReturn].
@@ -1036,9 +1235,17 @@ class _IdlePrompt extends StatelessWidget {
 /// on purpose — in the devcontainer only, the canonical golden host
 /// (ADR-0009) — not as a side effect of a video change.
 class _LiveVideoBox extends StatelessWidget {
-  const _LiveVideoBox({required this.session, this.still});
+  const _LiveVideoBox({
+    required this.session,
+    required this.docked,
+    this.still,
+  });
 
   final LiveVideoSession? session;
+
+  /// Whether this box is a doorbell's: 4:3 with a notch in the bottom edge,
+  /// rather than a plain camera's 16:9 rounded rectangle.
+  final bool docked;
 
   /// The Device's last still, or null when it has no `snapshot:` binding, no
   /// Hub address, or the fetch has not landed yet.
@@ -1048,11 +1255,13 @@ class _LiveVideoBox extends StatelessWidget {
   Widget build(BuildContext context) {
     final session = this.session;
     if (session == null) {
-      return _VideoFrame(child: _body(LiveVideoPhase.unconfigured, null));
+      return _VideoFrame(
+          docked: docked, child: _body(LiveVideoPhase.unconfigured, null));
     }
     return ValueListenableBuilder<LiveVideoPhase>(
       valueListenable: session.phase,
-      builder: (context, phase, _) => _VideoFrame(child: _body(phase, session)),
+      builder: (context, phase, _) =>
+          _VideoFrame(docked: docked, child: _body(phase, session)),
     );
   }
 
@@ -1096,7 +1305,7 @@ class _LiveVideoBox extends StatelessWidget {
       children: [
         Image.memory(still, fit: BoxFit.contain, gaplessPlayback: true),
         Align(
-          alignment: Alignment.bottomCenter,
+          alignment: Alignment.topCenter,
           child: _StillCaption(text: text),
         ),
       ],
@@ -1106,10 +1315,18 @@ class _LiveVideoBox extends StatelessWidget {
 
 /// The band that says a picture is a still and why there is no live one.
 ///
-/// Bottom edge and full width, over a scrim: the Popup's box letterboxes a
-/// 1:1 doorbell frame inside 16:9, so a floating badge would sometimes land on
-/// the picture and sometimes on the black, and the one thing this may not do
-/// is become hard to read over the wrong porch.
+/// Full width over a scrim: the Popup's box pillarboxes a 1:1 doorbell frame,
+/// so a floating badge would sometimes land on the picture and sometimes on
+/// the black, and the one thing this may not do is become hard to read over
+/// the wrong porch.
+///
+/// **Top edge, not bottom** — moved there by the 2026-08-14 redesign (issue
+/// #2), because the bottom edge is where the notch and the microphone are now.
+/// A band the notch bit a hole through would be the least acceptable casualty
+/// of the redesign: ADR-0007's rule is that a reading which is not live may
+/// not be dressed as one, and a still of a porch is indistinguishable from a
+/// live view of the same porch. This sentence is the only thing telling them
+/// apart, so it is the one thing on the picture that may not be obscured.
 class _StillCaption extends StatelessWidget {
   const _StillCaption({required this.text});
 
@@ -1139,21 +1356,34 @@ class _StillCaption extends StatelessWidget {
   }
 }
 
-/// The 16:9 rounded box every video body renders inside. Frozen geometry —
-/// see [_LiveVideoBox].
+/// The rounded box every video body renders inside.
+///
+/// Two shapes. A plain camera keeps the 16:9 rectangle it has always had. A
+/// doorbell gets **4:3 with a notch** — 4:3 because a Ring frame is natively
+/// 1:1, so 16:9 spent a third of the box on black pillars, and the notch
+/// because that is where the microphone docks (issue #2).
+///
+/// Keyed, because the redesign's invariants are relations *between* this box
+/// and the button ([_DockedTalk]) and between this box and the still's caption
+/// band ([_StillCaption]) — none of which can be asserted without a handle on
+/// the picture's own rect.
 class _VideoFrame extends StatelessWidget {
-  const _VideoFrame({required this.child});
+  const _VideoFrame({required this.child, required this.docked});
 
   final Widget child;
+  final bool docked;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: ColoredBox(color: const Color(0xFF2A2F3E), child: child),
-      ),
+    final box = AspectRatio(
+      aspectRatio: docked ? 4 / 3 : 16 / 9,
+      child: ColoredBox(color: const Color(0xFF2A2F3E), child: child),
+    );
+    return KeyedSubtree(
+      key: const ValueKey('popup-video'),
+      child: docked
+          ? ClipPath(clipper: const _NotchClipper(), child: box)
+          : ClipRRect(borderRadius: BorderRadius.circular(16), child: box),
     );
   }
 }
@@ -1187,21 +1417,31 @@ class _VideoNotice extends StatelessWidget {
 }
 
 /// The doorbell Popup's push-to-talk control: a call-style circular button
-/// with a pulsing ring while held.
+/// with a pulsing ring while held, docked into the video's bottom edge by
+/// [_DockedTalk].
 ///
 /// The pick from an A/B/C/D throwaway prototype comparison. The prototype
 /// itself was never committed and was deleted once D won, so it left no
-/// trace to point to — what is here is the whole record of the comparison
-/// now. A's bigger card, kept, with B's circular mic swapped in for A's
-/// full-width pill. [pulse] is owned by the caller, not this widget: it
-/// lives beside [phase] in [_DevicePopupBodyState] so a rebuild here (the
-/// ring's own `AnimatedBuilder`) never restarts or re-creates the ticker
-/// driving it.
+/// trace to point to — issue #2 holds the comparison table, and what is here
+/// plus [kTalkButtonDrop] is the rest of the record. A's bigger card, kept,
+/// with B's circular mic swapped in for A's full-width pill. [pulse] is owned
+/// by the caller, not this widget: it lives beside [phase] in
+/// [_DevicePopupBodyState] so a rebuild here (the ring's own
+/// `AnimatedBuilder`) never restarts or re-creates the ticker driving it.
 ///
 /// Three looks, not two, and the middle one is the point: pressed-but-not-yet
 /// -open wears the mic icon (the press was registered) in the resting colour
 /// (nothing is live yet). Only [TalkPhase.open] — go2rtc having answered —
 /// turns the button red and starts the ring.
+///
+/// The box is exactly [kTalkButtonDiameter], and the ring is deliberately
+/// allowed to overflow it (`Clip.none`, here and in [_DockedTalk]). Docked,
+/// that means ~14 px of translucent red lands on the picture at full
+/// expansion. Accepted, and looked at: clipping the ring to the card would
+/// give it a flat top, which reads as a rendering fault rather than as a
+/// halo. Sizing the box to the ring instead would make the button's rect —
+/// the thing the geometry tests and the touch target are both about — a
+/// number about an animation.
 class _PushToTalkButton extends StatelessWidget {
   const _PushToTalkButton({
     required this.phase,
@@ -1222,49 +1462,48 @@ class _PushToTalkButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final live = phase == TalkPhase.open;
-    return Center(
-      child: GestureDetector(
-        key: const ValueKey('push-to-talk'),
-        onTapDown: (_) => onStart(),
-        onTapUp: (_) => onStop(),
-        onTapCancel: onStop,
-        child: SizedBox(
-          width: 140,
-          height: 140,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              if (live)
-                AnimatedBuilder(
-                  animation: pulse,
-                  builder: (context, _) => Container(
-                    width: 96 + 44 * pulse.value,
-                    height: 96 + 44 * pulse.value,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: const Color(
-                        0xFFE05252,
-                      ).withValues(alpha: .35 * (1 - pulse.value)),
-                    ),
+    return GestureDetector(
+      key: const ValueKey('push-to-talk'),
+      onTapDown: (_) => onStart(),
+      onTapUp: (_) => onStop(),
+      onTapCancel: onStop,
+      child: SizedBox(
+        width: kTalkButtonDiameter,
+        height: kTalkButtonDiameter,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            if (live)
+              AnimatedBuilder(
+                animation: pulse,
+                builder: (context, _) => Container(
+                  width: kTalkButtonDiameter + 44 * pulse.value,
+                  height: kTalkButtonDiameter + 44 * pulse.value,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(
+                      0xFFE05252,
+                    ).withValues(alpha: .35 * (1 - pulse.value)),
                   ),
                 ),
-              Container(
-                width: 96,
-                height: 96,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: live ? const Color(0xFFE05252) : PanelTheme.accent,
-                  border: Border.all(color: PanelTheme.surfaceRaised, width: 3),
-                  boxShadow: PanelTheme.raised(10),
-                ),
-                child: Icon(
-                  _held ? Icons.mic : Icons.mic_none,
-                  color: Colors.white,
-                  size: 40,
-                ),
               ),
-            ],
-          ),
+            Container(
+              width: kTalkButtonDiameter,
+              height: kTalkButtonDiameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: live ? const Color(0xFFE05252) : PanelTheme.accent,
+                border: Border.all(color: PanelTheme.surfaceRaised, width: 3),
+                boxShadow: PanelTheme.raised(10),
+              ),
+              child: Icon(
+                _held ? Icons.mic : Icons.mic_none,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1290,6 +1529,20 @@ class _PushToTalkButton extends StatelessWidget {
 ///     construction, and whichever process ends up playing inbound audio is
 ///     still an open owner decision. Half a duplex working is not two-way
 ///     audio, and the wall should not imply it is.
+///
+/// **[TalkPhase.idle] has no sentence any more** — the one wording the
+/// 2026-08-14 redesign dropped (issue #2). `Hold to speak — you won't hear the
+/// door back yet` was a *hint*, and a mic icon docked under a live picture
+/// already says "hold this to speak" without a caption's help; the half it
+/// really carried, that the door cannot be heard back, is not a thing this
+/// Popup can honestly announce at rest either, since nothing has been
+/// attempted yet.
+///
+/// The other four stay, and the rule they answer to is untouched: every one of
+/// them reports a **fault or a live state** — a missing `GO2RTC_URL`, a
+/// missing `talk:` binding, a microphone opening, a microphone open, a go2rtc
+/// that refused. ADR-0007 is about not dressing up what is not happening, and
+/// removing a hint claims nothing. Removing any of these four would.
 class _TalkCaption extends StatelessWidget {
   const _TalkCaption(this.phase);
 
@@ -1297,11 +1550,15 @@ class _TalkCaption extends StatelessWidget {
 
   static const _wording = {
     TalkPhase.unconfigured: 'Two-way audio isn\'t configured for this door',
-    TalkPhase.idle: 'Hold to speak — you won\'t hear the door back yet',
     TalkPhase.opening: 'Opening the microphone…',
     TalkPhase.open: 'Microphone open — speak now',
     TalkPhase.failed: 'Couldn\'t open the microphone — nothing was sent',
   };
+
+  /// What this phase has to say, or null when it has nothing — which is only
+  /// [TalkPhase.idle]. The caption slot asks before it builds one, so that an
+  /// empty phase leaves reserved space rather than an empty [Text].
+  static String? wordingFor(TalkPhase phase) => _wording[phase];
 
   @override
   Widget build(BuildContext context) {
