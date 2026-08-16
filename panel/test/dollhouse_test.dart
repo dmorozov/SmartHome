@@ -2,12 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/data/hub_client.dart';
 import 'package:panel/domain/device_state.dart';
+import 'package:panel/ui/cameras/cameras_view.dart';
+import 'package:panel/ui/dollhouse/dollhouse_view.dart';
+import 'package:panel/ui/edge_tab.dart';
 import 'package:panel/ui/video/live_video.dart';
 
 import 'dollhouse_geometry.dart';
 import 'fixtures.dart';
 import 'support/fake_go2rtc.dart';
 import 'test_house.dart';
+
+/// A Device glyph **on the Dollhouse**, which is not the same question as
+/// "anywhere on the Panel": the doorbell's edge tab deliberately wears the
+/// same icon as its pin (`edge_tab.dart` — so the tab and the pin cannot come
+/// to disagree about what a doorbell looks like), and a bare `find.byIcon`
+/// therefore counts a pin that is not there and a tab that always is.
+///
+/// The tests below are about **which Floor is expanded**, so the Dollhouse is
+/// the subtree they mean.
+Finder pinIcon(IconData icon) =>
+    find.descendant(of: find.byType(DollhouseView), matching: find.byIcon(icon));
 
 /// The Dollhouse as the wall shows it. Every scene the Hub has a hand in is
 /// staged through FakeHub's driving surface — the same adapter dev builds
@@ -19,9 +33,9 @@ void main() {
 
     expect(find.text('Demo House'), findsOneWidget);
     // Ground-floor pins are live (the doorbell lives in the hall)…
-    expect(find.byIcon(Icons.doorbell), findsOneWidget);
+    expect(pinIcon(Icons.doorbell), findsOneWidget);
     // …while collapsed upstairs shows no pins (litter robot: landing).
-    expect(find.byIcon(Icons.pets), findsNothing);
+    expect(pinIcon(Icons.pets), findsNothing);
   });
 
   testWidgets('tapping a collapsed floor expands it', (tester) async {
@@ -34,8 +48,63 @@ void main() {
         floorId: 'upstairs'));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.pets), findsOneWidget);
-    expect(find.byIcon(Icons.doorbell), findsNothing);
+    expect(pinIcon(Icons.pets), findsOneWidget);
+    expect(pinIcon(Icons.doorbell), findsNothing);
+  });
+
+  /// The handles on the Panel's right edge (owner-restacked 2026-08-15): the
+  /// doorbell's Popup above, the Cameras view below, both flush to the glass.
+  group('the edge tabs', () {
+    testWidgets('both ride the screen edge, starting below the title — no '
+        'gutter, because a tab inside the gutter is a button', (tester) async {
+      tester.view
+        ..physicalSize = const Size(1280, 800)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(panelApp(controller));
+      await tester.pumpAndSettle();
+
+      final bell = tester.getRect(find.byType(DoorbellTab));
+      final cameras = tester.getRect(find.byType(CamerasTab));
+
+      // Flush: the 24 px gutter every other thing on the Panel sits inside
+      // stops at these two.
+      expect(bell.right, 1280);
+      expect(cameras.right, 1280);
+      expect(bell.top, kEdgeTabsTop);
+      // The doorbell above the cameras, one gap apart, and the same width —
+      // two handles have to read as a set.
+      expect(cameras.top, kEdgeTabsTop + bell.height + kEdgeTabGap);
+      expect(cameras.width, bell.width);
+    });
+
+    testWidgets('tapping the doorbell tab opens the same Popup a ding raises '
+        '— reached without hunting for the pin', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(panelApp(
+        controller,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsNothing);
+      await tester.tap(find.byType(DoorbellTab));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsOneWidget);
+      expect(find.text('Ring Doorbell'), findsOneWidget);
+      // A person tapped it, so it opened the doorbell's own stream and gets
+      // no countdown (D14) — the tab is the pin's shortcut, not a new kind
+      // of Popup.
+      expect(go2rtc.only.name, 'ring_doorbell');
+      expect(find.byKey(const ValueKey('push-to-talk')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
+      await tester.pumpAndSettle();
+    });
   });
 
   testWidgets('tapping a light pin toggles it through the hub',

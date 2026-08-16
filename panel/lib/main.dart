@@ -8,10 +8,12 @@ import 'config/runtime_env.dart';
 import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
 import 'diagnostics/url_redaction.dart';
-import 'domain/device_vocabulary.dart';
+import 'domain/house.dart';
 import 'ui/cameras/cameras_view.dart';
+import 'ui/device_popup.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
 import 'ui/doorbell_popup_host.dart';
+import 'ui/edge_tab.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
 import 'ui/audio/talk.dart';
@@ -47,8 +49,8 @@ Future<void> main() async {
     'mode': kReleaseMode
         ? 'release'
         : kProfileMode
-            ? 'profile'
-            : 'debug',
+        ? 'profile'
+        : 'debug',
     'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
     'log': Log.level.name,
     // Which origin set it — the same argument as `hub.config`: with two
@@ -70,8 +72,10 @@ Future<void> main() async {
   // genuinely surprising consequence of environment-first order. Warn, don't
   // fail: the environment is still the answer we want, just not silently.
   if (config.overridden.isNotEmpty) {
-    Log.warn('hub', 'config_override',
-        {'settings': config.overridden.join(','), 'winner': 'environment'});
+    Log.warn('hub', 'config_override', {
+      'settings': config.overridden.join(','),
+      'winner': 'environment',
+    });
   }
   // Where go2rtc is, host and port in the clear, because "pointed at the
   // wrong go2rtc" is otherwise invisible until somebody taps a camera.
@@ -112,22 +116,23 @@ Future<void> main() async {
   // ways" and brings up two things, the House and the Hub adapter. go2rtc is
   // neither, and a field there would invite a fourth boot failure for the
   // one setting that must never stop the wall coming up.
-  runApp(PanelApp(
-    controller: boot.controller,
-    hubLabel: boot.hubLabel,
-    video:
-        VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
-    // The Hub's own address and token, reused: a camera snapshot is an HA
-    // REST fetch authenticated exactly like the socket. The token travels
-    // in this object to become a header — never a URL part (snapshot.dart).
-    snapshots: SnapshotConfig(haUrl: config.url, token: config.token),
-    // The same go2rtc, reached over the same address, for the other half of
-    // the doorbell: `video` plays what the camera sees, `talk` pushes a
-    // microphone back into it. Two configs and not one because every camera
-    // Popup in the house carries the first and only a doorbell can use the
-    // second (ADR-0011; `ui/audio/talk.dart`).
-    talk: TalkConfig(go2rtcUrl: config.go2rtcUrl),
-  ));
+  runApp(
+    PanelApp(
+      controller: boot.controller,
+      hubLabel: boot.hubLabel,
+      video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
+      // The Hub's own address and token, reused: a camera snapshot is an HA
+      // REST fetch authenticated exactly like the socket. The token travels
+      // in this object to become a header — never a URL part (snapshot.dart).
+      snapshots: SnapshotConfig(haUrl: config.url, token: config.token),
+      // The same go2rtc, reached over the same address, for the other half of
+      // the doorbell: `video` plays what the camera sees, `talk` pushes a
+      // microphone back into it. Two configs and not one because every camera
+      // Popup in the house carries the first and only a doorbell can use the
+      // second (ADR-0011; `ui/audio/talk.dart`).
+      talk: TalkConfig(go2rtcUrl: config.go2rtcUrl),
+    ),
+  );
 }
 
 /// What this build was compiled with, or null where the define was omitted —
@@ -142,12 +147,15 @@ Future<void> main() async {
 /// same shape and is optional in every build: a Panel that was never told
 /// where go2rtc is shows every Device it always showed, and says so on one
 /// camera Popup rather than failing to start.
-const String? _buildHubKind =
-    bool.hasEnvironment('HUB') ? String.fromEnvironment('HUB') : null;
-const String? _buildHaUrl =
-    bool.hasEnvironment('HA_URL') ? String.fromEnvironment('HA_URL') : null;
-const String? _buildHaToken =
-    bool.hasEnvironment('HA_TOKEN') ? String.fromEnvironment('HA_TOKEN') : null;
+const String? _buildHubKind = bool.hasEnvironment('HUB')
+    ? String.fromEnvironment('HUB')
+    : null;
+const String? _buildHaUrl = bool.hasEnvironment('HA_URL')
+    ? String.fromEnvironment('HA_URL')
+    : null;
+const String? _buildHaToken = bool.hasEnvironment('HA_TOKEN')
+    ? String.fromEnvironment('HA_TOKEN')
+    : null;
 const String? _buildGo2rtcUrl = bool.hasEnvironment('GO2RTC_URL')
     ? String.fromEnvironment('GO2RTC_URL')
     : null;
@@ -195,6 +203,19 @@ class PanelApp extends StatelessWidget {
       .expand((f) => f.devices)
       .any((d) => specOf(d.kind).video);
 
+  /// The doorbell the edge tab opens, or null in a House that has none —
+  /// which decides that tab's existence for [_hasCameras]'s reason.
+  ///
+  /// The first, in House order, and this house has exactly one. A second
+  /// doorbell would want a tab each, and that is a decision about what the
+  /// edge looks like with three handles on it, not something to guess at now.
+  Device? get _doorbell {
+    for (final device in controller.house.floors.expand((f) => f.devices)) {
+      if (device.kind == DeviceKind.doorbell) return device;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -212,71 +233,102 @@ class PanelApp extends StatelessWidget {
           snapshots: snapshots,
           talk: talk,
           child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            // The edge tabs ride flush against the right of this Stack, which
+            // is why the gutter below is a Padding *inside* it rather than
+            // around it: everything else on the Panel keeps its 24 px, and
+            // the tabs keep the screen edge. Inside the SafeArea, not around
+            // it — the wall has no notch, but a tab under one would be a tab
+            // nobody can press.
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        controller.house.name,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: PanelTheme.ink,
+                      Row(
+                        children: [
+                          Text(
+                            controller.house.name,
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: PanelTheme.ink,
+                            ),
+                          ),
+                          const Spacer(),
+                          ListenableBuilder(
+                            listenable: controller,
+                            builder: (context, _) => _HubBadge(
+                              label: hubLabel,
+                              status: controller.status,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Tap a floor to expand · tap a room to toggle its lights · tap a device to act',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: PanelTheme.inkFaint,
                         ),
                       ),
-                      const Spacer(),
-                      ListenableBuilder(
-                        listenable: controller,
-                        builder: (context, _) => _HubBadge(
-                          label: hubLabel,
-                          status: controller.status,
+                      Expanded(
+                        child: ListenableBuilder(
+                          listenable: controller,
+                          builder: (context, _) => DollhouseView(
+                            controller: controller,
+                            video: video,
+                            snapshots: snapshots,
+                            talk: talk,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Tap a floor to expand · tap a room to toggle its lights · tap a device to act',
-                    style: TextStyle(fontSize: 12, color: PanelTheme.inkFaint),
-                  ),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: ListenableBuilder(
-                            listenable: controller,
-                            builder: (context, _) => DollhouseView(
-                                controller: controller,
-                                video: video,
-                                snapshots: snapshots,
-                                talk: talk),
-                          ),
-                        ),
-                        // The right-edge tab (phase-7 §B2). Outside the
-                        // ListenableBuilder: its existence depends on the
-                        // House, which never changes after boot.
-                        if (_hasCameras)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: Builder(
-                              builder: (context) => CamerasTab(
-                                onTap: () => showCamerasView(
-                                  context,
-                                  controller: controller,
-                                  video: video,
-                                  snapshots: snapshots,
-                                ),
-                              ),
+                ),
+                // The edge tabs (phase-7 §B2, restacked 2026-08-15). Outside the
+                // gutter so they touch the screen edge, and outside the
+                // ListenableBuilder because their *existence* depends on the
+                // House, which never changes after boot — only what they open
+                // ever moves.
+                Positioned(
+                  top: kEdgeTabsTop,
+                  right: 0,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (_doorbell case final doorbell?)
+                        Builder(
+                          builder: (context) => DoorbellTab(
+                            onTap: () => showDevicePopup(
+                              context,
+                              presentation: controller.presentationOf(doorbell),
+                              video: video,
+                              talk: talk,
+                              controller: controller,
+                              snapshots: snapshots,
                             ),
                           ),
-                      ],
-                    ),
+                        ),
+                      if (_doorbell != null && _hasCameras)
+                        const SizedBox(height: kEdgeTabGap),
+                      if (_hasCameras)
+                        Builder(
+                          builder: (context) => CamerasTab(
+                            onTap: () => showCamerasView(
+                              context,
+                              controller: controller,
+                              video: video,
+                              snapshots: snapshots,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

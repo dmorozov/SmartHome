@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../diagnostics/log.dart';
 import '../../domain/house.dart';
+import '../edge_tab.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
 import '../video/live_video.dart';
@@ -35,32 +36,19 @@ const kCamerasSnapshotRefresh = Duration(seconds: 60);
 /// Renders nothing when the House has no video Device — a tab onto an empty
 /// grid is furniture. Sits in `PanelApp`'s Stack rather than inside
 /// `DollhouseView`, which neither plays nor decides anything about video.
+///
+/// Kept as its own name rather than folded into [EdgeTab] at the call site:
+/// "the Cameras tab" is a thing the suite and the plans both talk about, and
+/// `find.byType(CamerasTab)` is how a test says it without asserting which
+/// glyph is on it.
 class CamerasTab extends StatelessWidget {
   const CamerasTab({super.key, required this.onTap});
 
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Cameras',
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 18),
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            borderRadius: const BorderRadius.horizontal(
-                left: Radius.circular(16)),
-            boxShadow: PanelTheme.raised(8),
-          ),
-          child: const Icon(Icons.videocam_outlined,
-              size: 22, color: PanelTheme.inkFaint),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      EdgeTab(icon: Icons.videocam_outlined, label: 'Cameras', onTap: onTap);
 }
 
 /// Slides the Cameras view out over the Dollhouse, leftward, full screen —
@@ -76,18 +64,26 @@ Future<void> showCamerasView(
   required VideoConfig video,
   required SnapshotConfig snapshots,
 }) {
-  return Navigator.of(context).push(PageRouteBuilder<void>(
-    pageBuilder: (_, _, _) => CamerasView(
-        controller: controller, video: video, snapshots: snapshots),
-    transitionsBuilder: (_, animation, _, child) => SlideTransition(
-      position: animation.drive(
-          Tween(begin: const Offset(1, 0), end: Offset.zero)
-              .chain(CurveTween(curve: Curves.easeInOutCubic))),
-      child: child,
+  return Navigator.of(context).push(
+    PageRouteBuilder<void>(
+      pageBuilder: (_, _, _) => CamerasView(
+        controller: controller,
+        video: video,
+        snapshots: snapshots,
+      ),
+      transitionsBuilder: (_, animation, _, child) => SlideTransition(
+        position: animation.drive(
+          Tween(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+        ),
+        child: child,
+      ),
+      transitionDuration: const Duration(milliseconds: 300),
+      reverseTransitionDuration: const Duration(milliseconds: 300),
     ),
-    transitionDuration: const Duration(milliseconds: 300),
-    reverseTransitionDuration: const Duration(milliseconds: 300),
-  ));
+  );
 }
 
 /// The full-screen grid of camera tiles. Every tile is a toggle; the
@@ -141,9 +137,11 @@ class _CamerasViewState extends State<CamerasView> {
     Log.info('cameras', 'opened', {
       'tiles': _devices.length,
       'auto_live': _devices
-          .where((d) =>
-              specOf(d.kind).autoLive &&
-              widget.video.urlFor(d.streamName) != null)
+          .where(
+            (d) =>
+                specOf(d.kind).autoLive &&
+                widget.video.urlFor(d.streamName) != null,
+          )
           .length,
     });
     _rearmIdle();
@@ -199,8 +197,9 @@ class _CamerasViewState extends State<CamerasView> {
       // Something sits on top. The Popup's dismiss_blocked precedent:
       // retry rather than lose the deadline — the obstruction closes
       // itself (a ding Popup lives 30 s) and the next fire lands.
-      Log.debug('cameras', 'idle_blocked',
-          {'retry_s': kCamerasIdleWarning.inSeconds});
+      Log.debug('cameras', 'idle_blocked', {
+        'retry_s': kCamerasIdleWarning.inSeconds,
+      });
       _idleFire = Timer(kCamerasIdleWarning, _fireIdle);
       return;
     }
@@ -249,25 +248,27 @@ class _CamerasViewState extends State<CamerasView> {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: LayoutBuilder(builder: (context, constraints) {
-                    final columns = constraints.maxWidth > 900 ? 3 : 2;
-                    return GridView.count(
-                      crossAxisCount: columns,
-                      mainAxisSpacing: 16,
-                      crossAxisSpacing: 16,
-                      childAspectRatio: 16 / 11,
-                      children: [
-                        for (final device in _devices)
-                          CameraTile(
-                            key: ValueKey('tile-${device.id}'),
-                            device: device,
-                            video: widget.video,
-                            snapshots: widget.snapshots,
-                            onWent: _tileWent,
-                          ),
-                      ],
-                    );
-                  }),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columns = constraints.maxWidth > 900 ? 3 : 2;
+                      return GridView.count(
+                        crossAxisCount: columns,
+                        mainAxisSpacing: 16,
+                        crossAxisSpacing: 16,
+                        childAspectRatio: 16 / 11,
+                        children: [
+                          for (final device in _devices)
+                            CameraTile(
+                              key: ValueKey('tile-${device.id}'),
+                              device: device,
+                              video: widget.video,
+                              snapshots: widget.snapshots,
+                              onWent: _tileWent,
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
                 if (_prompting) _StillWatching(),
               ],
@@ -454,8 +455,10 @@ class CameraTileState extends State<CameraTile>
     session.close();
     _session = null;
     if (_openLogged) {
-      Log.info('cameras', 'tile_closed',
-          {'name': _device.streamName, 'reason': reason});
+      Log.info('cameras', 'tile_closed', {
+        'name': _device.streamName,
+        'reason': reason,
+      });
       if (census) widget.onWent(device: _device.id, live: false);
     }
     _openLogged = false;
@@ -471,8 +474,10 @@ class CameraTileState extends State<CameraTile>
     final entity = _device.snapshotEntityId;
     final url = widget.snapshots.urlFor(entity);
     if (entity == null || url == null) return;
-    final result = await widget.snapshots.fetch(url,
-        token: widget.snapshots.token);
+    final result = await widget.snapshots.fetch(
+      url,
+      token: widget.snapshots.token,
+    );
     if (!mounted || _session != null) return;
     // Logged on change only: a broken Hub would otherwise write the same
     // warning once a minute for as long as the view is open.
@@ -482,8 +487,10 @@ class CameraTileState extends State<CameraTile>
       } else {
         // `status` is an HTTP code or an exception's bare type name — never
         // exception text, which embeds the request URL (phase-7 §B5).
-        Log.warn('cameras', 'snapshot_failed',
-            {'entity': entity, 'status': result.status});
+        Log.warn('cameras', 'snapshot_failed', {
+          'entity': entity,
+          'status': result.status,
+        });
       }
     }
     setState(() {
@@ -524,8 +531,7 @@ class CameraTileState extends State<CameraTile>
         // the same pumpAndSettle and same-lie reasons.
         LiveVideoPhase.connecting => const _FaceNotice('Connecting…'),
         LiveVideoPhase.failed => const _FaceNotice('Live view failed'),
-        LiveVideoPhase.unconfigured ||
-        LiveVideoPhase.unsupported =>
+        LiveVideoPhase.unconfigured || LiveVideoPhase.unsupported =>
           const _FaceNotice('Live view unavailable'),
       };
     }
@@ -542,8 +548,7 @@ class CameraTileState extends State<CameraTile>
           // decode, so the tile never blinks grey once a minute.
           Image.memory(still, fit: BoxFit.cover, gaplessPlayback: true),
           if (canGoLive)
-            const Align(
-                alignment: Alignment.bottomRight, child: _TapForLive()),
+            const Align(alignment: Alignment.bottomRight, child: _TapForLive()),
         ],
       );
     }
@@ -556,8 +561,12 @@ class CameraTileState extends State<CameraTile>
       fit: StackFit.expand,
       children: [
         Center(
-            child: Icon(deviceIcon(_device.kind),
-                size: 40, color: PanelTheme.inkFaint)),
+          child: Icon(
+            deviceIcon(_device.kind),
+            size: 40,
+            color: PanelTheme.inkFaint,
+          ),
+        ),
         if (canGoLive)
           const Align(alignment: Alignment.bottomRight, child: _TapForLive()),
       ],
@@ -568,14 +577,13 @@ class CameraTileState extends State<CameraTile>
     // LIVE means frames are flowing or about to — a failed or unsupported
     // session wearing the badge was measured and is a lie.
     final phase = _session?.phase.value;
-    final live = phase == LiveVideoPhase.connecting ||
-        phase == LiveVideoPhase.playing;
+    final live =
+        phase == LiveVideoPhase.connecting || phase == LiveVideoPhase.playing;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: [
-          Icon(deviceIcon(_device.kind),
-              size: 16, color: PanelTheme.inkFaint),
+          Icon(deviceIcon(_device.kind), size: 16, color: PanelTheme.inkFaint),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -590,8 +598,7 @@ class CameraTileState extends State<CameraTile>
           ),
           if (live)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: PanelTheme.accent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
