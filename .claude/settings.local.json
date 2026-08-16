@@ -120,7 +120,9 @@
       "Bash(sed -i 's/when \\\\[expanded\\\\] — room/when [selected] — room/; s/required this\\\\.expanded,/required this.selected,/; s/^  final bool expanded;/  \\\\/\\\\/\\\\/ Whether this is the House'\"'\"'s one selected Floor — full size, labelled,\\\\n  \\\\/\\\\/\\\\/ with live pins and a hit-testable slab. Named for the state rather than\\\\n  \\\\/\\\\/\\\\/ the gesture that produces it \\(CONTEXT.md, Floor\\): a tap on a neighbour\\\\n  \\\\/\\\\/\\\\/ and a drag up or down both arrive here.\\\\n  final bool selected;/; s/expanded ? \\(d\\) => _handleTap/selected ? \\(d\\) => _handleTap/; s/showLabels: expanded,/showLabels: selected,/; s/if \\(expanded\\)/if \\(selected\\)/' lib/ui/dollhouse/floor_view.dart)",
       "Bash(sed -i 's/expanded: placement.role == FloorRole.selected,/selected: placement.role == FloorRole.selected,/' lib/ui/dollhouse/dollhouse_view.dart)",
       "Bash(sed -i 's/              expanded: true,/              selected: true,/' test/floor_view_test.dart)",
-      "Bash(git diff *)"
+      "Bash(git diff *)",
+      "Bash(sed -i \"s|^import 'audio/talk.dart';|import 'audio/talk.dart';\\\\nimport 'close_button.dart';|\" lib/ui/device_popup.dart)",
+      "Bash(sed -i \"s|^import '../edge_tab.dart';|import '../close_button.dart';\\\\nimport '../edge_tab.dart';|\" lib/ui/cameras/cameras_view.dart)"
     ]
   },
   "enabledMcpjsonServers": [

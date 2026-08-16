@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../diagnostics/log.dart';
 import '../domain/house.dart';
 import 'audio/talk.dart';
+import 'close_button.dart';
 import 'device_presentation.dart';
 import 'hub_controller.dart';
 import 'theme.dart';
@@ -406,39 +407,41 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     // are both settled states and neither of them moves.
     _pulse.repeat();
     Log.debug('popup', 'talk_start', {'device': device.id});
-    _talkOps = _talkOps.then((_) async {
-      final result = await widget.talk.post(url);
-      if (!result.ok) {
-        // The status, never the URL: `talk.dart` keeps this to an HTTP code
-        // or an exception's bare type name, because a fat-fingered
-        // `GO2RTC_URL` can carry a password (log.dart: **Never log a
-        // secret**).
-        Log.warn('popup', 'talk_failed', {
-          'device': device.id,
-          'phase': 'start',
-          'status': result.status,
+    _talkOps = _talkOps
+        .then((_) async {
+          final result = await widget.talk.post(url);
+          if (!result.ok) {
+            // The status, never the URL: `talk.dart` keeps this to an HTTP code
+            // or an exception's bare type name, because a fat-fingered
+            // `GO2RTC_URL` can carry a password (log.dart: **Never log a
+            // secret**).
+            Log.warn('popup', 'talk_failed', {
+              'device': device.id,
+              'phase': 'start',
+              'status': result.status,
+            });
+          }
+          // A release that landed while this was in flight already queued its own
+          // stop behind this link, so there is nothing to undo here — only a
+          // stale answer to decline to render.
+          if (!mounted || press != _talkPress) return;
+          setState(() => _talk = result.ok ? TalkPhase.open : TalkPhase.failed);
+          _pulse.stop();
+          // Each link swallows its own faults rather than passing them down. A
+          // `.then` chain propagates an error past every later link, so one
+          // throw here — a poster breaking its no-throw contract, a `setState`
+          // on a torn-down tree — would silently cancel the STOP queued behind
+          // it and leave the microphone open. That is the one failure this
+          // design exists to prevent, so it may not be reachable through a bug
+          // in the link before it.
+        })
+        .catchError((Object error) {
+          Log.warn('popup', 'talk_failed', {
+            'device': device.id,
+            'phase': 'start',
+            'status': error.runtimeType.toString(),
+          });
         });
-      }
-      // A release that landed while this was in flight already queued its own
-      // stop behind this link, so there is nothing to undo here — only a
-      // stale answer to decline to render.
-      if (!mounted || press != _talkPress) return;
-      setState(() => _talk = result.ok ? TalkPhase.open : TalkPhase.failed);
-      _pulse.stop();
-      // Each link swallows its own faults rather than passing them down. A
-      // `.then` chain propagates an error past every later link, so one
-      // throw here — a poster breaking its no-throw contract, a `setState`
-      // on a torn-down tree — would silently cancel the STOP queued behind
-      // it and leave the microphone open. That is the one failure this
-      // design exists to prevent, so it may not be reachable through a bug
-      // in the link before it.
-    }).catchError((Object error) {
-      Log.warn('popup', 'talk_failed', {
-        'device': device.id,
-        'phase': 'start',
-        'status': error.runtimeType.toString(),
-      });
-    });
   }
 
   /// Closes it again. Fired on release, on a cancelled gesture, and once more
@@ -466,25 +469,27 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   void _queueStop(String deviceId) {
     final url = widget.talk.stopUrl(widget.presentation.device.talkStream);
     if (url == null) return;
-    _talkOps = _talkOps.then((_) async {
-      final result = await widget.talk.post(url);
-      if (result.ok) return;
-      // Worth a line even though nothing here can retry: the watchdog is the
-      // backstop, and this is the log entry that explains why it had to be.
-      Log.warn('popup', 'talk_failed', {
-        'device': deviceId,
-        'phase': 'stop',
-        'status': result.status,
-      });
-      // Swallowed here for the reason the START link gives: a poisoned chain
-      // is a stop that never fires.
-    }).catchError((Object error) {
-      Log.warn('popup', 'talk_failed', {
-        'device': deviceId,
-        'phase': 'stop',
-        'status': error.runtimeType.toString(),
-      });
-    });
+    _talkOps = _talkOps
+        .then((_) async {
+          final result = await widget.talk.post(url);
+          if (result.ok) return;
+          // Worth a line even though nothing here can retry: the watchdog is the
+          // backstop, and this is the log entry that explains why it had to be.
+          Log.warn('popup', 'talk_failed', {
+            'device': deviceId,
+            'phase': 'stop',
+            'status': result.status,
+          });
+          // Swallowed here for the reason the START link gives: a poisoned chain
+          // is a stop that never fires.
+        })
+        .catchError((Object error) {
+          Log.warn('popup', 'talk_failed', {
+            'device': deviceId,
+            'phase': 'stop',
+            'status': error.runtimeType.toString(),
+          });
+        });
   }
 
   @override
@@ -931,7 +936,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     } else {
       child = const SizedBox.shrink();
     }
-    return SizedBox(height: _kCaptionSlot, child: Center(child: child));
+    return SizedBox(
+      height: _kCaptionSlot,
+      child: Center(child: child),
+    );
   }
 
   @override
@@ -991,7 +999,14 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
             ],
           ),
         ),
-        _CloseButton(onPressed: () => Navigator.of(context).pop()),
+        // Top-right of the header row, which never scrolls — that is what
+        // makes "the way out is always reachable" true by construction rather
+        // than guarded, after a `Close` text button at the bottom of the card
+        // spent years being the thing that scrolled out of reach.
+        PanelCloseButton(
+          key: const ValueKey('popup-close'),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
       ],
     );
     // The one thing that can grow tall: the picture, plus — on a doorbell —
@@ -1061,59 +1076,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
           // its events — see the push-to-talk case in the suite.
           behavior: HitTestBehavior.opaque,
           onPointerDown: (_) => _rearmIdle(),
-          child:
-              Padding(padding: const EdgeInsets.all(24), child: content),
-        ),
-      ),
-    );
-  }
-}
-
-/// The way out of every Popup: a small raised puck with an X, top-right of
-/// the header row.
-///
-/// One idiom for every kind — doorbell, camera, thermostat, washer — because
-/// the Panel has no keyboard and no Escape, so "how do I get out of this" must
-/// have exactly one answer wherever somebody is standing. It replaced a
-/// `Close` text button in a row of its own at the bottom of the card, which
-/// cost a row of height and, on a short window, had to be deliberately kept
-/// outside the scrollable region to stay reachable at all. The header never
-/// scrolls, so that whole class of bug is gone rather than guarded against.
-///
-/// A [GestureDetector] rather than an [IconButton]: the card is wrapped in a
-/// [Listener] that re-arms the idle bound on any touch, and listeners never
-/// enter the gesture arena — so this cannot lose a press to it, exactly as
-/// [_PushToTalkButton] does not. 48 px of target around a 36 px puck, because
-/// the thing pressing it is a thumb.
-class _CloseButton extends StatelessWidget {
-  const _CloseButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Close',
-      button: true,
-      child: GestureDetector(
-        key: const ValueKey('popup-close'),
-        onTap: onPressed,
-        behavior: HitTestBehavior.opaque,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: PanelTheme.surfaceRaised,
-                shape: BoxShape.circle,
-                boxShadow: PanelTheme.raised(8),
-              ),
-              child: const Icon(Icons.close, color: PanelTheme.ink, size: 20),
-            ),
-          ),
+          child: Padding(padding: const EdgeInsets.all(24), child: content),
         ),
       ),
     );
@@ -1195,13 +1158,16 @@ class _NotchClipper extends CustomClipper<Path> {
   @override
   Path getClip(Size size) {
     final frame = Path()
-      ..addRRect(RRect.fromRectAndRadius(
-          Offset.zero & size, const Radius.circular(16)));
+      ..addRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(16)),
+      );
     final bite = Path()
-      ..addOval(Rect.fromCircle(
-        center: Offset(size.width / 2, size.height + kTalkButtonDrop),
-        radius: kTalkButtonDiameter / 2 + kTalkButtonMoat,
-      ));
+      ..addOval(
+        Rect.fromCircle(
+          center: Offset(size.width / 2, size.height + kTalkButtonDrop),
+          radius: kTalkButtonDiameter / 2 + kTalkButtonMoat,
+        ),
+      );
     return Path.combine(ui.PathOperation.difference, frame, bite);
   }
 
@@ -1263,7 +1229,9 @@ class _LiveVideoBox extends StatelessWidget {
     final session = this.session;
     if (session == null) {
       return _VideoFrame(
-          docked: docked, child: _body(LiveVideoPhase.unconfigured, null));
+        docked: docked,
+        child: _body(LiveVideoPhase.unconfigured, null),
+      );
     }
     return ValueListenableBuilder<LiveVideoPhase>(
       valueListenable: session.phase,
@@ -1496,24 +1464,24 @@ class _PushToTalkButton extends StatelessWidget {
   static const _fault = Color(0xFFE05252);
 
   Color get _ringColour => switch (phase) {
-        TalkPhase.open || TalkPhase.failed => _fault,
-        TalkPhase.opening => PanelTheme.accent,
-        TalkPhase.idle => PanelTheme.accent.withValues(alpha: .75),
-        TalkPhase.unconfigured => PanelTheme.inkFaint.withValues(alpha: .3),
-      };
+    TalkPhase.open || TalkPhase.failed => _fault,
+    TalkPhase.opening => PanelTheme.accent,
+    TalkPhase.idle => PanelTheme.accent.withValues(alpha: .75),
+    TalkPhase.unconfigured => PanelTheme.inkFaint.withValues(alpha: .3),
+  };
 
   IconData get _glyph => switch (phase) {
-        // Struck through, and only here: a microphone go2rtc refused is the
-        // one phase where the control looks like the live one otherwise.
-        TalkPhase.failed => Icons.mic_off,
-        _ => _held ? Icons.mic : Icons.mic_none,
-      };
+    // Struck through, and only here: a microphone go2rtc refused is the
+    // one phase where the control looks like the live one otherwise.
+    TalkPhase.failed => Icons.mic_off,
+    _ => _held ? Icons.mic : Icons.mic_none,
+  };
 
   Color get _glyphColour => switch (phase) {
-        TalkPhase.open => _fault,
-        TalkPhase.unconfigured => PanelTheme.inkFaint.withValues(alpha: .5),
-        _ => PanelTheme.ink,
-      };
+    TalkPhase.open => _fault,
+    TalkPhase.unconfigured => PanelTheme.inkFaint.withValues(alpha: .5),
+    _ => PanelTheme.ink,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -1602,7 +1570,11 @@ class _RimArc extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.drawArc(
       Rect.fromLTWH(
-          inset, inset, size.width - inset * 2, size.height - inset * 2),
+        inset,
+        inset,
+        size.width - inset * 2,
+        size.height - inset * 2,
+      ),
       start * 2 * math.pi,
       sweep * 2 * math.pi,
       false,

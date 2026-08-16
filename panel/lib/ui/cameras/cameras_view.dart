@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../diagnostics/log.dart';
 import '../../domain/house.dart';
+import '../close_button.dart';
 import '../edge_tab.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
@@ -234,10 +235,14 @@ class _CamerasViewState extends State<CamerasView> {
                       ),
                     ),
                     const Spacer(),
-                    IconButton(
-                      tooltip: 'Close',
+                    // The same puck the Popups wear. It was a bare Material
+                    // IconButton until 2026-08-15 — flat, inked, and the one
+                    // control on the Panel that did not look like the rest of
+                    // the Panel. `close_button.dart` says why one idiom
+                    // matters on a screen with no Escape key.
+                    PanelCloseButton(
+                      key: const ValueKey('cameras-close'),
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: PanelTheme.ink),
                     ),
                   ],
                 ),

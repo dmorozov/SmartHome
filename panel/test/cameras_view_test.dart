@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/diagnostics/log.dart';
+import 'package:panel/ui/close_button.dart';
 import 'package:panel/ui/cameras/cameras_view.dart';
 import 'package:panel/ui/dollhouse/dollhouse_view.dart';
 import 'package:panel/ui/video/live_video.dart';
@@ -40,20 +41,30 @@ void main() {
   /// [opener] replaces the raw fake for the one case that needs something
   /// *between* the tiles and it — the keep-alive. Everything else drives
   /// [go2rtc] directly, because what it asserts is the tile's own lifecycle.
-  Future<void> pumpPanel(WidgetTester tester,
-      {String? autoLiveStream, LiveVideoOpener? opener}) async {
+  Future<void> pumpPanel(
+    WidgetTester tester, {
+    String? autoLiveStream,
+    LiveVideoOpener? opener,
+  }) async {
     var house = loadTestHouse();
     if (autoLiveStream != null) {
       house = houseWithStream(house, 'cam-living', autoLiveStream);
     }
     final (controller, _) = fakeHubRig(house: house);
-    await tester.pumpWidget(panelApp(
-      controller,
-      video: VideoConfig(
-          go2rtcUrl: 'http://hub:1984', open: opener ?? go2rtc.open),
-      snapshots: SnapshotConfig(
-          haUrl: 'http://hub:8123', token: 'tok', fetch: snapshots.fetch),
-    ));
+    await tester.pumpWidget(
+      panelApp(
+        controller,
+        video: VideoConfig(
+          go2rtcUrl: 'http://hub:1984',
+          open: opener ?? go2rtc.open,
+        ),
+        snapshots: SnapshotConfig(
+          haUrl: 'http://hub:8123',
+          token: 'tok',
+          fetch: snapshots.fetch,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -69,43 +80,58 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('the right-edge tab slides the view out, Close returns',
-      (tester) async {
+  testWidgets('the way out is the same puck every Popup wears — one idiom on '
+      'a screen with no Escape key', (tester) async {
+    await pumpPanel(tester);
+    await openCameras(tester);
+
+    // The widget, not the glyph: a bare Material IconButton also draws an X,
+    // and that is exactly what this view had until 2026-08-15.
+    expect(find.byType(PanelCloseButton), findsOneWidget);
+    expect(find.byType(IconButton), findsNothing);
+  });
+
+  testWidgets('the right-edge tab slides the view out, Close returns', (
+    tester,
+  ) async {
     await pumpPanel(tester);
     expect(find.byType(CamerasView), findsNothing);
 
     await openCameras(tester);
     expect(find.byType(CamerasView), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byKey(const ValueKey('cameras-close')));
     await tester.pumpAndSettle();
     expect(find.byType(CamerasView), findsNothing);
     await unmount(tester);
   });
 
   testWidgets(
-      'the doorbell tile is off at entry, wears the snapshot, and no Ring '
-      'session exists until a person asks', (tester) async {
-    await pumpPanel(tester);
-    await openCameras(tester);
+    'the doorbell tile is off at entry, wears the snapshot, and no Ring '
+    'session exists until a person asks',
+    (tester) async {
+      await pumpPanel(tester);
+      await openCameras(tester);
 
-    // The safety half of `autoLive`: entering the view opened NOTHING —
-    // the doorbell's stream is wired and still not dialled (#177014).
-    expect(go2rtc.opened, isEmpty);
+      // The safety half of `autoLive`: entering the view opened NOTHING —
+      // the doorbell's stream is wired and still not dialled (#177014).
+      expect(go2rtc.opened, isEmpty);
 
-    // The still face came from HA's camera_proxy, token as a header value
-    // handed to the fetcher — and never in the URL.
-    final request = snapshots.requests.first;
-    expect(request.path, '/api/camera_proxy/camera.front_door_snapshot');
-    expect(request.toString().contains('tok'), isFalse);
-    expect(snapshots.tokens.first, 'tok');
-    await tester.pump();
-    expect(find.text('Tap for live'), findsOneWidget);
-    await unmount(tester);
-  });
+      // The still face came from HA's camera_proxy, token as a header value
+      // handed to the fetcher — and never in the URL.
+      final request = snapshots.requests.first;
+      expect(request.path, '/api/camera_proxy/camera.front_door_snapshot');
+      expect(request.toString().contains('tok'), isFalse);
+      expect(snapshots.tokens.first, 'tok');
+      await tester.pump();
+      expect(find.text('Tap for live'), findsOneWidget);
+      await unmount(tester);
+    },
+  );
 
-  testWidgets('a tile tap opens exactly that stream; a second tap closes it',
-      (tester) async {
+  testWidgets('a tile tap opens exactly that stream; a second tap closes it', (
+    tester,
+  ) async {
     await pumpPanel(tester);
     await openCameras(tester);
 
@@ -129,29 +155,37 @@ void main() {
   });
 
   testWidgets(
-      'a camera with a stream auto-lives on entry, and closing the view '
-      'closes every session', (tester) async {
-    await pumpPanel(tester, autoLiveStream: 'cam_living');
-    await openCameras(tester);
+    'a camera with a stream auto-lives on entry, and closing the view '
+    'closes every session',
+    (tester) async {
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
 
-    // The camera auto-lived; the doorbell did not.
-    expect(go2rtc.opened.map((s) => s.name), ['cam_living']);
+      // The camera auto-lived; the doorbell did not.
+      expect(go2rtc.opened.map((s) => s.name), ['cam_living']);
 
-    await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
-    await tester.pump();
-    expect(go2rtc.opened, hasLength(2));
+      await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
+      await tester.pump();
+      expect(go2rtc.opened, hasLength(2));
 
-    await tester.tap(find.byIcon(Icons.close));
-    await tester.pumpAndSettle();
-    for (final session in go2rtc.opened) {
-      expect(session.closes, 1, reason: '${session.name} must die with '
-          'the route, by every route out');
-    }
-    await unmount(tester);
-  });
+      await tester.tap(find.byKey(const ValueKey('cameras-close')));
+      await tester.pumpAndSettle();
+      for (final session in go2rtc.opened) {
+        expect(
+          session.closes,
+          1,
+          reason:
+              '${session.name} must die with '
+              'the route, by every route out',
+        );
+      }
+      await unmount(tester);
+    },
+  );
 
-  testWidgets('a not-wired camera renders honestly and dials nothing',
-      (tester) async {
+  testWidgets('a not-wired camera renders honestly and dials nothing', (
+    tester,
+  ) async {
     await pumpPanel(tester);
     await openCameras(tester);
 
@@ -169,8 +203,11 @@ void main() {
 
     await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
     expect(find.textContaining('Still watching?'), findsOneWidget);
-    expect(find.byType(CamerasView), findsOneWidget,
-        reason: 'the prompt is a question, not the act');
+    expect(
+      find.byType(CamerasView),
+      findsOneWidget,
+      reason: 'the prompt is a question, not the act',
+    );
 
     await tester.pump(kCamerasIdleWarning);
     await tester.pumpAndSettle();
@@ -180,42 +217,52 @@ void main() {
   });
 
   testWidgets(
-      'the idle fire refuses to pop a route that is not its own — a ding '
-      'Popup on top survives, and the retry lands once it leaves',
-      (tester) async {
-    await pumpPanel(tester, autoLiveStream: 'cam_living');
-    await openCameras(tester);
-    await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
-    expect(find.textContaining('Still watching?'), findsOneWidget);
+    'the idle fire refuses to pop a route that is not its own — a ding '
+    'Popup on top survives, and the retry lands once it leaves',
+    (tester) async {
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
+      expect(find.textContaining('Still watching?'), findsOneWidget);
 
-    // A ding is not a pointer event, so nothing re-arms: push an overlay
-    // the way DoorbellPopupHost would.
-    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
-    navigator.push(PageRouteBuilder<void>(
-        opaque: false, pageBuilder: (_, _, _) => const Text('a ding popup')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      // A ding is not a pointer event, so nothing re-arms: push an overlay
+      // the way DoorbellPopupHost would.
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.push(
+        PageRouteBuilder<void>(
+          opaque: false,
+          pageBuilder: (_, _, _) => const Text('a ding popup'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    await tester.pump(kCamerasIdleWarning);
-    expect(find.text('a ding popup'), findsOneWidget,
-        reason: 'the fire must never take somebody else\'s route');
-    expect(find.byType(CamerasView), findsOneWidget);
-    expect(go2rtc.only.closes, 0);
-    expect(records.any((r) => r.event == 'idle_blocked'), isTrue);
-    expect(records.any((r) => r.event == 'idle_return'), isFalse,
-        reason: 'a view that stayed must not log that it left');
+      await tester.pump(kCamerasIdleWarning);
+      expect(
+        find.text('a ding popup'),
+        findsOneWidget,
+        reason: 'the fire must never take somebody else\'s route',
+      );
+      expect(find.byType(CamerasView), findsOneWidget);
+      expect(go2rtc.only.closes, 0);
+      expect(records.any((r) => r.event == 'idle_blocked'), isTrue);
+      expect(
+        records.any((r) => r.event == 'idle_return'),
+        isFalse,
+        reason: 'a view that stayed must not log that it left',
+      );
 
-    navigator.pop();
-    await tester.pumpAndSettle();
-    await tester.pump(kCamerasIdleWarning);
-    await tester.pumpAndSettle();
-    expect(find.byType(CamerasView), findsNothing);
-    expect(go2rtc.only.closes, 1);
-    await unmount(tester);
-  });
+      navigator.pop();
+      await tester.pumpAndSettle();
+      await tester.pump(kCamerasIdleWarning);
+      await tester.pumpAndSettle();
+      expect(find.byType(CamerasView), findsNothing);
+      expect(go2rtc.only.closes, 1);
+      await unmount(tester);
+    },
+  );
 
-  testWidgets(
-      'a fire that finds its route already leaving does nothing — the '
+  testWidgets('a fire that finds its route already leaving does nothing — the '
       'Dollhouse survives the race', (tester) async {
     await pumpPanel(tester);
     await openCameras(tester);
@@ -228,51 +275,73 @@ void main() {
     await tester.pump(kCamerasIdleWarning);
     await tester.pumpAndSettle();
     expect(find.byType(CamerasView), findsNothing);
-    expect(find.byType(DollhouseView), findsOneWidget,
-        reason: 'popping blind here used to leave an empty Navigator — '
-            'a blank wall until restart');
+    expect(
+      find.byType(DollhouseView),
+      findsOneWidget,
+      reason:
+          'popping blind here used to leave an empty Navigator — '
+          'a blank wall until restart',
+    );
     await unmount(tester);
   });
 
   testWidgets(
-      'a session born failed still logs tile_failed, and a dead session '
-      'wears no LIVE badge', (tester) async {
-    // Both real openers answer a settled session for a constructor throw,
-    // and a settled session's notifier never fires a listener.
-    final (controller, _) = fakeHubRig();
-    await tester.pumpWidget(panelApp(
-      controller,
-      video: VideoConfig(
-          go2rtcUrl: 'http://hub:1984',
-          open: (url, {required name}) => SettledLiveVideoSession(
-              LiveVideoPhase.failed, failure: 'go2rtc refused: nope')),
-      snapshots: SnapshotConfig(
-          haUrl: 'http://hub:8123', token: 'tok', fetch: snapshots.fetch),
-    ));
-    await tester.pumpAndSettle();
-    await openCameras(tester);
+    'a session born failed still logs tile_failed, and a dead session '
+    'wears no LIVE badge',
+    (tester) async {
+      // Both real openers answer a settled session for a constructor throw,
+      // and a settled session's notifier never fires a listener.
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(
+        panelApp(
+          controller,
+          video: VideoConfig(
+            go2rtcUrl: 'http://hub:1984',
+            open: (url, {required name}) => SettledLiveVideoSession(
+              LiveVideoPhase.failed,
+              failure: 'go2rtc refused: nope',
+            ),
+          ),
+          snapshots: SnapshotConfig(
+            haUrl: 'http://hub:8123',
+            token: 'tok',
+            fetch: snapshots.fetch,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openCameras(tester);
 
-    await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
-    await tester.pump();
-    expect(records.any((r) => r.event == 'tile_failed'), isTrue,
-        reason: 'a listener never fires for a settled session — the open '
-            'path must report it itself');
-    expect(find.text('Live view failed'), findsOneWidget);
-    expect(find.text('LIVE'), findsNothing);
-    await unmount(tester);
-  });
+      await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
+      await tester.pump();
+      expect(
+        records.any((r) => r.event == 'tile_failed'),
+        isTrue,
+        reason:
+            'a listener never fires for a settled session — the open '
+            'path must report it itself',
+      );
+      expect(find.text('Live view failed'), findsOneWidget);
+      expect(find.text('LIVE'), findsNothing);
+      await unmount(tester);
+    },
+  );
 
-  testWidgets(
-      'a declined open hands the tile back to the still loop, and the '
+  testWidgets('a declined open hands the tile back to the still loop, and the '
       'badge never promises a tap that cannot deliver', (tester) async {
     // go2rtc unconfigured — the hermetic default — while the snapshot
     // face works. One tap used to freeze the still forever.
     final (controller, _) = fakeHubRig();
-    await tester.pumpWidget(panelApp(
-      controller,
-      snapshots: SnapshotConfig(
-          haUrl: 'http://hub:8123', token: 'tok', fetch: snapshots.fetch),
-    ));
+    await tester.pumpWidget(
+      panelApp(
+        controller,
+        snapshots: SnapshotConfig(
+          haUrl: 'http://hub:8123',
+          token: 'tok',
+          fetch: snapshots.fetch,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
     await openCameras(tester);
     await tester.pump();
@@ -282,25 +351,34 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
     await tester.pump();
     await tester.pump(kCamerasSnapshotRefresh);
-    expect(snapshots.requests.length, greaterThan(before),
-        reason: 'a tap whose open declined must not freeze the snapshot');
+    expect(
+      snapshots.requests.length,
+      greaterThan(before),
+      reason: 'a tap whose open declined must not freeze the snapshot',
+    );
     await unmount(tester);
   });
 
-  testWidgets('cameras.closed counts the sessions the teardown released',
-      (tester) async {
+  testWidgets('cameras.closed counts the sessions the teardown released', (
+    tester,
+  ) async {
     await pumpPanel(tester, autoLiveStream: 'cam_living');
     await openCameras(tester);
     await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
     await tester.pump();
 
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(find.byKey(const ValueKey('cameras-close')));
     await tester.pumpAndSettle();
     final closed = records.lastWhere(
-        (r) => r.area == 'cameras' && r.event == 'closed');
-    expect(closed.fields?['live'], 2,
-        reason: 'children unmount first — a census drained by tile '
-            'dispose always read 0 here');
+      (r) => r.area == 'cameras' && r.event == 'closed',
+    );
+    expect(
+      closed.fields?['live'],
+      2,
+      reason:
+          'children unmount first — a census drained by tile '
+          'dispose always read 0 here',
+    );
     await unmount(tester);
   });
 
@@ -343,14 +421,20 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
       await tester.pump();
       expect(go2rtc.only.closes, 0, reason: 'kept, not killed');
-      expect(find.text('LIVE'), findsNothing,
-          reason: 'the tile is off however the stream is held');
+      expect(
+        find.text('LIVE'),
+        findsNothing,
+        reason: 'the tile is off however the stream is held',
+      );
 
       await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
       await tester.pump();
 
-      expect(go2rtc.opened, hasLength(1),
-          reason: 'a second dial is the relaunch that loses the IDR race');
+      expect(
+        go2rtc.opened,
+        hasLength(1),
+        reason: 'a second dial is the relaunch that loses the IDR race',
+      );
       expect(find.text('LIVE'), findsOneWidget);
       // Already playing, so the picture is there on the first frame rather
       // than after another go2rtc spin-up.
@@ -368,7 +452,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tile-doorbell')));
       await tester.pump();
 
-      await tester.tap(find.byIcon(Icons.close));
+      await tester.tap(find.byKey(const ValueKey('cameras-close')));
       await tester.pumpAndSettle();
       await tester.pump(kLiveVideoLinger + const Duration(seconds: 1));
 
