@@ -20,8 +20,10 @@ import 'test_house.dart';
 ///
 /// The tests below are about **which Floor is expanded**, so the Dollhouse is
 /// the subtree they mean.
-Finder pinIcon(IconData icon) =>
-    find.descendant(of: find.byType(DollhouseView), matching: find.byIcon(icon));
+Finder pinIcon(IconData icon) => find.descendant(
+  of: find.byType(DollhouseView),
+  matching: find.byIcon(icon),
+);
 
 /// The Dollhouse as the wall shows it. Every scene the Hub has a hand in is
 /// staged through FakeHub's driving surface — the same adapter dev builds
@@ -42,14 +44,153 @@ void main() {
     final (controller, _) = fakeHubRig();
     await tester.pumpWidget(panelApp(controller));
 
-    await tester.tapAt(floorSlabCentre(tester,
+    await tester.tapAt(
+      floorSlabCentre(
+        tester,
         house: controller.house,
         selectedFloorId: 'ground-floor',
-        floorId: 'upstairs'));
+        floorId: 'upstairs',
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(pinIcon(Icons.pets), findsOneWidget);
     expect(pinIcon(Icons.doorbell), findsNothing);
+  });
+
+  /// Selecting a Floor by dragging the stack up or down (owner, 2026-08-15).
+  ///
+  /// **Content follows the finger**: dragging *down* slides the stack down,
+  /// bringing the Floor drawn above into the centre — and the Floor drawn
+  /// above is the higher level. So a downward drag goes upstairs. Every
+  /// direction assertion below is really that one sentence.
+  ///
+  /// The test house has two Floors, `ground-floor` (0) and `upstairs` (1),
+  /// and starts on the ground.
+  group('selecting a Floor by drag', () {
+    /// Comfortably past the commit threshold at the default surface, and the
+    /// wrong sign for going up — the drag goes *down* to reach the Floor
+    /// above.
+    const past = 220.0;
+    const short = 20.0;
+
+    Future<void> pumpDollhouse(WidgetTester tester) async {
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(panelApp(controller));
+      await tester.pumpAndSettle();
+    }
+
+    /// Drags from the middle of the Dollhouse, deliberately not from a pin —
+    /// the pin case is its own test below.
+    Future<void> dragBy(WidgetTester tester, double dy) async {
+      await tester.drag(find.byType(DollhouseView), Offset(0, dy));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('dragging down brings the Floor above into the centre', (
+      tester,
+    ) async {
+      await pumpDollhouse(tester);
+      expect(pinIcon(Icons.pets), findsNothing, reason: 'upstairs is not up');
+
+      await dragBy(tester, past);
+
+      expect(pinIcon(Icons.pets), findsOneWidget);
+      expect(pinIcon(Icons.doorbell), findsNothing);
+    });
+
+    testWidgets('dragging up from the ground floor does nothing — there is no '
+        'Floor below it, and the stack springs back', (tester) async {
+      await pumpDollhouse(tester);
+
+      await dragBy(tester, -past);
+
+      expect(pinIcon(Icons.doorbell), findsOneWidget);
+      expect(pinIcon(Icons.pets), findsNothing);
+      // Sprung back: nothing is left leaning, so the next gesture starts from
+      // a stack that is where the arrangement says it is.
+      final transform = tester.widget<Transform>(
+        find
+            .descendant(
+              of: find.byType(DollhouseView),
+              matching: find.byType(Transform),
+            )
+            .first,
+      );
+      expect(transform.transform.getTranslation().y, 0);
+    });
+
+    testWidgets('a drag that does not cover the threshold selects nothing', (
+      tester,
+    ) async {
+      await pumpDollhouse(tester);
+
+      await dragBy(tester, short);
+
+      expect(pinIcon(Icons.doorbell), findsOneWidget);
+      expect(pinIcon(Icons.pets), findsNothing);
+    });
+
+    testWidgets('and back down again — the two directions are symmetrical', (
+      tester,
+    ) async {
+      await pumpDollhouse(tester);
+      await dragBy(tester, past);
+      expect(pinIcon(Icons.pets), findsOneWidget);
+
+      await dragBy(tester, -past);
+
+      expect(pinIcon(Icons.doorbell), findsOneWidget);
+      expect(pinIcon(Icons.pets), findsNothing);
+    });
+
+    testWidgets('a drag that begins on a Device pin scrolls the house instead '
+        'of opening that Device — the regression this gesture most invites', (
+      tester,
+    ) async {
+      final go2rtc = FakeGo2rtc();
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(
+        panelApp(
+          controller,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.drag(
+        find.byKey(const ValueKey('pin-doorbell')),
+        const Offset(0, past),
+      );
+      await tester.pumpAndSettle();
+
+      // No Popup, and the Floor changed: the gesture arena gave the pointer
+      // to the drag once it passed slop, exactly as it does in a ListView
+      // full of buttons.
+      expect(find.byType(Dialog), findsNothing);
+      expect(go2rtc.opened, isEmpty);
+      expect(pinIcon(Icons.pets), findsOneWidget);
+    });
+
+    testWidgets('a tap on a pin still opens it — a drag recogniser does not '
+        'cost the taps that were there first', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(
+        panelApp(
+          controller,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('pin-doorbell')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(Dialog), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
+      await tester.pumpAndSettle();
+    });
   });
 
   /// The handles on the Panel's right edge (owner-restacked 2026-08-15): the
@@ -84,10 +225,12 @@ void main() {
         '— reached without hunting for the pin', (tester) async {
       final go2rtc = FakeGo2rtc();
       final (controller, _) = fakeHubRig();
-      await tester.pumpWidget(panelApp(
-        controller,
-        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
-      ));
+      await tester.pumpWidget(
+        panelApp(
+          controller,
+          video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(Dialog), findsNothing);
@@ -107,8 +250,7 @@ void main() {
     });
   });
 
-  testWidgets('tapping a light pin toggles it through the hub',
-      (tester) async {
+  testWidgets('tapping a light pin toggles it through the hub', (tester) async {
     final (controller, hub) = fakeHubRig();
     await tester.pumpWidget(panelApp(controller));
 
@@ -119,8 +261,9 @@ void main() {
     expect((hub.states['light-hall'] as SwitchState).on, !before);
   });
 
-  testWidgets('tapping the doorbell pin opens the live-view popup',
-      (tester) async {
+  testWidgets('tapping the doorbell pin opens the live-view popup', (
+    tester,
+  ) async {
     final (controller, _) = fakeHubRig();
     await tester.pumpWidget(panelApp(controller));
 
@@ -128,8 +271,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Ring Doorbell'), findsOneWidget);
-    expect(
-        find.text('Live view placeholder — go2rtc stream'), findsOneWidget);
+    expect(find.text('Live view placeholder — go2rtc stream'), findsOneWidget);
   });
 
   testWidgets('a tapped camera pin plays the stream the House Plan named, '
@@ -139,16 +281,23 @@ void main() {
     // fresh `VideoConfig()` there and every other test in this file still
     // passes — the Popup would simply, silently, never play anything.
     final (controller, _) = fakeHubRig(
-        house: houseWithStream(loadTestHouse(), 'doorbell', 'ring_doorbell'));
+      house: houseWithStream(loadTestHouse(), 'doorbell', 'ring_doorbell'),
+    );
     final go2rtc = FakeGo2rtc();
-    await tester.pumpWidget(panelApp(controller,
-        video:
-            VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open)));
+    await tester.pumpWidget(
+      panelApp(
+        controller,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      ),
+    );
 
     await tester.tap(find.byKey(const ValueKey('pin-doorbell')));
     await tester.pumpAndSettle();
 
-    expect(go2rtc.only.url.toString(), 'ws://hub:1984/api/ws?src=ring_doorbell');
+    expect(
+      go2rtc.only.url.toString(),
+      'ws://hub:1984/api/ws?src=ring_doorbell',
+    );
   });
 
   testWidgets('tapping a light pin with unknown state attempts a toggle, '
@@ -168,8 +317,9 @@ void main() {
     expect((hub.states['light-hall'] as SwitchState).on, isTrue);
   });
 
-  testWidgets('the OFFLINE badge follows the Hub away and back',
-      (tester) async {
+  testWidgets('the OFFLINE badge follows the Hub away and back', (
+    tester,
+  ) async {
     final (controller, hub) = fakeHubRig();
     await tester.pumpWidget(panelApp(controller));
 
@@ -186,8 +336,9 @@ void main() {
     expect(find.text('FAKE HUB'), findsOneWidget);
   });
 
-  testWidgets('a rejected token reads differently from an absent Hub',
-      (tester) async {
+  testWidgets('a rejected token reads differently from an absent Hub', (
+    tester,
+  ) async {
     // The whole point of the three-state status: one of these is fixed by
     // waiting and the other by a person with a new token, and the badge is
     // the only place the Panel can say which.
@@ -207,8 +358,14 @@ void main() {
 
     expect(find.text('21.4°'), findsOneWidget);
 
-    hub.pushState(const ThermostatState('thermostat',
-        current: 23.0, target: 21.0, unit: TemperatureUnit.celsius));
+    hub.pushState(
+      const ThermostatState(
+        'thermostat',
+        current: 23.0,
+        target: 21.0,
+        unit: TemperatureUnit.celsius,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('23.0°'), findsOneWidget);

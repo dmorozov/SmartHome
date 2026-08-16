@@ -25,8 +25,8 @@ The Panel-side description of the house's geometry — Floors with their Rooms a
 _Avoid_: blueprint (that is the paper source it may be drawn from), map, layout
 
 **Floor**:
-One level of the house in the Dollhouse (e.g. basement, first floor). Floors stack; tapping one expands it. A Floor need not span the whole house footprint (e.g. an upper floor over half the house).
-_Avoid_: level, story
+One level of the house in the Dollhouse (e.g. basement, first floor). Floors stack, and exactly one is **selected** at a time — shown full size, with its Rooms and Devices live. A Floor need not span the whole house footprint (e.g. an upper floor over half the house).
+_Avoid_: level, story; expanded (the Floor is selected, and that is the word everywhere)
 
 **Room**:
 A named area on a Floor. Rooms tile their Floor completely — every point belongs to exactly one Room (halls, stairs and the garage are Rooms too; there is no "outside the perimeter"). Rooms display aggregate state (lit, occupied) and hold pinned Devices. Tapping a Room acts on it (e.g. toggles its lights).

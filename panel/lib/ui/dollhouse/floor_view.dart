@@ -8,7 +8,7 @@ import 'floor_scene.dart';
 import 'iso.dart';
 
 /// One Floor as an isometric slab: rooms behind full-height translucent
-/// "glass" walls, warm glow on lit Rooms, and — when [expanded] — room
+/// "glass" walls, warm glow on lit Rooms, and — when [selected] — room
 /// labels plus tappable Device pins.
 ///
 /// Shape is [FloorScene]'s call, style is this file's: the scene decides
@@ -19,7 +19,7 @@ class FloorView extends StatelessWidget {
     required this.floor,
     required this.controller,
     required this.projection,
-    required this.expanded,
+    required this.selected,
     this.onRoomTap,
     this.onDeviceTap,
   });
@@ -27,7 +27,12 @@ class FloorView extends StatelessWidget {
   final Floor floor;
   final HubController controller;
   final IsoProjection projection;
-  final bool expanded;
+
+  /// Whether this is the House's one selected Floor — full size, labelled,
+  /// with live pins and a hit-testable slab. Named for the state rather than
+  /// the gesture that produces it (CONTEXT.md, Floor): a tap on a neighbour
+  /// and a drag up or down both arrive here.
+  final bool selected;
   final ValueChanged<Room>? onRoomTap;
   final ValueChanged<Device>? onDeviceTap;
 
@@ -52,10 +57,10 @@ class FloorView extends StatelessWidget {
     // in whatever font the engine happens to default to — a different one
     // from the rest of the Panel, and on a bare Linux kiosk possibly none.
     final labelStyle = DefaultTextStyle.of(context).style.copyWith(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: PanelTheme.inkFaint,
-        );
+      fontSize: 10,
+      fontWeight: FontWeight.w600,
+      color: PanelTheme.inkFaint,
+    );
     return SizedBox(
       width: size.width,
       height: size.height + wallDepth,
@@ -67,13 +72,14 @@ class FloorView extends StatelessWidget {
             // bounding boxes (a neighbour sits in the selected Floor's empty
             // isometric corner), so only the slab itself may take a tap.
             behavior: HitTestBehavior.deferToChild,
-            onTapUp:
-                expanded ? (d) => _handleTap(scene, d.localPosition) : null,
+            onTapUp: selected
+                ? (d) => _handleTap(scene, d.localPosition)
+                : null,
             child: CustomPaint(
               size: Size(size.width, size.height + wallDepth),
               painter: _FloorPainter(
                 scene: scene,
-                showLabels: expanded,
+                showLabels: selected,
                 labelStyle: labelStyle,
               ),
             ),
@@ -90,7 +96,7 @@ class FloorView extends StatelessWidget {
               ),
             ),
           ),
-          if (expanded)
+          if (selected)
             for (final room in floor.rooms)
               for (final device in room.devices) _pin(device),
         ],
@@ -181,7 +187,11 @@ class _FloorPainter extends CustomPainter {
     const depth = Offset(0, FloorScene.wallDepth);
 
     canvas.drawShadow(
-        scene.slab.shift(depth), const Color(0xFF7A849C), 6, false);
+      scene.slab.shift(depth),
+      const Color(0xFF7A849C),
+      6,
+      false,
+    );
 
     // Plinth: the viewer-facing outline edges, extruded.
     for (final face in scene.plinthFaces) {
@@ -209,11 +219,15 @@ class _FloorPainter extends CustomPainter {
         canvas.drawPath(
           shape.outline,
           Paint()
-            ..shader = RadialGradient(colors: [
-              PanelTheme.glow.withValues(alpha: .5),
-              PanelTheme.glow.withValues(alpha: .05),
-            ]).createShader(Rect.fromCircle(
-                center: glow.center, radius: glow.radius)),
+            ..shader =
+                RadialGradient(
+                  colors: [
+                    PanelTheme.glow.withValues(alpha: .5),
+                    PanelTheme.glow.withValues(alpha: .05),
+                  ],
+                ).createShader(
+                  Rect.fromCircle(center: glow.center, radius: glow.radius),
+                ),
         );
         canvas.restore();
       }
@@ -250,7 +264,10 @@ class _FloorPainter extends CustomPainter {
           ? const Color(0xFFE2E7F0)
           : const Color(0xFFC7CFE0);
       final alpha = wall.viewerFarExterior ? .5 : .26;
-      canvas.drawPath(wall.quad, Paint()..color = face.withValues(alpha: alpha));
+      canvas.drawPath(
+        wall.quad,
+        Paint()..color = face.withValues(alpha: alpha),
+      );
       canvas.drawPath(
         wall.quad,
         Paint()

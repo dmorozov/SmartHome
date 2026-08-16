@@ -43,7 +43,7 @@ void main() {
               floor: floor,
               controller: controller,
               projection: projection,
-              expanded: true,
+              selected: true,
               onRoomTap: (room) => tapped.add(room.id),
             ),
           ),
