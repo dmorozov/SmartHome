@@ -58,6 +58,53 @@ void main() {
     expect(pinIcon(Icons.doorbell), findsNothing);
   });
 
+  /// The Floor names (owner, 2026-08-15). Both complaints were real and had
+  /// different causes: a neighbour's name was drawn inside the subtree the
+  /// Dollhouse scales to 0.32, so a 12 px label rendered at about 4 px; and
+  /// every name was pinned to the *shared* plan box rather than to its own
+  /// Floor, so they queued up at one x however big or small the Floor was.
+  group('the Floor names', () {
+    Size sizeOf(WidgetTester tester, String name) =>
+        tester.getSize(find.text(name));
+
+    testWidgets('a collapsed Floor\'s name is drawn at the same size as the '
+        'selected one\'s — a name nobody can read is not a label', (
+      tester,
+    ) async {
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(panelApp(controller));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ground Floor'), findsOneWidget);
+      expect(find.text('Upstairs'), findsOneWidget);
+      // Same rendered size, not merely present: the bug was that it rendered
+      // at roughly a third of this and vanished into the slab.
+      expect(
+        sizeOf(tester, 'Upstairs').height,
+        sizeOf(tester, 'Ground Floor').height,
+      );
+    });
+
+    testWidgets('each name sits a fixed distance from its own Floor\'s left '
+        'edge, not from the shared plan box', (tester) async {
+      tester.view
+        ..physicalSize = const Size(1280, 800)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final (controller, _) = fakeHubRig();
+      await tester.pumpWidget(panelApp(controller));
+      await tester.pumpAndSettle();
+
+      // The two Floors are different sizes and sit at different places on
+      // stage, so two names anchored to their own slabs cannot share an x.
+      // Anchored to the shared box they very nearly did.
+      final ground = tester.getTopLeft(find.text('Ground Floor'));
+      final upstairs = tester.getTopLeft(find.text('Upstairs'));
+      expect((ground.dx - upstairs.dx).abs(), greaterThan(100));
+    });
+  });
+
   /// Selecting a Floor by dragging the stack up or down (owner, 2026-08-15).
   ///
   /// **Content follows the finger**: dragging *down* slides the stack down,

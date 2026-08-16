@@ -23,16 +23,16 @@ class IsoProjection {
 
   /// Pixel size of the projected plan parallelogram (excluding wall depth).
   Size get size => Size(
-        (planSize.width + planSize.height) * scale,
-        (planSize.width + planSize.height) * scale / 2,
-      );
+    (planSize.width + planSize.height) * scale,
+    (planSize.width + planSize.height) * scale / 2,
+  );
 
   double get _originX => planSize.height * scale;
 
   Offset project(Offset plan) => Offset(
-        (plan.dx - plan.dy) * scale + _originX,
-        (plan.dx + plan.dy) * scale / 2,
-      );
+    (plan.dx - plan.dy) * scale + _originX,
+    (plan.dx + plan.dy) * scale / 2,
+  );
 
   Offset unproject(Offset local) {
     final sx = local.dx - _originX;

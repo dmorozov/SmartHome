@@ -152,33 +152,40 @@ class FloorScene {
       }
       final a = projection.project(seg.a);
       final b = projection.project(seg.b);
-      faces.add(PlinthFace(
-        quad: Path()..addPolygon([a, b, b + depth, a + depth], true),
-        facing: seg.horizontal ? WallFacing.facing : WallFacing.shaded,
-      ));
+      faces.add(
+        PlinthFace(
+          quad: Path()..addPolygon([a, b, b + depth, a + depth], true),
+          facing: seg.horizontal ? WallFacing.facing : WallFacing.shaded,
+        ),
+      );
     }
     return faces;
   }
 
   List<WallQuad> _buildWallQuads() {
     // Painter's algorithm: back-to-front by plan depth.
-    final walls = [...floor.walls]..sort((w1, w2) =>
-        (w1.a.dx + w1.a.dy + w1.b.dx + w1.b.dy)
-            .compareTo(w2.a.dx + w2.a.dy + w2.b.dx + w2.b.dy));
+    final walls = [...floor.walls]
+      ..sort(
+        (w1, w2) => (w1.a.dx + w1.a.dy + w1.b.dx + w1.b.dy).compareTo(
+          w2.a.dx + w2.a.dy + w2.b.dx + w2.b.dy,
+        ),
+      );
     final up = Offset(0, -wallHeightM * projection.scale);
     final quads = <WallQuad>[];
     for (final wall in walls) {
       final pa = projection.project(wall.a);
       final pb = projection.project(wall.b);
       final outside = floor.outsideOf(wall);
-      quads.add(WallQuad(
-        quad: Path()..addPolygon([pa, pb, pb + up, pa + up], true),
-        capA: pa + up,
-        capB: pb + up,
-        facing: wall.horizontal ? WallFacing.facing : WallFacing.shaded,
-        viewerFarExterior: outside == PlanDirection.north ||
-            outside == PlanDirection.west,
-      ));
+      quads.add(
+        WallQuad(
+          quad: Path()..addPolygon([pa, pb, pb + up, pa + up], true),
+          capA: pa + up,
+          capB: pb + up,
+          facing: wall.horizontal ? WallFacing.facing : WallFacing.shaded,
+          viewerFarExterior:
+              outside == PlanDirection.north || outside == PlanDirection.west,
+        ),
+      );
     }
     return quads;
   }

@@ -84,18 +84,12 @@ class FloorView extends StatelessWidget {
               ),
             ),
           ),
-          Positioned(
-            left: 0,
-            top: 0,
-            child: Text(
-              floor.name,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: PanelTheme.inkFaint,
-              ),
-            ),
-          ),
+          // The Floor's name is deliberately *not* here any more. It used to
+          // sit at the box's top-left, inside the subtree `DollhouseView`
+          // scales — so on a neighbour it rendered at 12 × 0.32 ≈ 4 px, and
+          // it lined up with the *shared* plan box rather than with this
+          // Floor's own slab. Both are Dollhouse-stage facts, so the label
+          // is drawn there now, from `FloorPlacement.slabBounds`.
           if (selected)
             for (final room in floor.rooms)
               for (final device in room.devices) _pin(device),

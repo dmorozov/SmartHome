@@ -29,6 +29,7 @@ class FloorPlacement {
     required this.boxTopLeft,
     required this.scale,
     required this.scaledBounds,
+    required this.slabBounds,
   });
 
   final Floor floor;
@@ -47,6 +48,22 @@ class FloorPlacement {
   /// point — the one thing a caller cannot recover from [boxTopLeft] and
   /// [scale] without re-deriving the arrangement's own arithmetic.
   final Rect scaledBounds;
+
+  /// Where **this Floor's own** projected outline lands, in viewport
+  /// coordinates — as against [scaledBounds], which is the *shared* box every
+  /// Floor projects into.
+  ///
+  /// The two are the same only for a Floor that fills the house footprint.
+  /// `House.planExtent` is the union across all Floors and `Floor.planExtent`
+  /// is measured from the one shared plan origin, so an attic over half the
+  /// house still has a full-width box with its slab sitting somewhere inside
+  /// it. Anything that wants to sit *beside the Floor* — a label, a badge —
+  /// needs this rather than the box, or it lines up with every other Floor
+  /// instead of with its own.
+  ///
+  /// Excludes the plinth extrusion: this is the top surface, which is the
+  /// thing an annotation is annotating.
+  final Rect slabBounds;
 }
 
 /// The Dollhouse floor-drift arrangement, decided in one pass: the
@@ -69,7 +86,10 @@ class FloorPlacement {
 /// Pure — meters and pixels in, pixels out, no widgets — so the whole
 /// arrangement is answerable without pumping a frame.
 class FloorArrangement {
-  const FloorArrangement._({required this.projection, required this.placements});
+  const FloorArrangement._({
+    required this.projection,
+    required this.placements,
+  });
 
   /// Arranges [house] with [selectedFloorId] expanded inside a [viewport],
   /// where each Floor's box is its projected plan plus [wallDepth] pixels of
@@ -85,14 +105,15 @@ class FloorArrangement {
     final ordered = [...house.floors]
       ..sort((a, b) => b.level.compareTo(a.level));
 
-    final selectedLevel =
-        house.floors.firstWhere((f) => f.id == selectedFloorId).level;
+    final selectedLevel = house.floors
+        .firstWhere((f) => f.id == selectedFloorId)
+        .level;
     // At most three Floors are on stage: the selected one plus its immediate
     // neighbours. Anything further away waits off-stage until one of those
     // neighbours is selected and becomes the new centre.
     final onStage = [
       for (final floor in ordered)
-        if ((floor.level - selectedLevel).abs() <= 1) floor
+        if ((floor.level - selectedLevel).abs() <= 1) floor,
     ];
     double scaleOf(Floor floor) =>
         floor.id == selectedFloorId ? 1.0 : _neighbourScale;
@@ -101,7 +122,8 @@ class FloorArrangement {
     // two neighbours + spacing) overflow the height.
     final scaleTotal = onStage.fold(0.0, (sum, f) => sum + scaleOf(f));
     final heightBudget =
-        viewport.height / (scaleTotal + (onStage.length - 1) * _sizingGapFactor);
+        viewport.height /
+        (scaleTotal + (onStage.length - 1) * _sizingGapFactor);
     final isoWidth = math.min(
       viewport.width * _widthFraction,
       math.max(_minIsoWidth, (heightBudget - wallDepth) * 2),
@@ -135,8 +157,23 @@ class FloorArrangement {
     // and nothing can leave the viewport.
     double driftOf(Floor floor) {
       final slack = planW * (1 - scaleOf(floor)) / 2 + left;
-      return ((floor.level - selectedLevel) * _driftFactor * planW)
-          .clamp(-slack, slack);
+      return ((floor.level - selectedLevel) * _driftFactor * planW).clamp(
+        -slack,
+        slack,
+      );
+    }
+
+    // This Floor's own projected outline, in unscaled box coordinates — the
+    // union of its Rooms, which is what the slab is built from. A Floor with
+    // no Rooms at all falls back to the whole box; it has nothing to sit
+    // beside, and a null here would be a special case in every caller.
+    Rect localSlabOf(Floor floor) {
+      Rect? union;
+      for (final room in floor.rooms) {
+        final bounds = projection.projectPolygon(room.footprint).getBounds();
+        union = union == null ? bounds : union.expandToInclude(bounds);
+      }
+      return union ?? Rect.fromLTWH(0, 0, planW, floorH);
     }
 
     return FloorArrangement._(
@@ -146,13 +183,17 @@ class FloorArrangement {
           () {
             final scale = scaleOf(floor);
             final boxTopLeft = Offset(left + driftOf(floor), topOf(floor));
+            final local = localSlabOf(floor);
+            // The same top-centre scale [scaledBounds] reproduces, applied to
+            // an arbitrary x rather than to the box's own edges.
+            double sx(double x) => planW / 2 + (x - planW / 2) * scale;
             return FloorPlacement(
               floor: floor,
               role: floor.id == selectedFloorId
                   ? FloorRole.selected
                   : tops.containsKey(floor.id)
-                      ? FloorRole.neighbour
-                      : FloorRole.offStage,
+                  ? FloorRole.neighbour
+                  : FloorRole.offStage,
               boxTopLeft: boxTopLeft,
               scale: scale,
               // The top-centre scale, reproduced: the box keeps its top edge
@@ -162,6 +203,12 @@ class FloorArrangement {
                 boxTopLeft.dy,
                 planW * scale,
                 floorH * scale,
+              ),
+              slabBounds: Rect.fromLTRB(
+                boxTopLeft.dx + sx(local.left),
+                boxTopLeft.dy + local.top * scale,
+                boxTopLeft.dx + sx(local.right),
+                boxTopLeft.dy + local.bottom * scale,
               ),
             );
           }(),

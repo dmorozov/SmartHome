@@ -7,6 +7,7 @@ import '../../domain/house.dart';
 import '../device_popup.dart';
 import '../device_presentation.dart';
 import '../hub_controller.dart';
+import '../theme.dart';
 import '../audio/talk.dart';
 import '../video/live_video.dart';
 import '../video/snapshot.dart';
@@ -53,6 +54,27 @@ const kFloorDragEndResistance = 0.5;
 /// or not the drag committed. Shorter than the 300 ms Floor slide on purpose:
 /// the lean is undoing a preview, not performing a move.
 const kFloorDragSpringBack = Duration(milliseconds: 200);
+
+/// How far **up and to the left of its own slab** a Floor's name sits.
+///
+/// Constant on screen, not scaled with the Floor: a neighbour is drawn at a
+/// third of full size, and a label that shrank with it was ~4 px tall and
+/// unreadable — which defeats the only reason a collapsed Floor is labelled
+/// at all. The Dollhouse draws these itself for the same reason it decides
+/// opacity: how present a Floor looks is the stage's call, not the Floor's.
+///
+/// **Both push the name away from the slab, never into it**, and that is the
+/// whole of the 2026-08-15 correction. The first attempt nudged +6 *inward*
+/// and lifted by 16 — but the name is about 16 px tall at 12/w700, so its
+/// bottom edge landed exactly on `slabBounds.top` with nothing to spare. That
+/// reads as clean on a plain diamond and as an overlap on a Floor whose
+/// bounding-box corner is actually occupied, which the ground floor's is: its
+/// garage wing reaches into the very corner the name was sitting in.
+///
+/// [kFloorLabelLift] therefore clears the name's own height plus a gap, and
+/// [kFloorLabelNudge] is subtracted rather than added.
+const kFloorLabelNudge = 32.0;
+const kFloorLabelLift = 30.0;
 
 /// The Dollhouse: the house as stacked isometric Floors. One Floor is
 /// selected (full size, Device pins live); tapping a neighbour selects it
@@ -288,6 +310,45 @@ class _DollhouseViewState extends State<DollhouseView>
                               onDeviceTap: (device) =>
                                   _onDeviceTap(context, device),
                             ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                // The Floor names, drawn after the Floors so nothing paints
+                // over them, and outside every `AnimatedScale` so they keep
+                // one size whatever a Floor is scaled to. Anchored to
+                // `slabBounds` — this Floor's *own* outline — so a name sits
+                // a fixed distance from the Floor it names rather than from
+                // the shared plan box, which is where they all used to queue
+                // up regardless of how big their Floor was.
+                for (final placement in arrangement.placements)
+                  AnimatedPositioned(
+                    key: ValueKey('floor-label-${placement.floor.id}'),
+                    duration: _anim,
+                    curve: Curves.easeInOutCubic,
+                    // Clamped at the viewport's own left edge: a Floor drifted
+                    // hard left would otherwise put its name at a negative x,
+                    // and the Stack clips. Losing the nudge on that one Floor
+                    // beats losing the first letters of its name.
+                    left: math.max(
+                      0,
+                      placement.slabBounds.left - kFloorLabelNudge,
+                    ),
+                    top: placement.slabBounds.top - kFloorLabelLift,
+                    child: AnimatedOpacity(
+                      duration: _anim,
+                      opacity: _opacityOf(placement.role),
+                      // A name is not a target: a tap here has always meant
+                      // "select this Floor", and it still reaches the slab
+                      // underneath.
+                      child: IgnorePointer(
+                        child: Text(
+                          placement.floor.name,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: PanelTheme.inkFaint,
                           ),
                         ),
                       ),
