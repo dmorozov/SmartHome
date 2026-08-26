@@ -84,8 +84,16 @@ Decided and applied with this phase:
   re-setup, both preloaded mains EOF-looped — go2rtc re-dialling the
   floodlights every ~7–15 s without ever latching — while on-demand pulls
   of the same streams worked (9.6 s to a frame). A knock-loop is worse
-  than the cold start it was hiding; re-enable once the cause is
-  understood (handoff N10).
+  than the cold start it was hiding.
+  **RETIRED 2026-08-26, superseded by the RTSP transport (N5):** both
+  problems A4 existed to fix are MJPEG-path artifacts — the cold-start
+  wait and the zero-byte race — and the shipped RTSP default plays a cold
+  floodlight main in 3.9 s with neither. Preload is config-only (no
+  runtime API, verified against 1.9.14), so root-causing the loop means
+  production restarts and camera knocks for a feature with no remaining
+  job. The commented entries stay as the record; preload re-enters only
+  if MJPEG becomes the daily driver again (its investigation protocol is
+  preserved in handoff N10).
 - **A5 Bounded MJPEG transcodes.** Custom templates in the live config:
   `mjpeg/tiles` (`-q:v 8 -r 10`) on the five substream wrappers,
   `mjpeg/zoom` (`-q:v 6 -r 15`) on the mains and `ring_doorbell`;
@@ -189,9 +197,11 @@ sessions still log exactly once.
 
 - All five cameras answer on 322 after recovery, and
   `binary_sensor.wyze_*_rtsp` history charts their daemon uptime.
-- go2rtc 1.9.14 serves all 12 streams; `/api/preload` lists the two
-  floodlights; a cold floodlight tile shows a picture without the zero-byte
-  race.
+- go2rtc 1.9.14 serves all streams (14 since the talk deploy); ~~`/api/
+  preload` lists the two floodlights~~ *(A4 retired 2026-08-26 — the RTSP
+  transport superseded it)*; a cold floodlight shows a picture without
+  the zero-byte race — via the RTSP player's own patience, measured
+  3.9 s.
 - The MJPEG wrappers run bounded (`mjpeg/tiles` / `mjpeg/zoom`), hardware
   encode adopted or explicitly declined against the probe result.
 - The Panel's three video call sites open through the Stream Director, the

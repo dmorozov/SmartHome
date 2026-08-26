@@ -308,16 +308,19 @@ ffmpeg:
   mjpeg/tiles: "-c:v mjpeg -q:v 8 -r 10"
   mjpeg/zoom: "-c:v mjpeg -q:v 6 -r 15"
 
-# --- phase-8: hold the slow floodlight producers open (needs go2rtc >= 1.9.11)
-# The two floodlight-mounted v3s take 17-18 s to first frame cold and lose the
-# on-demand start race by design ("[exec] timeout" + the zero-byte cold MJPEG
-# answer, both measured — §"THE TWO FLOODLIGHT UNITS ARE SLOW TO START" above).
-# preload holds their H.264 producers open via a permanent probe consumer, so
-# go2rtc's own reconnect logic owns their liveness. "video" = video track only;
-# audio would spend 2.4 GHz airtime on nothing a tile plays.
-# FLOODLIGHTS ONLY, deliberately: preloading all five subs would hold ~5x the
-# substream bitrate on the 2.4 GHz cell 24/7 — that decision waits for a week
-# of the port-322 monitor's data (phase-8 §D).
-preload:
-  wyze_garage_door: "video"
-  wyze_back_yard: "video"
+# --- phase-8 A4, RETIRED 2026-08-26: preload is deliberately OFF.
+# It existed for the two slow floodlight mains (17-18 s to first frame cold,
+# the "[exec] timeout" + zero-byte races) — both artifacts of the MJPEG
+# transport, which is no longer the Panel's default: the RTSP player waits
+# out a cold producer start (3.9 s to a 1080p frame, measured). After the
+# cameras' 2026-08-26 RTSP re-setup the preloaded producers also EOF-looped
+# (go2rtc knocking the cameras every ~7-15 s without latching, while
+# on-demand pulls worked) — a standing knock-loop is worse than the cold
+# start it hid. Re-enable (shape below) only if MJPEG becomes the daily
+# driver again, and read phase-8-handoff.md N10's investigation protocol
+# first. "video" = video track only; audio would spend 2.4 GHz airtime on
+# nothing a tile plays.
+#
+# preload:
+#   wyze_garage_door: "video"
+#   wyze_back_yard: "video"

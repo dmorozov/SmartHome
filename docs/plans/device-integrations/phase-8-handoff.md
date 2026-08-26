@@ -668,20 +668,26 @@ outranking a fresh probe. Pure-Dart testable beside the existing suites.
 
 ### N10 — Small ops follow-ups
 
-- **Floodlight preload EOF loop (suspended 2026-08-26 — investigate before
-  re-enabling A4):** after the cameras' RTSP re-setup, the two preloaded
-  mains (`.54`/`.62` `stream0` via the `ffmpeg:…#video=copy#audio=copy`
-  producer) EOF-looped every ~7–15 s and never latched, while an on-demand
-  pull of the same restream delivered a frame in 9.6 s. The preload
-  entries are commented in the live yaml (backup
-  `go2rtc.yaml.bak-20260826-preload-suspend`); go2rtc restarted, log
-  quiet. To investigate: whether the RTSP re-setup changed the floodlights'
-  cold-start behaviour (they sleep harder? encoder starts slower than
-  go2rtc's producer patience?), whether preload's probe consumer differs
-  from a real consumer in producer selection, and whether a plain
-  `rtsps://` first producer (no ffmpeg wrap) latches where the wrapped one
-  does not. Reinstating is two uncomments + a restart. Note N3
-  (preload-all) inherits this question.
+- **Floodlight preload EOF loop — CLOSED 2026-08-26 by retiring A4
+  (superseded), not by root-causing it.** The record: after the cameras'
+  RTSP re-setup, the two preloaded mains (`.54`/`.62` `stream0` via the
+  `ffmpeg:…#video=copy#audio=copy` producer) EOF-looped every ~7–15 s and
+  never latched, while an on-demand pull of the same restream delivered a
+  frame in 9.6 s. Entries commented in the live yaml (backup
+  `go2rtc.yaml.bak-20260826-preload-suspend`), log quiet since. The
+  retirement's argument: preload's two jobs were MJPEG-path artifacts and
+  the shipped RTSP default has neither (cold main 3.9 s), while preload
+  is config-only (POST `/api/preload` is 405 on 1.9.14 — no runtime
+  arm/disarm), so reproduction costs production restarts and camera
+  knocks for a feature with no remaining job. **If preload is ever wanted
+  again** (MJPEG back as the daily driver, or N3/N4 reviving it), the
+  preserved protocol: uncomment one entry + restart; if the loop returns,
+  test whether preload's probe consumer selects producers differently
+  from a real consumer, and whether a plain `rtsps://` first producer (no
+  ffmpeg wrap) latches where the wrapped one does not — transient EOFs on
+  the wrapped producers also appear in normal use (seen on three subs
+  2026-08-26 ~04:07) and recover via retry when a real consumer holds;
+  the N2 log-skim should watch whether that noise grows.
 
 - **VAAPI:** blocked on the standard image (no Intel libva driver;
   `/dev/dri` IS mapped and the probe command is
@@ -781,6 +787,43 @@ fails mid-watch never comes back on its own, and the face just says
 4. Note the overlap that already exists: a probe-detected outage re-dials
    on the health flip (D1's gates); the ladder covers what the minute
    probe can't see fast — mid-stream EOFs and Wi-Fi blackouts.
+
+### N12 — Audio policy for the RTSP transport + the doorbell's LISTEN leg *(IMPLEMENTED 2026-08-26 — forced by the default flip, delivered as the inbound-audio feature)*
+
+**Why it existed:** MJPEG was silent by nature; fvp is not, and both Wyze
+stream tiers carry a `pcm_mulaw` track (probed via the restream) — so the
+RTSP default would have played six overlapping camera audios the moment
+the grid opened on a machine with working sound. The same player is also
+the missing LISTEN leg of ADR-0011 (inbound doorbell audio at the wall).
+
+**What landed (suite 579+2 after):**
+- `LiveVideoSession.setMuted(bool)` — the seam's new member. **Every
+  session is born muted** (all four implementations); unmuting is a
+  surface decision. MJPEG: no-op (no audio track). MSE/web: deliberate
+  no-op — `muted` is autoplay-load-bearing in a browser and programmatic
+  unmute pauses Chrome's autoplay-started video; sound on the second
+  screen is N9's kiosk-flag question. RTSP/fvp: real, `setVolume(0|1)`,
+  desired state tracked so an unmute racing `initialize` still lands
+  before a sample plays.
+- **The pool's silent-linger guarantee** (`live_video_keepalive.dart`
+  `_release`): every session kept for the linger is re-muted at release —
+  sound can never outlive the surface that asked for it, whichever of the
+  Popup's routes closed it. Pinned by a lease test.
+- **The Popup is the audible surface** (`device_popup.dart`): unmutes its
+  session at open (doorbell ding-Popup and camera Popups alike), and
+  **ducks to muted while the talk button is held** — ADR-0011's
+  half-duplex mechanism, the wall's speaker feeding the wall's mic being
+  the echo loop it breaks — restoring on release. Pinned by an
+  unmute/duck/restore ordering test.
+- Both wrappers (`_CountedSession`, the pool lease) delegate; the test
+  fake records `muted` + ordered `mutedChanges`.
+
+**Deliberately out, with reasons:** zoom/tile audio (the zoom would need
+`CameraFeed` to carry the muted want across re-dials — add it only if the
+owner asks for zoom sound); web audio (N9). **Operational note:** inbound
+doorbell audio exists only on the RTSP transport — switching production
+to `VIDEO_TRANSPORT=mjpeg` trades it away, which is worth remembering
+when weighing a rollback.
 
 ---
 

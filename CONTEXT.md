@@ -62,7 +62,7 @@ A rule that reacts to Device state (schedules, triggers, scenes). Automations li
 _Avoid_: rule, scene (unless meaning the Hub's scene concept specifically)
 
 **Popup**:
-A transient full-or-partial-screen overlay on the Panel, e.g. live doorbell video on ring. Video began Popup-only; the Cameras view (phase 7, below) is the second video surface. Still no recording. Since 2026-08-05 the thermostat's Popup also carries its setpoint controls — the Panel's first command beyond a toggle.
+A transient full-or-partial-screen overlay on the Panel, e.g. live doorbell video on ring. Video began Popup-only; the Cameras view (phase 7, below) is the second video surface. Still no recording. Since 2026-08-05 the thermostat's Popup also carries its setpoint controls — the Panel's first command beyond a toggle. Since 2026-08-26 the Popup is also the Panel's one AUDIBLE surface: every video session is born muted, the Popup unmutes its own (inbound doorbell audio, ADR-0011's LISTEN leg — RTSP transport only), and ducks it while push-to-talk is held.
 
 **Cameras**:
 The Panel's full-screen grid of camera tiles, slid out from a right-edge tab on the Dollhouse. Tiles start and stop their own live streams (the doorbell's is off by default — an open Ring session suppresses dings); closing the view stops them all.

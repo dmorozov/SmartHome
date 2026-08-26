@@ -1,5 +1,9 @@
 # TODO
 
+**IMPORTANT** This file should not be taken into account by AI agents!
+It is for the future planning by the human, not by AI.
+Reason: it is not prioritized and not cleanly defined.
+
 Create a new user friendly documentation:
 
 1. Configure / resolve network artifacts (search by MAC, giving names, Deco configuration, etc)
@@ -25,7 +29,11 @@ how to do backup for all keys / credentials?
 2. How to build the flutter app
 3. How to build the Sweet Home 3D plugin (our devices list to place in the house plan)
 
-
+We need research for what the recommended cameras to work with HA:
+- proper protocols easy to control
+- support sound
+- support different resolution / optimization for streaming.
+i.e. low resolution for the dashboard and high resolution when open specific camera
 
 cd /home/dmorozov/Work/SmartHome/panel
 
