@@ -48,3 +48,22 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 - `panel/` — the Panel Flutter app: dollhouse UI prototype, `FakeHub` and the real Home Assistant WebSocket client (pick with `HUB=fake|ha` in the environment, or `--dart-define=HUB=fake|ha` — the only route on web), structured `[panel]` logging, and golden tests that render the UI headlessly (baked and verified in the devcontainer, the canonical golden host; kiosk validation comes with the spike)
 - `spike/` — the Flutter-under-cage validation app + bootstrap script; runbook in `docs/research/flutter-cage-spike.md`
 - `docs/` — research (cited), ADRs, agent docs; `CONTEXT.md` — domain glossary
+
+## Video streaming
+
+RTSP is now the shipped default, with MJPEG as a first-class production switch. All green: analyzer clean, 575 passed + 2 skipped, web build compiles.
+
+How the resolution works now, on the appliance: VIDEO_TRANSPORT from the environment wins, then the build define, then the rtsp fallthrough. So in production:
+
+- Switch to MJPEG: set VIDEO_TRANSPORT=mjpeg in the service's environment and restart — no rebuild, by design.
+- Back to RTSP: remove the variable (or set rtsp) and restart.
+- The boot log names the winner every start: panel.video_transport transport=…, so a wall running the wrong player is one journald line away from diagnosis.
+
+The web build no longer consults the variable at all — its transport is MSE, stated plainly in main(), so a normal web boot no longer routes through the rtsp stub's misconfiguration warning.
+
+Two durable consequences recorded in the docs and memory:
+
+1. The MJPEG wrapper producers in the live go2rtc config are now load-bearing fallback, not dead lines — N5's "step 4 config retirement" is explicitly off the table while both transports stay first-class, and memory warns future sessions never to "clean them up." The Hub-side saving (52%→35% CPU, 573→117 MiB) still materializes whenever RTSP is the active transport, since the transcodes only run while an MJPEG consumer is attached.
+2. The §D adapter row is closed — prototype, adapter, soak, and default flip all done; the handoff's N5 carries the complete record including the switch procedure.
+
+The whole batch since your last commit is unstaged: N11 + its five review fixes, the two closed N10 checks, and this default flip. The one thing worth a glance in your next live run: the rounded-corner clipping on the now-default fvp textures — if anything looks off there, VIDEO_TRANSPORT=mjpeg is your instant rollback while we look at it.

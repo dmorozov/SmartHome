@@ -56,3 +56,23 @@ Four things in there are load-bearing:
 Stop it with q in that terminal.
 
 Sanity check if something looks wrong: the boot line prints [panel] I popup.go2rtc url=http://localhost:1984 — if that says url=absent, the GO2RTC_URL define didn't take and every tile will say "Not wired up yet" regardless of the config.
+
+### Manual evaluation between MJPEG-default and RTSP-default
+
+One caveat recorded honestly in the handoff: the synthetic selftest pattern turned out to be a light workout (CPU settled near 0.6% and the position callbacks mostly stayed quiet — the same selftest oddity flagged in the first gauntlet), so the heavy-decode endurance evidence rests on the first soak's 20 clean minutes at ~55% CPU with five real cameras, plus your own live VIDEO_TRANSPORT=rtsp session. go2rtc's log was silent the whole window, so nothing server-side misbehaved — and on the wall, any real stall becomes a 15-second watchdog trip and a spaced ladder re-dial, which is now well-tested machinery.
+
+Where that leaves the transport decision, which is yours: the two things standing between MJPEG-default and RTSP-default are your eyeball of the rounded-corner clipping in your live run, and your comfort with the evidence above. The flip itself is one line (defaultValue: 'rtsp' in main.dart), rollback is VIDEO_TRANSPORT=mjpeg in the environment — no rebuild — and after the flip has held for a while, N5's step 4 unlocks: retiring the five mjpeg/tiles transcodes from the live go2rtc config, which is the 52%→35% Hub CPU and ~450 MB memory win becoming permanent.
+
+┌──────────────────────────────────────────────────┬────────────┬───────────────┐
+│                       Path                       │ go2rtc CPU │ go2rtc memory │
+├──────────────────────────────────────────────────┼────────────┼───────────────┤
+│ MJPEG — 5 tile transcodes (today's shipped path) │ 52%        │ 573 MiB       │
+├──────────────────────────────────────────────────┼────────────┼───────────────┤
+│ RTSP — 6 stream copies (the new fvp path)        │ 35%        │ 117 MiB       │
+├──────────────────────────────────────────────────┼────────────┼───────────────┤
+│ Idle reference                                   │ 0%         │ 18 MiB        │
+└──────────────────────────────────────────────────┴────────────┴───────────────┘
+
+And the RTSP figure flatters MJPEG: those 35% included selftest's own ffmpeg pattern generator, so the camera-only cost of serving RTSP copies is lower still. The reason is structural — on the MJPEG path go2rtc runs one ffmpeg per watched stream, re-encoding H.264 into JPEG frames at 10 fps forever; on the RTSP path it just relays the camera's already-encoded H.264 bytes. That's also the ~7× difference on the Wi-Fi: ~186 kB/s per MJPEG tile versus roughly 25–30 kB/s for the substream's H.264.
+
+Panel-side is the unmeasured cell: the fvp prototype cost ~55% of one core for six streams including software-GL rendering under Xvfb (a real GPU session renders cheaper), while the MJPEG Panel path was never run through the same harness — but it does a JPEG decode per frame per tile on the CPU by construction, so theory points the same direction. If you want that cell filled before flipping the default, the fair test is running your live Panel once per transport and comparing ps on the panel process — two minutes of work, say the word.

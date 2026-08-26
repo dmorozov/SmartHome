@@ -763,8 +763,75 @@ void main() {
             'a listener never fires for a settled session — the open '
             'path must report it itself',
       );
-      expect(find.text('Live view failed'), findsOneWidget);
+      // Born failed, the ladder takes over at once (N11) — but nothing was
+      // ever up, so the quiet notice stays "Connecting…": "re-" claims a
+      // restoration this stream never earned (review, 2026-08-26).
+      expect(find.text('Connecting…'), findsOneWidget);
+      expect(find.text('Reconnecting…'), findsNothing);
       expect(find.text('LIVE'), findsNothing);
+      await unmount(tester);
+    },
+  );
+
+  testWidgets(
+    'the zoom count climbs ON SCREEN through same-phase failures — the one '
+    'climb a phase listener cannot see',
+    (tester) async {
+      // Every dial is born failed synchronously: retrying→retrying, no
+      // phase notification — only the count notifier can repaint the face.
+      await pumpPanel(
+        tester,
+        opener: (url, {required name}) => SettledLiveVideoSession(
+          LiveVideoPhase.failed,
+          failure: 'refused',
+        ),
+        stage: (house) =>
+            houseWithStream(house, 'cam-living', 'wyze_living_room'),
+      );
+      await openCameras(tester);
+
+      await tester.tap(find.byKey(const ValueKey('tile-cam-living')));
+      await tester.pumpAndSettle();
+      // Never played: honest words are "Connecting…", counted out loud.
+      expect(find.text('Connecting… try 2'), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 6));
+      expect(find.text('Connecting… try 3'), findsOneWidget,
+          reason: 'the count notifier fired where phase stayed silent');
+      await unmount(tester);
+    },
+  );
+
+  testWidgets(
+    'a zoom that dies mid-watch reconnects on its own and counts its tries '
+    'out loud',
+    (tester) async {
+      await pumpPanel(
+        tester,
+        stage: (house) =>
+            houseWithStream(house, 'cam-living', 'wyze_living_room'),
+      );
+      await openCameras(tester);
+      go2rtc.opened.last.plays();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('tile-cam-living')));
+      await tester.pumpAndSettle();
+      final zoomSession = go2rtc.opened.last;
+      zoomSession.plays();
+      await tester.pump();
+
+      // The picture dies mid-watch. Person-origin camera: the ladder runs,
+      // and the face says which attempt is coming — never a bare
+      // "Connecting…" over a stream the person just watched die.
+      zoomSession.fails('mid-watch death');
+      await tester.pump();
+      expect(find.text('Reconnecting… try 2'), findsOneWidget);
+
+      // Through the re-dial's own connecting phase the words hold.
+      await tester.pump(const Duration(seconds: 6));
+      expect(find.text('Reconnecting… try 2'), findsOneWidget);
+      expect(find.text('Connecting…'), findsNothing);
       await unmount(tester);
     },
   );

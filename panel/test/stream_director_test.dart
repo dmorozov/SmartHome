@@ -228,13 +228,122 @@ void main() {
       });
     });
 
-    test('a person-origin failure rests at failed — no uninvited retry', () {
+    test('a person-origin CAMERA failure climbs the ladder — a person '
+        'standing at a dead zoom wants it back, not a re-tap', () {
+      // Superseded 2026-08-26 (owner request): this case used to pin the
+      // opposite — person-origin rests at failed. That property now belongs
+      // to the doorbell alone (next case).
       fakeAsync((async) {
         final d = director(open: alwaysFails());
         final feed = d.attach(cam('c1', stream: 'main'), role: FeedRole.zoom);
+        expect(feed.phase.value, FeedPhase.retrying);
+        expect(feed.retryAttempt.value, 1);
+        // First rung (5 s): the re-dial happens and fails again.
+        async.elapse(const Duration(seconds: 6));
+        expect(feed.retryAttempt.value, 2);
+        expect(feed.phase.value, FeedPhase.retrying);
+        d.dispose();
+      });
+    });
+
+    test('the count notifies on its own — a synchronous re-dial failure is '
+        'retrying→retrying and phase alone stays silent', () {
+      fakeAsync((async) {
+        final d = director(open: alwaysFails());
+        final feed = d.attach(cam('c1', stream: 'main'), role: FeedRole.zoom);
+        var phaseFired = 0;
+        var countFired = 0;
+        feed.phase.addListener(() => phaseFired++);
+        feed.retryAttempt.addListener(() => countFired++);
+        async.elapse(const Duration(seconds: 6));
+        expect(feed.retryAttempt.value, 2);
+        expect(countFired, greaterThan(0),
+            reason: 'a counted face rebuilds from THIS notifier');
+        expect(phaseFired, 0,
+            reason: 'the ValueNotifier == short-circuit: retrying→retrying '
+                'never fires — which is why the count must');
+        d.dispose();
+      });
+    });
+
+    test('a stop to idle is a clean slate: the count resets and a resume '
+        'starts the ladder at rung zero', () {
+      fakeAsync((async) {
+        final go = FakeGo2rtc();
+        final d = director(open: go.open);
+        final feed =
+            d.attach(cam('c1', stream: 'main', sub: 'small'), role: FeedRole.tile);
+        go.opened.last.plays();
+        go.opened.last.fails('died mid-watch');
+        expect(feed.retryAttempt.value, 1);
+        feed.visible = false;
+        async.elapse(d.policy.offscreenLinger + const Duration(seconds: 1));
+        expect(feed.phase.value, FeedPhase.idle);
+        expect(feed.retryAttempt.value, 0,
+            reason: 'the getter\'s contract: 0 while none is pending — a '
+                'scroll-back must not wear "Reconnecting…" for a fresh '
+                'start, nor inherit a mid-ladder backoff');
+        d.dispose();
+      });
+    });
+
+    test('ladder re-dials take admission: two cameras that died together '
+        'come back spaced, never as a burst', () {
+      fakeAsync((async) {
+        var opens = 0;
+        LiveVideoSession failing(Uri url, {required String name}) {
+          opens++;
+          return SettledLiveVideoSession(LiveVideoPhase.failed,
+              failure: 'refused');
+        }
+
+        final d = director(open: failing);
+        d.attach(cam('c1', stream: 'm1'), role: FeedRole.zoom);
+        d.attach(cam('c2', stream: 'm2'), role: FeedRole.zoom);
+        // The taps themselves are unspaced by design — spacing is for
+        // storms, and a human tap is one dial.
+        expect(opens, 2);
+        // Both retry timers fire in the same tick five seconds later; the
+        // re-dials are timer-born, so the second waits out the gate.
+        async.elapse(const Duration(seconds: 5, milliseconds: 50));
+        expect(opens, 3, reason: 'first re-dial out, second held at the gate');
+        async.elapse(const Duration(milliseconds: 450));
+        expect(opens, 4);
+        d.dispose();
+      });
+    });
+
+    test('a person-origin DOORBELL failure rests at failed — the Ring '
+        'stream is never re-dialled on a timer (#177014)', () {
+      fakeAsync((async) {
+        final d = director(open: alwaysFails());
+        final feed = d.attach(
+            cam('door', stream: 'ring', kind: DeviceKind.doorbell),
+            role: FeedRole.zoom);
         expect(feed.phase.value, FeedPhase.failed);
         async.elapse(const Duration(minutes: 5));
         expect(feed.phase.value, FeedPhase.failed);
+        d.dispose();
+      });
+    });
+
+    test('the count resets when a picture lands — the next outage is a '
+        'fresh "try 2", not "try 9"', () {
+      fakeAsync((async) {
+        final go = FakeGo2rtc();
+        final d = director(open: go.open);
+        final feed = d.attach(cam('c1', stream: 'main'), role: FeedRole.zoom);
+        go.opened.last.fails('mid-watch death');
+        expect(feed.phase.value, FeedPhase.retrying);
+        expect(feed.retryAttempt.value, 1);
+        async.elapse(const Duration(seconds: 5, milliseconds: 450));
+        // The scheduled re-dial keeps the count through its connecting
+        // phase — that is what lets a face say "Reconnecting…" instead of
+        // the first-dial's "Connecting…".
+        expect(feed.retryAttempt.value, 1);
+        go.opened.last.plays();
+        expect(feed.phase.value, FeedPhase.playing);
+        expect(feed.retryAttempt.value, 0);
         d.dispose();
       });
     });

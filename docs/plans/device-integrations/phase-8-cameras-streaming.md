@@ -135,7 +135,11 @@ stream policy finally lives:
   carries it alone.
 - **Retry**: failed auto-live tiles re-dial at 5 s → 15 s → 60 s → every
   60 s (Wyze firmware drops off the network for seconds routinely; "changes
-  on refresh" is what a no-retry policy looks like).
+  on refresh" is what a no-retry policy looks like). *Amended 2026-08-26
+  (owner request, handoff N11): person-origin CAMERA feeds — the zoom —
+  ride the same ladder now; a person standing at a picture that died wants
+  it back, not a re-tap. The doorbell keeps manual-only retry (#177014:
+  a timered re-dial on the Ring stream re-opens cloud sessions).*
 - **Viewport**: auto-live tiles start on becoming visible and stop on a
   45–60 s debounce after scroll-out (the grid scrolls today: 6 tiles
   visible, the 7th below the fold at the owner's resolution). Tiles a person
@@ -146,9 +150,11 @@ stream policy finally lives:
   (default cacheExtent), and kept-alive live tiles never get `dispose()` on
   scroll-out.
 - **Honest faces**: queued = the idle face ("starting…" only past ~1 s);
-  "Connecting…" only while a dial is in flight; retrying = aged still +
-  quiet badge; offline = aged still + "offline since…". LIVE badge
-  semantics unchanged.
+  "Connecting…" only while a FIRST dial is in flight — a ladder re-dial
+  says "Reconnecting…" instead (zoom counts it out loud: "Reconnecting…
+  try #2"; tiles wear the quiet corner variant over the aged still —
+  2026-08-26, handoff N11); offline = aged still + "offline since…". LIVE
+  badge semantics unchanged.
 - **Policy is data**: auto-live substreams remain the shipped default —
   phase-7 §B3 stands. Stills-first (Frigate's "Smart Streaming" default,
   the largest airtime lever available) is a policy swap, not a rewrite,
@@ -173,7 +179,7 @@ sessions still log exactly once.
 |---|---|
 | ~~Stagger verdict~~ **CLOSED 2026-08-26**: 4 rounds (2 sim / 2 stag-2s) at five healthy cameras, 20/20 pulls ok in both modes → `dialSpacing` stays 400 ms as hygiene, per the decision rule. Simultaneous showed a real but non-fatal tail: 2 of 10 sim dials (one round) hit first-attempt EOF + retry (9.9 s / 12.2 s to first frame vs ≤6.0 s staggered max); staggered rounds were uniformly clean. Full data in the handoff's N1. | — |
 | Preload-all-substreams | a week of A2 monitor data |
-| H.264/RTSP adapter on the appliance — **prototype AND adapter built 2026-08-26** (fvp; `live_video_rtsp.dart`, `VIDEO_TRANSPORT=rtsp\|mjpeg`, default mjpeg; handoff N5 carries both records). Remaining: the 2 h soak verdict, a real-session eyeball of texture clipping, then the default flip and config retirement (deletes the MJPEG transcodes) | soak + owner's eyeball |
+| H.264/RTSP adapter on the appliance — **DONE 2026-08-26**: prototype + adapter built (fvp; `live_video_rtsp.dart`), soak passed (no leak), and the **default is `rtsp`** by owner decision — with `mjpeg` kept as a first-class production switch (`VIDEO_TRANSPORT=mjpeg` + restart, no rebuild). Because both stay first-class, the MJPEG wrapper producers stay in the live go2rtc config — no retirement. Handoff N5 carries the full record | — |
 | Native `wyze://` source (1.9.14, experimental TUTK — bypasses the RTSP daemon entirely) | monitor shows chronic daemon death |
 | Idle-return dedup (CamerasView / DevicePopup copies) | a third surface (the web second screen) |
 | Web build platform-view ceiling (Flutter web caps overlays at 7; 6 MSE tiles + a Popup video is at it — detach grid views under a Popup) | web second-screen work |

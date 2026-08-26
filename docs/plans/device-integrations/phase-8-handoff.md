@@ -287,7 +287,10 @@ argument in the module docs:
 9. No `Timer` outlives its owner: feeds cancel on `release()`, the
    Director on `dispose()`; the view-owned Director dies with the view.
 10. Person-origin exemptions: no viewport stop, no overlay pause, no
-    automatic retry, no admission spacing.
+    admission spacing. *The no-automatic-retry exemption was retired
+    2026-08-26 (N11): person-origin cameras ride the ladder; only a
+    person-origin NON-camera (the doorbell) rests at `failed` — that
+    narrowing is itself pinned (#177014).*
 11. Tiles dial `DirectorPolicy.tileStream` (substream-first), zoom/Popup
     dial the main stream; zoom-replaces-grid stays a mode, not a route.
 12. go2rtc stays the ONLY RTSP client of any camera (Wyze serves ~3–4
@@ -435,16 +438,23 @@ only RTSP client of the cameras). Measured, headless under Xvfb
   client waits out the producer start; no 17–18 s pathology, no
   zero-byte race on this path.
 - **Teardown:** consumer count drained to 0 both runs.
-- **Soak: cut short at ~20 min, clean as far as it ran.** Stopped
-  deliberately (two Wyze daemons died mid-soak — the chronic
-  daemon-death pattern, logged under N2 — and the owner was live-testing
-  on the same fleet, so continuing meant knocking cameras for marginal
-  data). While it ran: 6 streams, **zero FAIL lines**, RSS 453 MB at
-  start-of-sampling → 490 MB ten minutes later (one interval — the
-  plateau-vs-leak question is NOT answered; re-run the soak against
-  `selftest`-only or off-hours before flipping the default transport, and
-  don't let two writers share one log file — the app's `>` redirect
-  clobbered the monitor's `>>` samples).
+- **Soak verdict (two runs, 2026-08-26): no leak.** Run 1 (five live
+  cameras + selftest) was cut short at ~20 min deliberately (two Wyze
+  daemons died mid-soak — N2's pattern — while the owner live-tested):
+  zero failures, sustained ~55 % CPU decode, RSS 453 → 490 MB across its
+  one sampled interval. Run 2 (`selftest` ×6, camera-free) went the full
+  2 h: zero failures, clean teardown, and **RSS dead flat at 383 MB for
+  110 minutes across 11 samples** — the plateau answer. Caveat stated
+  honestly: run 2's CPU collapsed to ~0.6 % after the first minutes and
+  only one player ever advanced `position` (the known selftest anomaly),
+  so its decode load was light-or-stalled — sustained-heavy-decode
+  evidence rests on run 1's 20 clean minutes plus the owner's live
+  `VIDEO_TRANSPORT=rtsp` session. go2rtc's log was silent throughout run
+  2 (no producer events), so the quiet is fvp-side handling of the
+  synthetic pattern, not a server fault; on the wall the adapter's 15 s
+  stall watchdog turns any real stall into a ladder re-dial by design.
+  (Ops note from run 1: never let the app's `>` redirect and a monitor's
+  `>>` share one log file.)
 - **Still open from the gauntlet:** the soak re-run (above), texture
   clipping under `PanelTheme` rounded corners (needs a real GPU session —
   the owner's live `VIDEO_TRANSPORT=rtsp` run is exactly that), and the
@@ -509,12 +519,17 @@ everything else). What landed, against the plan below it:
   native library is not built for VM test runs (the MJPEG live suite is
   pure `dart:io`) — the live proof is the `rtsp_probe` prototype run and
   the wall itself under `VIDEO_TRANSPORT=rtsp`.
-- To try it on the dev machine:
-  `cd panel && VIDEO_TRANSPORT=rtsp flutter run -d linux` (plus the usual
-  HUB/HA_URL/HA_TOKEN/GO2RTC_URL). MJPEG stays the shipped default until
-  the soak and a real-session eyeball (texture clipping under the rounded
-  corners) pass — then flipping the default is a one-line define change,
-  and step 4 (config retirement) unlocks.
+- **Default FLIPPED to `rtsp` 2026-08-26** (owner decision, after the
+  soak verdict and a live session): `main()` resolves
+  `VIDEO_TRANSPORT` environment-first with `rtsp` as the fallthrough on
+  the appliance; the web build never consults it (its transport is MSE,
+  stated in `main()` rather than routed through the stub's
+  misconfiguration warning). **Both transports are first-class peers by
+  the same decision** — the owner switches in production with
+  `VIDEO_TRANSPORT=mjpeg` + restart, no rebuild — which means **step 4
+  below (retiring the `mjpeg/tiles`/`mjpeg/zoom` wrapper producers from
+  the live go2rtc config) is OFF the table**: the fallback needs them
+  serving. Revisit only if the owner ever demotes MJPEG outright.
 
 The original plan, for reference:
 - New file `panel/lib/ui/video/live_video_rtsp.dart`: a
@@ -674,20 +689,65 @@ outranking a fresh probe. Pure-Dart testable beside the existing suites.
   option is the `alexxit/go2rtc:1.9.14-hardware` image variant — an owner
   pin decision (bigger image, different contents). Moot if N5 retires the
   MJPEG transcodes.
-- **Camera status text cosmetics (verify, then decide):** the entity swap
-  means camera Devices fold `StatusState('on'/'off')`. Check whether that
-  string surfaces anywhere user-visible (Dollhouse pin popups/status
-  rows) — if it does, prettify per-kind in the presentation layer or
-  accept it. Not asserted as a problem; nobody has looked yet.
-- **HA log noise:** after a few days, skim `hub/ha-config/home-assistant.log`
-  for `command_line` warnings (a timing-out probe exits non-zero by
-  design — `|| echo OFF` keeps the sensor honest, but HA may still log
-  the non-zero exit). If noisy, wrap the command to always exit 0.
+- **Camera status text cosmetics — VERIFIED 2026-08-26, nothing to do:**
+  the raw `StatusState('on'/'off')` never reaches a user-visible surface.
+  `DevicePresentation.statusText` renders only in the non-video Popup
+  body; video kinds take `_LiveVideoBox` (`device_popup.dart` ~890), and
+  Dollhouse pins label only `PowerState` compactly. Re-check only if a
+  camera kind ever grows a non-video status row.
+- **HA log noise — VERIFIED 2026-08-26, quiet:** zero `command_line`
+  lines in `hub/ha-config/home-assistant.log` after a day of the five
+  probes at 60 s (`|| echo OFF` keeps the exit clean). Nothing to wrap.
 - **Wall deployment:** the wall build must pick up the Panel changes when
   the kiosk finally exists (no cage/touchscreen yet as of 2026-08-25 —
   commissioning 06 stops at Xvfb first-light).
 
-### N11 — Mid-watch reconnect + honest retry faces *(owner request, live wall session 2026-08-26; queued behind N5 per the owner's "end of list")*
+### N11 — Mid-watch reconnect + honest retry faces *(IMPLEMENTED 2026-08-26, same day as requested — record below; the original sketch follows it)*
+
+What landed (suite 571+2 after):
+- `_Feed._onDialFailed`: the ladder now serves person-origin feeds whose
+  kind is `DeviceKind.camera`; a person-origin non-camera (the doorbell)
+  still rests at `failed` — the arm carries the #177014 argument.
+- `CameraFeed.retryAttempt` (0 when none; reset on playing and on
+  health-flip recovery; HOLDS through a re-dial's connecting phase — that
+  persistence is what the faces read). Doc on the interface states the
+  +1 display rule: the first re-dial reads "try 2".
+- Faces: zoom — "Reconnecting… try #N" for `retrying` AND for
+  `connecting` with a nonzero count ("Connecting…" is first-dials only);
+  tile — quiet "Reconnecting…" corner tag over the aged still for
+  `retrying`, word-swap for re-dial connecting. `failed` keeps "Live view
+  failed" and is now doorbell-territory only.
+- Tests: the old "person-origin rests at failed" pin is superseded and
+  says so in place; new pins — camera-person climbs the ladder, doorbell
+  rests (canary), count resets on playing and holds through connecting;
+  view-level: a killed zoom shows "Reconnecting… try 2" through the
+  re-dial. Invariant §3.10 amended.
+
+**Adversarial review round (same day, 10 agents), all confirmed findings
+fixed — suite 575+2 after:**
+- *(major)* the count climbed with NO notification on same-phase
+  retrying→retrying (a re-dial failing synchronously never leaves
+  retrying, and `ValueNotifier`'s `==` short-circuit swallows the
+  setPhase) — the counted face froze at "try 2". Fix: `retryAttempt` is a
+  `ValueListenable<int>`; both faces listen to it beside `phase`; pinned
+  by a notifier-count test and an on-screen "try 2 → try 3" widget test.
+- *(minor ×2)* `_stop()` kept the count and the ladder rung across
+  idle-park → resume — a scrolled-back tile wore "Reconnecting…" for a
+  fresh start and inherited mid-ladder backoff. Fix: `_stop()` zeroes the
+  count (the getter's own contract); pinned.
+- *(minor)* person ladder re-dials bypassed admission — N cameras dying
+  together re-dialled in one tick. Fix: `_requestDial(ladder: true)`
+  routes timer-born dials through the gate; the tap itself stays
+  unspaced; pinned (two-feed spacing test).
+- *(minor)* a born-failed FIRST attempt claimed "Reconnecting…" though no
+  picture was ever up. Fix: faces track `_sawPlaying`; a first connect
+  that keeps failing stays "Connecting…", counted ("Connecting… try 3").
+- *(nit ×2)* the kind wall is now origin-blind (`kind == camera` alone
+  decides the ladder — no policy path dials a non-camera today, but the
+  wall is structural), and the stale "retries never" / "policy-started"
+  doc passages were rewritten.
+
+The original sketch, for the reasoning:
 
 **Observed (owner):** the grid and the zoom both work — but a stream that
 fails mid-watch never comes back on its own, and the face just says

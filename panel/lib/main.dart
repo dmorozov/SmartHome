@@ -96,15 +96,21 @@ Future<void> main() async {
   // phase 4 asked for — it borrows the secret-withholding vocabulary for an
   // address and throws away the host, which is the one fact worth having.
   Log.info('popup', 'go2rtc', urlForLog(config.go2rtcUrl));
-  // Which player the appliance dials with (phase-8 N5): `rtsp` plays
-  // go2rtc's H.264 restream through fvp; anything else is the shipped
-  // MJPEG default. Environment first, build define second, like every Hub
-  // setting above and for the same reason — rolling the wall back from a
-  // misbehaving transport must cost a restart, not a rebuild. On web the
-  // rtsp opener falls through to the platform player and says so itself.
-  final videoTransport =
-      environment['VIDEO_TRANSPORT'] ?? _buildVideoTransport ?? 'mjpeg';
-  if (videoTransport != 'mjpeg' && videoTransport != 'rtsp') {
+  // Which player the appliance dials with (phase-8 N5): `rtsp` — the
+  // default since 2026-08-26 (owner decision: measured cheaper end to end,
+  // go2rtc 35 % CPU / 117 MiB serving copies vs 52 % / 573 MiB
+  // transcoding MJPEG) — plays go2rtc's H.264 restream through fvp;
+  // `mjpeg` remains a FIRST-CLASS peer, not a deprecation: the owner
+  // switches transports in production by setting `VIDEO_TRANSPORT=mjpeg`
+  // and restarting, no rebuild — which is why it resolves environment
+  // first, build define second, like every Hub setting above. The web
+  // build does not consult it at all: a browser's transport is MSE,
+  // full stop (phase-8 N9), and routing web through the rtsp stub's
+  // fallback would log a misconfiguration warning for a normal boot.
+  final videoTransport = kIsWeb
+      ? 'mse'
+      : environment['VIDEO_TRANSPORT'] ?? _buildVideoTransport ?? 'rtsp';
+  if (!const {'mse', 'mjpeg', 'rtsp'}.contains(videoTransport)) {
     Log.warn('panel', 'video_transport_unknown',
         {'asked': videoTransport, 'using': 'mjpeg'});
   }

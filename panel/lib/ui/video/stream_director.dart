@@ -53,9 +53,11 @@ enum FeedPhase {
   /// Frames are arriving; [CameraFeed.view] is worth rendering.
   playing,
 
-  /// A policy-started dial failed and the backoff ladder
-  /// ([DirectorPolicy.retrySchedule]) has the next rung armed. The next
-  /// dial goes through the same admission discipline as any other.
+  /// A CAMERA dial failed — policy- or person-started alike since
+  /// 2026-08-26 — and the backoff ladder ([DirectorPolicy.retrySchedule])
+  /// has the next rung armed. The next dial goes through the same
+  /// admission discipline as any other; [CameraFeed.retryAttempt] counts
+  /// the climb for the faces.
   retrying,
 
   /// Camera Health says unreachable, so nothing is dialled at all — not
@@ -63,9 +65,11 @@ enum FeedPhase {
   /// at go2rtc. Leaves this state only when Health stops saying so.
   offline,
 
-  /// A person-started dial failed, and the Director will not retry
-  /// uninvited — [CameraFeed.start] asks again. Policy-started failures
-  /// never rest here; they go to [retrying].
+  /// A dial failed and no automatic retry is coming. Since 2026-08-26 only
+  /// a NON-camera can rest here — in practice the doorbell, whose Ring
+  /// stream must never be re-dialled on a timer (#177014); the wall is
+  /// kind-structural, origin-blind. [CameraFeed.start] asks again. Every
+  /// camera failure goes to [retrying] instead.
   failed,
 
   /// Nothing to dial and nothing to wait for: no stream name for this role,
@@ -266,6 +270,23 @@ abstract interface class CameraFeed {
   /// person-origin feeds and for [FeedRole.zoom]. No-op after [release].
   set visible(bool value);
 
+  /// How many automatic re-dials the ladder has scheduled since the last
+  /// picture — 0 while none is pending, reset the moment a dial reaches
+  /// playing, on a health-flip recovery, and on a stop to idle (an idle
+  /// park is a clean slate: the resume dial is a fresh start at rung
+  /// zero, not a resumption of somebody else's backoff). For faces: the
+  /// human count is one ahead ("try #2" is the FIRST re-dial —
+  /// `value + 1` — because the person watched attempt #1 fail). Stays put
+  /// through the re-dial's own connecting phase, which is what lets a
+  /// face keep counting instead of resetting to the first-dial words.
+  ///
+  /// A listenable, not a getter, and the reason is the one climb phase
+  /// cannot report: a re-dial that fails synchronously goes
+  /// retrying→retrying, no phase notification fires, and a face that
+  /// rebuilt only on phase would freeze its count. Listen to this beside
+  /// [phase]; remove the listener in `dispose` like any other.
+  ValueListenable<int> get retryAttempt;
+
   /// Camera Health's current verdict for this feed's Device — [Reachability
   /// .unknown] where no health source is wired. Exposed because phase is
   /// not a health proxy: a feed parked at [FeedPhase.idle] (or settled at
@@ -278,7 +299,9 @@ abstract interface class CameraFeed {
   Reachability get reachability;
 
   /// A person asked. Marks the feed person-origin (never viewport-stopped,
-  /// never overlay-paused, no automatic retry), and: from [FeedPhase.idle]
+  /// never overlay-paused; cameras keep the retry ladder — a person
+  /// standing at a dead zoom wants it back, not a re-tap — while the
+  /// doorbell stays manual-only, #177014), and: from [FeedPhase.idle]
   /// dials now — spacing is for storms, not for a standing human; from
   /// [FeedPhase.failed] or [FeedPhase.retrying] re-dials; from
   /// [FeedPhase.offline] does NOT dial — Health is absolute — but the
@@ -550,9 +573,14 @@ class _Feed implements CameraFeed {
   Reachability get reachability =>
       director.health?.reachableOf(device.id).value ?? Reachability.unknown;
 
+  @override
+  ValueListenable<int> get retryAttempt => _retryAttempt;
+
   /// Person-origin: a zoom from birth, a tile after [start]. Exempt from
-  /// viewport stops, overlay pauses and the retry ladder — and from
-  /// admission spacing, because somebody is standing there.
+  /// viewport stops, overlay pauses and admission spacing, because somebody
+  /// is standing there. The retry ladder is NOT an exemption any more
+  /// (2026-08-26): a person-origin camera reconnects like any tile — only
+  /// a person-origin non-camera (the doorbell) rests at failed (#177014).
   var personOrigin = false;
 
   var _visible = true;
@@ -563,7 +591,12 @@ class _Feed implements CameraFeed {
   /// now in one place).
   var _openLogged = false;
   var _failureLogged = false;
-  var _retryAttempt = 0;
+  // A notifier, not an int: the ladder can climb WITHOUT a phase change —
+  // a re-dial that fails synchronously goes retrying→retrying, which
+  // `ValueNotifier`'s == short-circuit swallows — and a counted face that
+  // only listens to phase freezes at "try 2" while the Director is on try
+  // six (review, 2026-08-26).
+  final _retryAttempt = ValueNotifier(0);
 
   Timer? _lingerTimer;
   Timer? _overlayTimer;
@@ -606,18 +639,19 @@ class _Feed implements CameraFeed {
     _requestDial();
   }
 
-  void _requestDial() {
+  void _requestDial({bool ladder = false}) {
     if (released) return;
     if (director._reachability(device.id) == Reachability.unreachable) {
       Log.debug('cameras', '${_eventPrefix}_offline', {'device': device.id});
       setPhase(FeedPhase.offline);
       return;
     }
-    if (personOrigin) {
+    if (personOrigin && !ladder) {
       // No gate: spacing paces policy storms (a view opening five tiles),
       // and a human tap is one dial. Not arming it either — a zoom-and-back
       // would otherwise hold the returning grid's re-attaches at the gate,
-      // turning the pool's free re-attach into a visible wait.
+      // turning the pool's free re-attach into a visible wait. A LADDER
+      // re-dial is not a tap — it is timer-born and takes admission below.
       dial();
     } else {
       director._admit(this);
@@ -698,7 +732,7 @@ class _Feed implements CameraFeed {
   }
 
   void _onReachedPlaying() {
-    _retryAttempt = 0;
+    _retryAttempt.value = 0;
     director._reportOutcome(device.id, connected: true);
   }
 
@@ -720,22 +754,38 @@ class _Feed implements CameraFeed {
       setPhase(FeedPhase.offline);
       return;
     }
-    if (!personOrigin) {
+    // The ladder is a KIND wall, not an origin rule (owner request
+    // 2026-08-26; sharpened by its review): cameras reconnect whoever
+    // started them — a person standing at a zoom that died mid-watch wants
+    // the picture back, not an instruction to re-tap — and a non-camera
+    // NEVER rides a timer, whoever started it. The doorbell is the case
+    // that matters: an automatic re-dial on the Ring stream re-opens cloud
+    // sessions (#177014), which only a person's own tap may do. No policy
+    // path dials a non-camera today (`autoLive` is a camera fact), so the
+    // else arm is the doorbell's in practice — but the wall is structural,
+    // same as the still loop's `_grabStream`.
+    if (device.kind == DeviceKind.camera) {
       final schedule = director.policy.retrySchedule;
-      final rung = _retryAttempt < schedule.length
-          ? schedule[_retryAttempt]
+      final rung = _retryAttempt.value < schedule.length
+          ? schedule[_retryAttempt.value]
           : schedule.last;
-      _retryAttempt++;
+      _retryAttempt.value++;
       Log.debug('cameras', '${_eventPrefix}_retry', {
         'name': _streamName,
-        'attempt': _retryAttempt,
+        'attempt': _retryAttempt.value,
         'in_s': rung.inSeconds,
       });
       setPhase(FeedPhase.retrying);
       _retryTimer?.cancel();
       _retryTimer = Timer(rung, () {
         if (released || _phase.value != FeedPhase.retrying) return;
-        _requestDial();
+        // A ladder re-dial is timer-born, not person-born: it takes the
+        // admission gate like any policy dial, because N cameras whose
+        // daemons died together must come back spaced — the person
+        // exemption is for the tap itself, not for the storm the ladder
+        // can synthesize five seconds after a Wi-Fi blip (review,
+        // 2026-08-26).
+        _requestDial(ladder: true);
       });
     } else {
       setPhase(FeedPhase.failed);
@@ -802,6 +852,11 @@ class _Feed implements CameraFeed {
     director._unqueue(this);
     _retryTimer?.cancel();
     _retryTimer = null;
+    // An idle park is a clean slate — the getter's own contract ("0 while
+    // none is pending"): the resume dial after a scroll-in must neither
+    // wear "Reconnecting…" for what a person experiences as a fresh start,
+    // nor inherit a mid-ladder backoff rung (review, 2026-08-26).
+    _retryAttempt.value = 0;
     _closeSession(reason);
     setPhase(FeedPhase.idle);
   }
@@ -824,7 +879,7 @@ class _Feed implements CameraFeed {
       return;
     }
     if (_phase.value == FeedPhase.offline) {
-      _retryAttempt = 0;
+      _retryAttempt.value = 0;
       if (personOrigin) {
         // A person-origin feed's recovery dial is theirs — they asked while
         // the camera was down, and the answer arrives now, viewport or not.

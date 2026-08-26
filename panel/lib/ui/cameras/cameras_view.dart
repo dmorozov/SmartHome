@@ -518,6 +518,11 @@ class CameraTileState extends State<CameraTile>
   late final CameraFeed _feed;
   var _wasActive = false;
 
+  /// Whether a picture was ever up on this tile — "Reconnecting…" is worn
+  /// only over a restoration; a first connect that keeps failing stays
+  /// "Connecting…" (the zoom's rule, quietly).
+  var _sawPlaying = false;
+
   /// The viewport fact, mirrored for the grab gate — the feed's own
   /// `visible` is a setter (push-only, by the seam's design), and the gate
   /// needs to read it.
@@ -547,6 +552,10 @@ class CameraTileState extends State<CameraTile>
     super.initState();
     _feed = widget.director.attach(_device, role: FeedRole.tile);
     _feed.phase.addListener(_onPhase);
+    // Both notifiers: the retry count can climb without a phase change
+    // (retrying→retrying on a synchronous re-dial failure), and a counted
+    // face that listens to phase alone freezes.
+    _feed.retryAttempt.addListener(_onPhase);
     _wasActive = _feed.phase.value.isActive;
     if (_wasActive) {
       widget.onWent(device: _device.id, live: true);
@@ -561,6 +570,7 @@ class CameraTileState extends State<CameraTile>
   void dispose() {
     _refresh?.cancel();
     _feed.phase.removeListener(_onPhase);
+    _feed.retryAttempt.removeListener(_onPhase);
     // The census is deliberately not drained here: children unmount before
     // their parent, so a census drained in tile dispose always read 0 by
     // the time the view's closing line was written (measured).
@@ -570,6 +580,7 @@ class CameraTileState extends State<CameraTile>
 
   void _onPhase() {
     if (!mounted) return;
+    if (_feed.phase.value == FeedPhase.playing) _sawPlaying = true;
     final active = _feed.phase.value.isActive;
     if (active != _wasActive) {
       _wasActive = active;
@@ -780,13 +791,22 @@ class CameraTileState extends State<CameraTile>
       case FeedPhase.playing:
         return _feed.view;
       // Honest text, never a spinner — the same rule as the Popup, for
-      // the same pumpAndSettle and same-lie reasons.
+      // the same pumpAndSettle and same-lie reasons. A ladder re-dial over
+      // a picture that WAS up says "Reconnecting…" instead (owner request
+      // 2026-08-26 — this superseded "the ladder is a log fact, not a
+      // wall fact"); a first connect that keeps failing stays
+      // "Connecting…", because "re-" claims a restoration.
       case FeedPhase.connecting:
-        return const _FaceNotice('Connecting…');
-      // One face for both: "the Director is coming back on its own" is a
-      // log fact (`tile_retry`), not a wall fact — the wall's answer is
-      // that there is no live view right now, said plainly.
-      case FeedPhase.failed || FeedPhase.retrying:
+        return _sawPlaying && _feed.retryAttempt.value > 0
+            ? const _FaceNotice('Reconnecting…')
+            : const _FaceNotice('Connecting…');
+      // The quiet tile variant of the zoom's counted face: the aged still
+      // (where one exists) with the word in the corner — the §C design
+      // ("retrying = aged still + quiet badge") finally spelled.
+      case FeedPhase.retrying:
+        return _stillFace(notice: _sawPlaying ? 'Reconnecting…' : 'Connecting…');
+      // Only a non-camera rests here (#177014).
+      case FeedPhase.failed:
         return const _FaceNotice('Live view failed');
       // Camera Health's verdict: the camera is off the air, so the honest
       // face is the aged still with the word, not a 25 s connect timeout.
@@ -946,17 +966,29 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
   late final CameraFeed _feed;
   var _wasActive = false;
 
+  /// Whether a picture was EVER up on this zoom — what separates the
+  /// honest "Reconnecting…" from a first connect that keeps failing:
+  /// "re-" claims a restoration, and a stream that never showed a frame
+  /// has nothing to restore.
+  var _sawPlaying = false;
+
   Device get _device => widget.device;
 
   @override
   void initState() {
     super.initState();
     // Person-origin by role: a zoom exists because somebody tapped, so the
-    // Director dials now, retries never, and no viewport or overlay rule
-    // touches it. Any born failure is already logged by the time this
-    // returns — the born-failed trap is the Director's to close, once.
+    // Director dials now and no viewport or overlay rule touches it; a
+    // mid-watch death rides the retry ladder (N11 — cameras reconnect,
+    // the doorbell rests at failed, #177014). Any born failure is already
+    // logged by the time this returns — the born-failed trap is the
+    // Director's to close, once.
     _feed = widget.director.attach(_device, role: FeedRole.zoom);
     _feed.phase.addListener(_onPhase);
+    // The count can climb with NO phase change (a re-dial failing
+    // synchronously is retrying→retrying) — the counted face listens to
+    // both or it freezes at "try 2".
+    _feed.retryAttempt.addListener(_onPhase);
     _wasActive = _feed.phase.value.isActive;
     if (_wasActive) widget.onWent(device: _device.id, live: true);
   }
@@ -964,6 +996,7 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
   @override
   void dispose() {
     _feed.phase.removeListener(_onPhase);
+    _feed.retryAttempt.removeListener(_onPhase);
     // No census drain here, the tiles' rule: the view drains this feed's
     // entry itself at zoom-out, and at view teardown the populated census
     // is exactly what the closing line reads.
@@ -973,6 +1006,7 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
 
   void _onPhase() {
     if (!mounted) return;
+    if (_feed.phase.value == FeedPhase.playing) _sawPlaying = true;
     final active = _feed.phase.value.isActive;
     if (active != _wasActive) {
       _wasActive = active;
@@ -999,13 +1033,27 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
       case FeedPhase.playing:
         return SizedBox.expand(child: _feed.view);
       case FeedPhase.connecting ||
-            // Unreachable for a zoom (person dials skip the queue and a
-            // zoom is born wanting), kept in this arm so a policy change
-            // cannot leave the whole screen blank.
+            // A ladder re-dial passes through queued now (admission paces
+            // timer-born dials), and idle is unreachable for a zoom — all
+            // three arms count the same way so a policy change cannot
+            // leave the screen blank or the count silent.
             FeedPhase.idle ||
             FeedPhase.queued:
-        return const _FaceNotice('Connecting…');
-      case FeedPhase.failed || FeedPhase.retrying:
+        // Plain "Connecting…" is for a first dial only: once the ladder
+        // is climbing, the face keeps counting — and says "Reconnecting"
+        // only if a picture was ever up ("re-" claims a restoration; a
+        // first connect that keeps failing is still just connecting,
+        // counted out loud).
+        return _feed.retryAttempt.value > 0
+            ? _FaceNotice('${_sawPlaying ? 'Reconnecting…' : 'Connecting…'}'
+                ' try ${_feed.retryAttempt.value + 1}')
+            : const _FaceNotice('Connecting…');
+      case FeedPhase.retrying:
+        return _FaceNotice('${_sawPlaying ? 'Reconnecting…' : 'Connecting…'}'
+            ' try ${_feed.retryAttempt.value + 1}');
+      // Only a non-camera rests here — the doorbell, whose stream is never
+      // re-dialled on a timer (#177014). A tap asks again.
+      case FeedPhase.failed:
         return const _FaceNotice('Live view failed');
       case FeedPhase.offline:
         return const _FaceNotice('Camera offline');
