@@ -56,6 +56,23 @@ void main() {
   }
 
   group('the grace window', () {
+    test('a lingered session is SILENT — the pool re-mutes what the closing '
+        'surface unmuted, so sound cannot outlive a Popup', () {
+      withKeepAlive((async, go2rtc, keep) {
+        final lease = keep.open(doorbell, name: 'ring_doorbell');
+        go2rtc.only.plays();
+        // The Popup, being the person-opened surface, turned the sound on.
+        lease.setMuted(false);
+        expect(go2rtc.only.muted, isFalse);
+
+        lease.close();
+        expect(go2rtc.only.closes, 0,
+            reason: 'kept for the linger — which is exactly why the mute '
+                'must not wait for the real close');
+        expect(go2rtc.only.muted, isTrue);
+      });
+    });
+
     test('a reopen inside it re-attaches to the producer that is already '
         'running, instead of racing a new one', () {
       withKeepAlive((async, go2rtc, keep) {

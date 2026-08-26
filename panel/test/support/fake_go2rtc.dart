@@ -44,6 +44,12 @@ class FakeLiveVideoSession implements LiveVideoSession {
   /// cannot tell a double-close from a clean one.
   var closes = 0;
 
+  /// The seam's born-muted default, and the history of every [setMuted]
+  /// call — the ORDER is what the duck test reads (unmute on open, mute on
+  /// press, unmute on release).
+  var muted = true;
+  final mutedChanges = <bool>[];
+
   @override
   final ValueNotifier<LiveVideoPhase> phase =
       ValueNotifier(LiveVideoPhase.connecting);
@@ -53,6 +59,12 @@ class FakeLiveVideoSession implements LiveVideoSession {
 
   @override
   Widget get view => const Text('a moving picture');
+
+  @override
+  void setMuted(bool value) {
+    muted = value;
+    mutedChanges.add(value);
+  }
 
   @override
   void close() => closes++;

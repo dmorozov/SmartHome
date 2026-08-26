@@ -164,6 +164,41 @@ void main() {
       });
     });
 
+    test('born muted, and the unmute that raced initialize still lands '
+        'before a sample plays', () {
+      fakeAsync((async) {
+        final controller = _FakeController();
+        final session =
+            RtspLiveVideoSession(_url, controllerFor: (_) => controller);
+        // The surface decides DURING the dial — the Popup unmutes right
+        // after opening, while initialize is still in flight.
+        session.setMuted(false);
+        controller.finishInitialize();
+        async.flushMicrotasks();
+        expect(controller.volumes, [1.0],
+            reason: 'the in-flight decision wins; nothing ever played at '
+                'the default volume');
+        expect(controller.played, isTrue);
+
+        session.setMuted(true);
+        expect(controller.volumes, [1.0, 0.0]);
+        session.close();
+      });
+    });
+
+    test('left alone, the player is silent — six tiles of pcm_mulaw is the '
+        'measured alternative', () {
+      fakeAsync((async) {
+        final controller = _FakeController();
+        final session =
+            RtspLiveVideoSession(_url, controllerFor: (_) => controller);
+        controller.finishInitialize();
+        async.flushMicrotasks();
+        expect(controller.volumes, [0.0]);
+        session.close();
+      });
+    });
+
     test('the opener never throws', () {
       // With no native player in a VM test run, everything past the seam is
       // allowed to fail — as a settled session or a failing dial, never as
@@ -188,6 +223,12 @@ class _FakeController extends VideoPlayerController {
   final _init = Completer<void>();
   var played = false;
   var disposed = false;
+
+  /// Every volume the adapter set, in order — the mute contract's witness.
+  final volumes = <double>[];
+
+  @override
+  Future<void> setVolume(double volume) async => volumes.add(volume);
 
   @override
   Future<void> initialize() async {

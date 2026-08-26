@@ -400,6 +400,11 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     // here, posting nothing.
     if (url == null) return;
     final press = ++_talkPress;
+    // Half-duplex, ADR-0011's own mechanism: inbound playback is ducked
+    // for as long as the button is held — intercoms want 30–40 dB of
+    // separation before the far end stops hearing itself, and the wall's
+    // speaker feeding the wall's microphone is exactly that loop.
+    _session?.setMuted(true);
     setState(() => _talk = TalkPhase.opening);
     // Started here rather than on success: the sweeping segment *is* the
     // opening phase, and that phase begins the moment the thumb lands. It is
@@ -455,6 +460,8 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     final device = widget.presentation.device;
     if (_talk == TalkPhase.unconfigured || _talk == TalkPhase.idle) return;
     ++_talkPress;
+    // The other half of the duck: the button is up, listening resumes.
+    _session?.setMuted(false);
     _pulse.stop();
     // A failure stays on screen past the release that follows it. A press is
     // over in a moment, and a caption nobody has time to read reports the
@@ -508,6 +515,13 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       _talk = TalkPhase.unconfigured;
     }
     _session = _openVideo();
+    // The Popup is the person-opened surface, so it is the audible one —
+    // the doorbell's LISTEN leg (ADR-0011) and every camera's, through
+    // whichever transport carries sound (the web and MJPEG branches answer
+    // with a no-op). Nothing to undo on the way out: the keep-alive pool
+    // re-mutes every session it lingers, so the sound cannot outlive this
+    // Popup whichever of its routes closes it.
+    _session?.setMuted(false);
     _fetchStill();
     // Checked immediately as well as on change: an opener can answer
     // `failed` before it returns — the not-yet-written web shim does — and a

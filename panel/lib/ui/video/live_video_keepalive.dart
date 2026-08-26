@@ -291,6 +291,11 @@ class LiveVideoKeepAlive {
     // still be healthy, and its age cap is the later one.
     final incumbent = _kept.remove(kept.key);
     if (incumbent != null) _retire(incumbent, 'superseded');
+    // The pool's own guarantee, not the surface's diligence: a lingered
+    // session is SILENT. The Popup that unmuted this stream is gone; the
+    // next consumer starts from the seam's born-muted default and decides
+    // for itself.
+    kept.inner.setMuted(true);
     kept.lingerTimer = Timer(linger, () => _retire(kept, 'linger_expired'));
     // Both real players can fail with nobody listening — the MJPEG one on
     // `onDone`, the MSE one on a close frame — and their watchdogs keep
@@ -414,6 +419,12 @@ class _Lease implements LiveVideoSession {
   /// which is the cost this whole class exists to avoid.
   @override
   Widget get view => _kept.inner.view;
+
+  @override
+  void setMuted(bool muted) {
+    if (_closed) return;
+    _kept.inner.setMuted(muted);
+  }
 
   @override
   void close() {

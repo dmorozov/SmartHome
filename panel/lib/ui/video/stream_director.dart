@@ -988,6 +988,9 @@ class _CountedSession implements LiveVideoSession {
   Widget get view => _inner.view;
 
   @override
+  void setMuted(bool muted) => _inner.setMuted(muted);
+
+  @override
   void close() {
     _inner.close();
     if (_closed) return;

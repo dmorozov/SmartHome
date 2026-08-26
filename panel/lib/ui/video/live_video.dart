@@ -109,6 +109,23 @@ abstract interface class LiveVideoSession {
   /// remounting it just rebuilds.
   Widget get view;
 
+  /// Whether this session's sound — where the transport carries any —
+  /// reaches the speakers. **Every session is born muted**, all four
+  /// implementations: the web `<video>` needs it for autoplay, the RTSP
+  /// player would otherwise play six camera audio tracks over each other
+  /// the moment the grid opens (both Wyze stream tiers carry `pcm_mulaw`,
+  /// probed 2026-08-26), and MJPEG carries no audio at all. Unmuting is a
+  /// SURFACE decision, and only the person-opened surface — the Popup —
+  /// makes it (the doorbell's LISTEN leg, ADR-0011; ducked back to muted
+  /// while the talk button is held, half-duplex).
+  ///
+  /// Never throws, callable in any phase, idempotent; a transport with no
+  /// audio (MJPEG) or no player (settled sessions) answers with a no-op.
+  /// The keep-alive pool re-mutes every session it lingers, so audio can
+  /// never outlive the surface that asked for it (`live_video_keepalive
+  /// .dart` — the pool's own guarantee, not the Popup's diligence).
+  void setMuted(bool muted);
+
   /// Idempotent: the Popup can be dismissed by three routes and the timer
   /// can fire during the fourth.
   ///
@@ -322,6 +339,9 @@ class SettledLiveVideoSession implements LiveVideoSession {
   /// [LiveVideoPhase.playing], and a settled session is never in it.
   @override
   Widget get view => const SizedBox.shrink();
+
+  @override
+  void setMuted(bool muted) {} // Nothing was dialled; there is no sound.
 
   @override
   void close() {}

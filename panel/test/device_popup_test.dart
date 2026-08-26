@@ -1140,6 +1140,50 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
     });
+
+    testWidgets('the popup is the audible surface, and the talk press ducks '
+        'it — half-duplex, ADR-0011', (tester) async {
+      tester.view
+        ..physicalSize = const Size(1280, 800)
+        ..devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final go2rtc = FakeGo2rtc();
+      final talk = FakeTalk();
+      await openPopup(
+        tester,
+        device: const Device(
+          id: 'doorbell',
+          name: 'Ring Doorbell',
+          kind: DeviceKind.doorbell,
+          connectivity: Connectivity.cloud,
+          position: Offset.zero,
+          streamName: 'ring_doorbell',
+          talkStream: 'ring',
+        ),
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        talk: TalkConfig(go2rtcUrl: 'http://hub:1984', post: talk.post),
+      );
+
+      // Born muted (the seam's rule); the person-opened Popup unmuted it —
+      // the doorbell's LISTEN leg.
+      expect(go2rtc.only.mutedChanges, [false]);
+
+      // The button lands: inbound ducks for as long as it is held (the
+      // wall's speaker feeding the wall's microphone is the echo loop
+      // half-duplex exists to break)…
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('push-to-talk'))),
+      );
+      await tester.pump();
+      expect(go2rtc.only.muted, isTrue);
+
+      // …and the release resumes listening.
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(go2rtc.only.muted, isFalse);
+      expect(go2rtc.only.mutedChanges, [false, true, false]);
+    });
   });
 
   /// Variant D's pick, folded in: A's bigger card kept, B's circular

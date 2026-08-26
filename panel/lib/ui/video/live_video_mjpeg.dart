@@ -305,6 +305,12 @@ class MjpegLiveVideoSession implements LiveVideoSession {
     _release();
   }
 
+  /// MJPEG is multipart JPEG — picture only, no audio track to mute or
+  /// unmute. The historical silence of this transport is exactly the
+  /// born-muted default the seam now states for every player.
+  @override
+  void setMuted(bool muted) {}
+
   @override
   void close() {
     if (_closed) return;

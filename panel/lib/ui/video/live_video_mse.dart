@@ -950,6 +950,15 @@ class MseLiveVideoSession implements LiveVideoSession {
       (_phase.value == LiveVideoPhase.connecting ||
           _phase.value == LiveVideoPhase.playing);
 
+  /// Deliberately a no-op on web: `muted` on the `<video>` is
+  /// autoplay-load-bearing (see the element setup — every autoplay policy
+  /// rejects unmuted playback with no user gesture behind it), and Chrome
+  /// pauses an autoplay-started video that is unmuted programmatically.
+  /// If the web second screen ever wants sound, that is N9's
+  /// browser-policy question (kiosk autoplay flags), not a one-liner here.
+  @override
+  void setMuted(bool muted) {}
+
   @override
   void close() {
     if (_closed) return;

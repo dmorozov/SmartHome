@@ -110,6 +110,13 @@ class RtspLiveVideoSession implements LiveVideoSession {
   var _closed = false;
   var _lastPosition = Duration.zero;
 
+  /// Born muted — the seam's rule, and on THIS transport it is load-bearing:
+  /// both Wyze stream tiers carry a `pcm_mulaw` track (probed 2026-08-26),
+  /// so an unmuted default would play six camera audios over each other the
+  /// moment the grid opens. The desired state is tracked here because
+  /// [setMuted] can arrive before [_dial]'s initialize completes.
+  var _muted = true;
+
   @override
   ValueListenable<LiveVideoPhase> get phase => _phase;
 
@@ -127,11 +134,28 @@ class RtspLiveVideoSession implements LiveVideoSession {
     try {
       await _controller.initialize();
       if (_closed) return;
+      // The muted-or-not decision may have landed while initialize was in
+      // flight; apply whatever is current, before a single sample plays.
+      await _controller.setVolume(_muted ? 0 : 1);
+      if (_closed) return;
       await _controller.play();
     } catch (error) {
       // Type only: video_player wraps platform errors whose text quotes
       // the URL it failed to open.
       _fail('the player threw ${error.runtimeType}');
+    }
+  }
+
+  @override
+  void setMuted(bool muted) {
+    if (_closed) return;
+    _muted = muted;
+    // Applied only once the player exists; before that, [_dial] reads
+    // [_muted] itself. Fire-and-forget with the same swallow as dispose:
+    // a volume call racing teardown is nothing a wall can act on.
+    if (_controller.value.isInitialized) {
+      unawaited(
+          _controller.setVolume(muted ? 0 : 1).catchError((Object _) {}));
     }
   }
 
