@@ -50,6 +50,18 @@ api:
   origin: "*"
 
 streams:
+  # Talkback (ADR-0011, E9 decided 2026-08-26): the appliance microphone,
+  # captured through PipeWire's PulseAudio-compat socket (hub/compose.yaml
+  # mounts it and sets PULSE_SERVER). opus/48000/2 is what Ring negotiates,
+  # so the doorbell Popup's push-to-talk attaches this to the backchannel
+  # as a passthrough — no re-encode. Producer shape proven in
+  # hub/dev/go2rtc/go2rtc.yaml. Plainly said: with this stream present,
+  # anything that can reach this API can open the host's microphone — the
+  # LAN/VPN boundary is the control (the api.origin "*" ruling).
+  mic: >-
+    exec:ffmpeg -re -f pulse -i default -c:a libopus -b:a 48k
+    -rtsp_transport tcp -f rtsp {output}
+
   # ONE STREAM, TWO PRODUCERS — this is the shape every camera here must take.
   #
   # The Panel has two builds and they want two codecs off the same camera:

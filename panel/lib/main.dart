@@ -20,6 +20,7 @@ import 'ui/audio/talk.dart';
 import 'ui/video/camera_health.dart';
 import 'ui/video/live_video.dart';
 import 'ui/video/live_video_keepalive.dart';
+import 'ui/video/live_video_rtsp.dart';
 import 'ui/video/snapshot.dart';
 import 'ui/video/stream_director.dart';
 
@@ -95,6 +96,20 @@ Future<void> main() async {
   // phase 4 asked for — it borrows the secret-withholding vocabulary for an
   // address and throws away the host, which is the one fact worth having.
   Log.info('popup', 'go2rtc', urlForLog(config.go2rtcUrl));
+  // Which player the appliance dials with (phase-8 N5): `rtsp` plays
+  // go2rtc's H.264 restream through fvp; anything else is the shipped
+  // MJPEG default. Environment first, build define second, like every Hub
+  // setting above and for the same reason — rolling the wall back from a
+  // misbehaving transport must cost a restart, not a rebuild. On web the
+  // rtsp opener falls through to the platform player and says so itself.
+  final videoTransport =
+      environment['VIDEO_TRANSPORT'] ?? _buildVideoTransport ?? 'mjpeg';
+  if (videoTransport != 'mjpeg' && videoTransport != 'rtsp') {
+    Log.warn('panel', 'video_transport_unknown',
+        {'asked': videoTransport, 'using': 'mjpeg'});
+  }
+  final rawOpen = videoTransport == 'rtsp' ? openRtspVideo : openLiveVideo;
+  Log.info('panel', 'video_transport', {'transport': videoTransport});
   // The House Plan (ADR-0005): everything drawn — geometry and Device
   // Placements — generated into house.yaml, joined with the hand-maintained
   // Hub bindings.
@@ -112,7 +127,7 @@ Future<void> main() async {
   // instead, so the widget tree is unchanged, both video surfaces get it
   // through the seam they already use, and `test/fixtures.dart` still
   // defaults to the raw opener.
-  final keepAlive = LiveVideoKeepAlive();
+  final keepAlive = LiveVideoKeepAlive(opener: rawOpen);
   // The Stream Director (phase-8), one per process like the pool and never
   // disposed here for the pool's reason: it holds admission and retry
   // Timers for as long as the Panel runs. Composed ABOVE the pool — it
@@ -182,6 +197,9 @@ const String? _buildHaToken = bool.hasEnvironment('HA_TOKEN')
     : null;
 const String? _buildGo2rtcUrl = bool.hasEnvironment('GO2RTC_URL')
     ? String.fromEnvironment('GO2RTC_URL')
+    : null;
+const String? _buildVideoTransport = bool.hasEnvironment('VIDEO_TRANSPORT')
+    ? String.fromEnvironment('VIDEO_TRANSPORT')
     : null;
 
 class PanelApp extends StatelessWidget {

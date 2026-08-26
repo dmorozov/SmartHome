@@ -367,6 +367,14 @@ Facts this feeds: **N3** (preload-all go/no-go), **N4** (`wyze://`
 go/no-go), and whether daemon death correlates with streaming activity
 (the 2026-08-25 session saw Living Room die ~40 min after serving the
 load experiment, then self-recover — one data point, not a pattern).
+**2026-08-26 additions:** during sustained streaming (the N5 soak plus the
+owner's live Panel session), Garage and Living Room daemons died within a
+minute of each other (~03:52 UTC, ~20 min into the soak) and **both
+self-recovered ~5 min later** (probes `off` 03:52/03:53 → `on`
+03:57/03:58). Three deaths so far, all during-or-after sustained serving,
+all self-recovering — the correlation is firming and the owner watched
+the whole loop work: honest "Camera offline" faces on the probe flip,
+automatic re-dial on recovery, no restart, no interaction.
 
 ### N3 — Preload all five substreams *(trigger: N2 says daemons are stable and the airtime budget tolerates it)*
 
@@ -408,9 +416,46 @@ ffmpeg MJPEG transcode on the Hub, the ~7× bytes, the per-frame JPEG
 decode in Flutter, and the cold-floodlight zero-byte race, by playing
 go2rtc's RTSP restream (`rtsp://127.0.0.1:8554/<name>`) directly.
 
-**Step 1 — prototype (throwaway, a day):** two candidates, both rendering
-to Flutter Textures (ordinary clippable widgets — no platform-view tap
-workaround on this path):
+**Step 1 — prototype: RUN 2026-08-26, fvp PASSES.** Throwaway app in the
+session scratchpad (`rtsp_probe/`, argv: `[seconds] [stream...]`), fvp
+0.38.1 over `video_player`, `lowLatency: 1`, RTSP/TCP (fvp's own default),
+pulling go2rtc's restream on host port 8554 (published; go2rtc stays the
+only RTSP client of the cameras). Measured, headless under Xvfb
+(software GL — real-GPU numbers will be better):
+
+- **6 simultaneous players** (5 live Wyze subs + selftest): all played,
+  camera first-frames at **3.9–5.1 s**, zero failures, 60 s steady.
+- **App cost:** ~55 % of one core, 459 MB RSS — including Xvfb software
+  rendering of six textures.
+- **Hub cost, the headline:** go2rtc at **35 % CPU / 117 MiB** serving six
+  RTSP copies (selftest's own ffmpeg pattern included) vs **52 % CPU /
+  573 MiB** for today's five `mjpeg/tiles` transcodes. The Panel-side
+  saving (no per-frame JPEG decode) is on top and unmeasured.
+- **Cold floodlight main:** 1080p first frame in **3.9 s** — the RTSP
+  client waits out the producer start; no 17–18 s pathology, no
+  zero-byte race on this path.
+- **Teardown:** consumer count drained to 0 both runs.
+- **Soak: cut short at ~20 min, clean as far as it ran.** Stopped
+  deliberately (two Wyze daemons died mid-soak — the chronic
+  daemon-death pattern, logged under N2 — and the owner was live-testing
+  on the same fleet, so continuing meant knocking cameras for marginal
+  data). While it ran: 6 streams, **zero FAIL lines**, RSS 453 MB at
+  start-of-sampling → 490 MB ten minutes later (one interval — the
+  plateau-vs-leak question is NOT answered; re-run the soak against
+  `selftest`-only or off-hours before flipping the default transport, and
+  don't let two writers share one log file — the app's `>` redirect
+  clobbered the monitor's `>>` samples).
+- **Still open from the gauntlet:** the soak re-run (above), texture
+  clipping under `PanelTheme` rounded corners (needs a real GPU session —
+  the owner's live `VIDEO_TRANSPORT=rtsp` run is exactly that), and the
+  anomaly that `selftest` INIT'd but never advanced `position` past zero
+  (cameras all did; check whether position is the right first-frame
+  signal per stream type before trusting the adapter's watchdogs on
+  unusual streams).
+
+media_kit was not exercised — fvp met the gauntlet without system deps,
+so the tie-breaker (`apt install libmpv-dev`, an owner action) was never
+needed. Candidates, for the record:
 - `fvp` 0.38.1 (libmdk; actively shipped Aug 2026; `'lowLatency': 1`,
   NVDEC relevant on the Legion's NVIDIA) — the safer-maintenance bet.
 - `media_kit` 1.2.6 (libmpv from the distro — `apt install libmpv-dev
@@ -426,10 +471,52 @@ simply wait out the 17 s warm-up instead of the zero-byte race);
 teardown → go2rtc consumer count drains; texture clips under
 `PanelTheme`'s rounded corners; a multi-hour soak for leaks.
 
-**Step 2 — the adapter behind the seam:** the conditional import in
-`live_video.dart` selects by *platform* (VM/web), so a second VM player is
-a *runtime* choice at the composition root, which the seam already
-supports (`VideoConfig.open` is injected):
+**Step 2 — the adapter behind the seam: BUILT 2026-08-26** (unstaged, with
+everything else). What landed, against the plan below it:
+
+- `lib/ui/video/live_video_rtsp.dart` (conditional shell) →
+  `live_video_rtsp_io.dart` (the adapter) / `live_video_rtsp_web.dart`
+  (web stub: delegates to the platform player with one
+  `video_transport_fallback` warning — browsers do not speak RTSP, and a
+  misconfigured define must cost nothing).
+- `RtspLiveVideoSession` over fvp 0.38.1 via `video_player`
+  (`fvp.registerWith({'lowLatency': 1})` once, lazily, in the opener):
+  never-throwing opener; **position-advance is the first-frame and
+  liveness signal** (fvp's `isInitialized` is metadata, before any
+  picture — the honest-phases rule); the seam's own deadlines reused
+  (`kRtspFirstFrameTimeout`/`kRtspStallTimeout` alias the MJPEG pair —
+  "the branches are kept equal deliberately"); failure strings type-only,
+  platform error text never repeated; `view` built once per dial;
+  `close()` idempotent, disposes the player (which drains the go2rtc
+  consumer).
+- `rtspEndpointFor`: `ws(s)://host:1984/api/ws?src=X` →
+  `rtsp://host:8554/X`, always cleartext `rtsp` (8554 has no TLS
+  listener), **userInfo stripped** (GO2RTC_URL may carry API credentials;
+  they never reach a native player whose error strings we do not control).
+- `main()` selection, environment-first like every Hub setting
+  (`VIDEO_TRANSPORT` env, then the dart-define, default `mjpeg`) —
+  rollback is a systemd restart, not a rebuild; logged as
+  `panel.video_transport`, unknown values warn and fall back to mjpeg.
+  The keep-alive pool wraps the selected opener
+  (`LiveVideoKeepAlive(opener: rawOpen)`).
+- `pubspec`: + `video_player`, + `fvp`. Both builds verified compiling
+  (web 21 s; linux — after clearing a stale devcontainer CMake cache in
+  `build/linux`, an environment quirk, not a code fact).
+- Tests: `test/live_video_rtsp_test.dart`, 11 hermetic cases — URL rule
+  (incl. the credential-strip and no-TLS-invention), metadata-is-not-a-
+  picture, open/stall watchdogs, error redaction, typed init failure,
+  idempotent close with no timers left. **No opt-in live suite**: fvp's
+  native library is not built for VM test runs (the MJPEG live suite is
+  pure `dart:io`) — the live proof is the `rtsp_probe` prototype run and
+  the wall itself under `VIDEO_TRANSPORT=rtsp`.
+- To try it on the dev machine:
+  `cd panel && VIDEO_TRANSPORT=rtsp flutter run -d linux` (plus the usual
+  HUB/HA_URL/HA_TOKEN/GO2RTC_URL). MJPEG stays the shipped default until
+  the soak and a real-session eyeball (texture clipping under the rounded
+  corners) pass — then flipping the default is a one-line define change,
+  and step 4 (config retirement) unlocks.
+
+The original plan, for reference:
 - New file `panel/lib/ui/video/live_video_rtsp.dart`: a
   `LiveVideoSession` implementation over the chosen player. It must keep
   every contract in §3: never throw from the opener; phases honest
@@ -566,6 +653,21 @@ outranking a fresh probe. Pure-Dart testable beside the existing suites.
 
 ### N10 — Small ops follow-ups
 
+- **Floodlight preload EOF loop (suspended 2026-08-26 — investigate before
+  re-enabling A4):** after the cameras' RTSP re-setup, the two preloaded
+  mains (`.54`/`.62` `stream0` via the `ffmpeg:…#video=copy#audio=copy`
+  producer) EOF-looped every ~7–15 s and never latched, while an on-demand
+  pull of the same restream delivered a frame in 9.6 s. The preload
+  entries are commented in the live yaml (backup
+  `go2rtc.yaml.bak-20260826-preload-suspend`); go2rtc restarted, log
+  quiet. To investigate: whether the RTSP re-setup changed the floodlights'
+  cold-start behaviour (they sleep harder? encoder starts slower than
+  go2rtc's producer patience?), whether preload's probe consumer differs
+  from a real consumer in producer selection, and whether a plain
+  `rtsps://` first producer (no ffmpeg wrap) latches where the wrapped one
+  does not. Reinstating is two uncomments + a restart. Note N3
+  (preload-all) inherits this question.
+
 - **VAAPI:** blocked on the standard image (no Intel libva driver;
   `/dev/dri` IS mapped and the probe command is
   `curl -s http://127.0.0.1:1984/api/ffmpeg/hardware`). The one-line
@@ -584,6 +686,41 @@ outranking a fresh probe. Pure-Dart testable beside the existing suites.
 - **Wall deployment:** the wall build must pick up the Panel changes when
   the kiosk finally exists (no cage/touchscreen yet as of 2026-08-25 —
   commissioning 06 stops at Xvfb first-light).
+
+### N11 — Mid-watch reconnect + honest retry faces *(owner request, live wall session 2026-08-26; queued behind N5 per the owner's "end of list")*
+
+**Observed (owner):** the grid and the zoom both work — but a stream that
+fails mid-watch never comes back on its own, and the face just says
+"Connecting…" with no sign anything is being retried.
+
+**Why it behaves that way today** (all deliberate, now to be revisited):
+- A **zoomed** camera is person-origin, and invariant §3.10 exempts
+  person-origin feeds from the automatic retry ladder — so a mid-watch
+  failure parks at `failed` until the person re-taps. This is the
+  "doesn't reconnect" the owner saw.
+- **Tiles** DO auto-retry (5 s → 15 s → 60 s → 60 s…), but retry progress
+  is a log fact (`tile_retry`), not a wall fact — the failed/retrying face
+  reads "Live view failed" by the phase-8 "honest faces" ruling.
+
+**Design sketch:**
+1. Expose the ladder on the seam: `CameraFeed` gains a read of the retry
+   state (`_Feed._retryAttempt` exists; e.g. `int get retryAttempt`, 0
+   when none) so faces can render it without a second source of truth.
+2. **Zoom reconnect — the invariant amendment**: give person-origin
+   feeds of `DeviceKind.camera` the retry ladder (or a bounded 3-attempt
+   variant ending in a "Tap to retry" face). **The doorbell must stay
+   manual** — an automatic re-dial on the Ring stream re-opens cloud
+   sessions in a loop (#177014); gate by kind where the ladder arms, and
+   add a doorbell canary test. Update: invariant §3.10's wording, the
+   pinned person-origin tests in `stream_director_test.dart`, and
+   CONTEXT.md's Stream Director entry.
+3. **Faces**: distinguish a first dial from a recovery — zoom wears a
+   centered "Reconnecting… try #2" while the ladder works; tiles a quiet
+   corner variant of the same words. "Connecting…" stays for the first
+   dial only. Amend the §C honest-faces table in the phase-8 doc.
+4. Note the overlap that already exists: a probe-detected outage re-dials
+   on the health flip (D1's gates); the ladder covers what the minute
+   probe can't see fast — mid-stream EOFs and Wi-Fi blackouts.
 
 ---
 

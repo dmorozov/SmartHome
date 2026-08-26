@@ -79,6 +79,13 @@ Decided and applied with this phase:
   stays floodlights-only until the A2 monitor produces a week of data
   (preload-all-subs would hold ~5× substream bitrate on the 2.4 GHz cell
   24/7, and its interaction with daemon death is unknown).
+  **SUSPENDED 2026-08-26** (entries commented in the live yaml, backup
+  `go2rtc.yaml.bak-20260826-preload-suspend`): after the cameras' RTSP
+  re-setup, both preloaded mains EOF-looped — go2rtc re-dialling the
+  floodlights every ~7–15 s without ever latching — while on-demand pulls
+  of the same streams worked (9.6 s to a frame). A knock-loop is worse
+  than the cold start it was hiding; re-enable once the cause is
+  understood (handoff N10).
 - **A5 Bounded MJPEG transcodes.** Custom templates in the live config:
   `mjpeg/tiles` (`-q:v 8 -r 10`) on the five substream wrappers,
   `mjpeg/zoom` (`-q:v 6 -r 15`) on the mains and `ring_doorbell`;
@@ -166,10 +173,11 @@ sessions still log exactly once.
 |---|---|
 | ~~Stagger verdict~~ **CLOSED 2026-08-26**: 4 rounds (2 sim / 2 stag-2s) at five healthy cameras, 20/20 pulls ok in both modes → `dialSpacing` stays 400 ms as hygiene, per the decision rule. Simultaneous showed a real but non-fatal tail: 2 of 10 sim dials (one round) hit first-attempt EOF + retry (9.9 s / 12.2 s to first frame vs ≤6.0 s staggered max); staggered rounds were uniformly clean. Full data in the handoff's N1. | — |
 | Preload-all-substreams | a week of A2 monitor data |
-| H.264/RTSP adapter on the appliance (fvp / media_kit; deletes the MJPEG transcodes and the per-frame JPEG decode) | after the Stream Director exists — a third adapter should meet one call site, not three |
+| H.264/RTSP adapter on the appliance — **prototype AND adapter built 2026-08-26** (fvp; `live_video_rtsp.dart`, `VIDEO_TRANSPORT=rtsp\|mjpeg`, default mjpeg; handoff N5 carries both records). Remaining: the 2 h soak verdict, a real-session eyeball of texture clipping, then the default flip and config retirement (deletes the MJPEG transcodes) | soak + owner's eyeball |
 | Native `wyze://` source (1.9.14, experimental TUTK — bypasses the RTSP daemon entirely) | monitor shows chronic daemon death |
 | Idle-return dedup (CamerasView / DevicePopup copies) | a third surface (the web second screen) |
 | Web build platform-view ceiling (Flutter web caps overlays at 7; 6 MSE tiles + a Popup video is at it — detach grid views under a Popup) | web second-screen work |
+| Mid-watch reconnect for the zoom (person-origin retry, doorbell excluded — #177014) + "Reconnecting… try #N" faces on zoom and tiles (owner request 2026-08-26; handoff N11) | after the N5 adapter |
 
 ## E. Done when
 

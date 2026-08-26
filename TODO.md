@@ -35,6 +35,15 @@ flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1 --profile \
   --dart-define=HA_TOKEN="$(cat ~/.sh_keys/token)" \
   --dart-define=GO2RTC_URL=http://localhost:1984
 
+or Linux (real HUB)
+
+HUB=ha \                                                                                                            1 ↵
+HA_URL=http://127.0.0.1:8123 \
+HA_TOKEN="$(tr -d '[:space:]' < ~/.sh_keys/token)" \
+GO2RTC_URL=http://127.0.0.1:1984 \
+VIDEO_TRANSPORT=rtsp \
+flutter run -d linux --release
+
 Then open http://localhost:8080.
 
 Four things in there are load-bearing:

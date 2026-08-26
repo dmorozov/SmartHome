@@ -197,4 +197,21 @@ services:
       # no /config). The tracked starter is ./go2rtc/go2rtc.example.yaml — not
       # mounted; go2rtc doesn't need it.
       - ${SH_KEYS_DIR}/go2rtc:/config
+      # Talkback (ADR-0011, owner decision E9 DECIDED 2026-08-26: deploy —
+      # the LAN/VPN boundary is the control, the same ruling as
+      # api.origin "*"): PipeWire's PulseAudio-compat socket, for the `mic`
+      # stream the doorbell Popup's push-to-talk attaches to Ring's
+      # backchannel. Stated plainly, as hub/dev/compose.yaml does: with
+      # this mounted and `mic:` in the live config, anything that can
+      # reach this API can open this machine's microphone — accepted.
+      # ⚠️ /run/user/1000 is the current operator's uid; when the kiosk
+      # account exists it will own the audio session and this path (and
+      # the env below) must follow it — the rest of E9's homework.
+      - /run/user/1000/pulse:/run/user/1000/pulse
+    environment:
+      # Container-side path of the socket mounted above — the same pair as
+      # hub/dev/compose.yaml, where microphone capture through PipeWire
+      # was proven (a direct /dev/snd pass-through fails: PipeWire holds
+      # the device exclusively on any modern desktop).
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
     restart: unless-stopped

@@ -27,7 +27,8 @@ brought to match.
 | Ansible: audio group + lingering | ✅ **converged, and PipeWire observed running** for the `nologin` user — §4.5 |
 | Ansible: converge / idempotence / `--check` against `appliance/test` | ✅ **all three met** — §4.5 |
 | Anything on real Appliance hardware | ⬜ **blocked** — no speaker/mic chosen yet (**D7**) |
-| Hub stack's audio mount (the UID question) | ⬜ **not started** — §4.3, needs a decision (**E9**) |
+| **TALK on the production stack, real listener** | ✅ **verified 2026-08-26**: `mic:` + `ring:` deployed to production go2rtc (E9 row above), the owner held the Panel popup's talk button and a person at the door heard them. Inbound (hearing the door on the Panel) not yet assessed — the owner's machine had a local sound issue during the test; the LISTEN leg (§1) remains unimplemented in the Panel either way |
+| Hub stack's audio mount (the UID question) | ✅ **E9 DECIDED and deployed 2026-08-26** (owner): the LAN/VPN boundary is the control, same ruling as `api.origin "*"`. `hub/compose.yaml` mounts `/run/user/1000/pulse` + `PULSE_SERVER`; the live go2rtc.yaml carries the `mic:` stream (backup `.bak-20260826-mic`); opus frames verified flowing from the host mic through the restream. Kiosk-uid follow-through (`/run/user/1000` is the dev operator's uid) stays open for the appliance build — the compose comment carries it |
 | *Why* ffmpeg destroys the inbound audio | 🔴 **not established** — the 60 ms-frame explanation does **not** reproduce; §6 item 6 |
 
 **What "verified" does and does not mean here.** The devcontainer results are
