@@ -45,4 +45,15 @@ const integratedBindings = <String>{
   // entity; the stream and snapshot ride along.
   'doorbell', // -> event.front_door_ding
   //            (+ stream: ring_doorbell, snapshot: camera.front_door_snapshot)
+  // 2026-08-25 (phase-8 A2) — the five Wyze cams' entities moved off the
+  // generated sensor.*_cam stand-ins and onto the real Hub's RTSP daemon
+  // probes, which is what Camera Health gates dials on. Real in the exact
+  // sense this ledger means: the entity exists on the appliance Hub and not
+  // on the dev one, and its value is the house's actual state (`on`/`off`),
+  // not a seed.
+  'cam-garage', // -> binary_sensor.wyze_garage_door_rtsp
+  'cam-living', // -> binary_sensor.wyze_living_room_rtsp
+  'cam-family', // -> binary_sensor.wyze_family_room_rtsp
+  'cam-backyard', // -> binary_sensor.wyze_back_yard_rtsp
+  'cam-backyard-door', // -> binary_sensor.wyze_back_yard_door_rtsp
 };

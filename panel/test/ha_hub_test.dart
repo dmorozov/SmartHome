@@ -397,7 +397,7 @@ bindings:
       expect(lineFor('connecting'), '[panel] I hub.connecting '
           'url=ws://ha.local:8123');
       expect(lineFor('connected'), '[panel] I hub.connected '
-          'url=ws://ha.local:8123 devices=33');
+          'url=ws://ha.local:8123 devices=36');
     });
 
     test('no path=set on a path the Panel appended itself, or the word would '

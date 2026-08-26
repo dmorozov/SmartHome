@@ -102,16 +102,161 @@ streams:
   # reach [] — the ffmpeg producer counts as a consumer of its own source and
   # finishes starting regardless, then idles out. Expected; not a leak.
 
-  # Wyze v3 / Pan v3 after the official RTSP firmware flash (research §3.2).
-  # wyze_living_room:
-  #   - rtsp://user:pass@CAMERA-IP/live
-  #   - ffmpeg:wyze_living_room#video=mjpeg
+  # ---- Wyze, path A: the camera's own RTSP (research §3.2, Ch. 5 §2.2) ----
+  #
+  # All five units in this house are Wyze Cam v3 on firmware 4.36.16.7064,
+  # which is NEWER than 4.36.16.5654 — the build that promoted RTSP from beta
+  # to production on 2026-02-02. So there is most likely nothing to flash: the
+  # feature is in the firmware and ships OFF, enabled per camera in the Wyze
+  # app (the camera -> Settings -> Advanced Settings -> RTSP), where the owner
+  # also invents the user and password that go in the URL below. Nothing
+  # external issues those credentials and nothing else knows them.
+  #
+  # WORKING END TO END SINCE 2026-08-15, all five, both transports —
+  # INCLUDING the two Floodlight bundles, which research §3.2 had flagged
+  # UNVERIFIED for this firmware. The live file has the real credentials; this
+  # is the shape it has.
+  #
+  # THREE THINGS HERE ARE NOT WHAT THIS PLAN PREDICTED. Each one cost a wrong
+  # guess before it was measured, and each fails in a way that looks like a
+  # different problem:
+  #
+  # 1. THE PATH IS /stream0, NOT /live. `/live` was the old sideloaded demo
+  #    firmware's path and it is what every doc in this repo said until now.
+  #    Getting it wrong does NOT give a 404 — the camera accepts the
+  #    credentials and then closes the connection in silence, which is
+  #    indistinguishable from a bad password until you try a deliberately bad
+  #    password and get `401 Invalid Authorization` instead. The Wyze app
+  #    prints the whole URL on its RTSP screen; read it there. /stream1 is
+  #    the substream.
+  # 2. RTSPS ON 322, NOT RTSP ON 554 — when the app's RTSPS toggle is on,
+  #    which is the default. TLS 1.3, self-signed cert, realm `Wyze_Cam`.
+  #    Port 554 is open on all five and answers NOTHING, plaintext or TLS: it
+  #    reads as success to a port scan and hangs every client. Turning RTSPS
+  #    off in the app moves them to plain 554 and is defensible on a LAN with
+  #    no port-forward (ADR-0008) — it would also let go2rtc dial them
+  #    natively, see 3. Pick one deliberately and write down which.
+  # 3. THE SOURCE MUST BE WRAPPED IN `ffmpeg:`. go2rtc 1.9.10's own RTSP
+  #    client cannot talk TLS to these cameras: both `rtsps://` and the
+  #    `rtspx://` prefix — its documented skip-verification variant, meant
+  #    for UniFi — time out reading the socket. ffmpeg has no trouble, and
+  #    `#video=copy#audio=copy` remuxes rather than transcodes, so this costs
+  #    a process, not CPU.
+  #
+  # ONE RTSP SESSION PER CAMERA. Do not "optimise" the mjpeg producer by
+  # giving it the camera URL directly: measured 2026-08-15, two producers
+  # dialling the same camera make BOTH return nothing. The second producer
+  # reads from go2rtc's own stream name, as below.
+  #
+  # The addresses are safe to write here because C1 reserved every one of them
+  # by MAC on the Deco (2026-08-07), re-verified unchanged 2026-08-15 — before
+  # those reservations existed, two of these units swapped IPs in three days.
+  #
+  # wyze_family_room:                                 # plain v3
+  #   - ffmpeg:rtsps://user:pass@192.168.68.57:322/stream0#video=copy#audio=copy
+  #   - ffmpeg:wyze_family_room#video=mjpeg/zoom
+  # wyze_living_room:                                 # plain v3
+  #   - ffmpeg:rtsps://user:pass@192.168.68.69:322/stream0#video=copy#audio=copy
+  #   - ffmpeg:wyze_living_room#video=mjpeg/zoom
+  # wyze_back_yard_door:                              # plain v3
+  #   - ffmpeg:rtsps://user:pass@192.168.68.63:322/stream0#video=copy#audio=copy
+  #   - ffmpeg:wyze_back_yard_door#video=mjpeg/zoom
+  # wyze_garage_door:                                 # v3 + floodlight
+  #   - ffmpeg:rtsps://user:pass@192.168.68.54:322/stream0#video=copy#audio=copy
+  #   - ffmpeg:wyze_garage_door#video=mjpeg/zoom
+  # wyze_back_yard:                                   # v3 + floodlight
+  #   - ffmpeg:rtsps://user:pass@192.168.68.62:322/stream0#video=copy#audio=copy
+  #   - ffmpeg:wyze_back_yard#video=mjpeg/zoom
+  #
+  # `mjpeg/zoom`, not bare `mjpeg`, since phase-8: the wrapper used to run at
+  # source fps and ffmpeg's default JPEG quality (~1.3 MB/s per 1080p
+  # consumer, measured). The custom templates at the end of this file bound
+  # it. The name must keep the `mjpeg/` prefix — go2rtc picks the output
+  # FORMAT from the codec name before the first `/`.
+  #
+  # "FLOODLIGHT BUNDLE" IS ONE CAMERA ON A LAMP MOUNT — one lens, one video
+  # stream, exactly like the plain v3s. The second firmware version the A1
+  # inventory records (1.0.0.55) belongs to the light controller: LEDs plus
+  # their own PIR sensor, which switch themselves on locally and are not a
+  # video source and not in this file. Nothing here streams a floodlight,
+  # because there is nothing there to stream.
+  #
+  # THE TWO FLOODLIGHT UNITS ARE SLOW TO START, though, and that is a
+  # property of the units. Measured cold, time to first frame on H.264:
+  #
+  #   Family Room / Living Room / Back Yard Door   4.6 - 5.2 s
+  #   Garage Door / Back Yard  (floodlight)       17.0 - 17.9 s
+  #
+  # No overlap, and RF does not explain it — Family Room has WORSE ping
+  # latency than Back Yard and still starts in 5 s. Which units are slow is
+  # measured; WHY is not. The lamp fixture is the only known difference.
+  #
+  # CONSEQUENCE, and it only bites the appliance: a COLD MJPEG request to
+  # either floodlight returns HTTP 200 and zero bytes. The mjpeg producer
+  # reads from go2rtc's own name, and go2rtc answers that DESCRIBE before the
+  # upstream producer has established what tracks exist, so ffmpeg gets an
+  # empty SDP and exits with "Output file does not contain any stream". Warm
+  # the source and the same camera serves MJPEG normally (12.25 MB, first
+  # byte 6.5 s). The three plain v3s start inside the race and never hit it.
+  #
+  # TRIED AND DOES NOT WORK: `#timeout=30` on the mjpeg producer. That sets
+  # the RTSP *input* timeout and the failure is not a timeout — ffmpeg
+  # connects fine and finds nothing to map. Do not add it back thinking it
+  # was never tried.
+  #
+  # Bandwidth at 1920×1080 20 fps, measured: H.264 ~100 kB/s, MJPEG ~1.3 MB/s.
+  # That MJPEG figure is 7× what §B measured against the 640×480 selftest
+  # pattern, and five tiles of it is roughly 50 Mbit.
+  #
+  # ---- Substreams: the same cameras at /stream1, for the Cameras grid ----
+  #
+  # 640×360 against /stream0's 1920×1080 — about a ninth of the pixels. The
+  # Cameras view's tiles are ~400 px wide and play THESE, named by
+  # `substream:` in bindings.yaml; the Popup keeps /stream0, because that is
+  # the one place somebody is looking closely.
+  #
+  # THIS IS NOT A NICETY ON A WIRELESS HOUSE. Measured 2026-08-15: five
+  # 1080p tiles opened at once reliably knocked one or two cameras off with
+  # ffmpeg's `Host is unreachable`, and WHICH ones moved between runs — one
+  # at a time all five were fine. Wyze v3 is 2.4 GHz-only and this Hub is on
+  # Wi-Fi as well, so every frame crosses the air twice, and there was 10-20%
+  # packet loss to some cameras even idle. All five SUBSTREAMS at once: all
+  # five delivered.
+  #
+  # AND THERE IS NO CABLE COMING. Owner constraint, stated 2026-08-15: this
+  # environment is Wi-Fi only, permanently. So this is not a knob a better
+  # network retires — it is how the Cameras view works here, for good.
+  #
+  # /stream0 and /stream1 can be pulled from one camera SIMULTANEOUSLY —
+  # measured, 1920×1080 and 640×360 side by side. That is what makes a tile
+  # and a Popup on the same camera legal. (Two producers on the same PATH is
+  # what fails; see the one-session note above.)
+  #
+  # wyze_family_room_sub:
+  #   - ffmpeg:rtsps://user:pass@192.168.68.57:322/stream1#video=copy#audio=copy
+  #   - ffmpeg:wyze_family_room_sub#video=mjpeg/tiles
+  #   … one per camera, same shape. (`mjpeg/tiles` = the bounded 10 fps
+  #   template at the end of this file — a ~400 px grid tile has no use for
+  #   source fps at default JPEG quality.)
+  #
+  # ---- Wyze, path B: docker-wyze-bridge (Ch. 5 §2.3) ----
+  #
+  # Only for a unit that turns out to have no usable RTSP of its own. The
+  # bridge logs into the Wyze cloud, so anything behind it binds
+  # `connectivity: cloud`, and its own RTSP port has to be moved off 8554 —
+  # that port belongs to go2rtc on this host, and the bridge needs
+  # `network_mode: host`, so there is nothing to remap. Same two-producer
+  # shape, different source:
+  #
+  # wyze_back_yard:
+  #   - rtsp://127.0.0.1:8557/back-yard-cam
+  #   - ffmpeg:wyze_back_yard#video=mjpeg/zoom
 
   # Ring doorbell, via ring-mqtt's RTSP output. LIVE on this Hub since
   # 2026-08-05; the shape is here because the live file is gitignored.
   # ring_doorbell:
   #   - rtsp://127.0.0.1:8556/RING-CAMERA-ID_live
-  #   - ffmpeg:ring_doorbell#video=mjpeg
+  #   - ffmpeg:ring_doorbell#video=mjpeg/zoom
   #
   # THE PORT IS 8556, NOT 8554, and this line said 8554 until 2026-08-05.
   # 8554 is go2rtc's OWN RTSP port, so the old value pointed go2rtc at itself.
@@ -130,7 +275,37 @@ streams:
 
   # The synthetic pattern every check in the docs is runnable against, with
   # no Ring and no Wyze credentials — and written in the two-producer shape
-  # so that it exercises the same path a real camera will.
+  # so that it exercises the same path a real camera will. Deliberately on
+  # the plain built-in `mjpeg` template, not `mjpeg/…`: the canonical
+  # unmodified check should exercise go2rtc's defaults.
   selftest:
     - ffmpeg:virtual?video&size=640x480#video=h264
     - ffmpeg:selftest#video=mjpeg
+
+# --- phase-8 (2026-08-25): bounded MJPEG transcode templates -----------------
+# Custom output templates for the #video=mjpeg/... producers above
+# (docs/plans/device-integrations/phase-8-cameras-streaming.md §B, A5).
+# The key must keep the `mjpeg/` prefix — go2rtc selects the output format
+# from the codec name before the first `/`. `tiles` feeds the Cameras grid
+# (10 fps reads as live on a ~400 px tile); `zoom` feeds the one full-screen
+# view (no width cap: that surface is the reason 1080p exists here).
+# If `#hardware=vaapi` is adopted (needs /dev/dri mapped into the container —
+# see hub/compose.yaml — and a positive GET /api/ffmpeg/hardware probe), note
+# the VAAPI encoder ignores -q:v; tune with -global_quality instead.
+ffmpeg:
+  mjpeg/tiles: "-c:v mjpeg -q:v 8 -r 10"
+  mjpeg/zoom: "-c:v mjpeg -q:v 6 -r 15"
+
+# --- phase-8: hold the slow floodlight producers open (needs go2rtc >= 1.9.11)
+# The two floodlight-mounted v3s take 17-18 s to first frame cold and lose the
+# on-demand start race by design ("[exec] timeout" + the zero-byte cold MJPEG
+# answer, both measured — §"THE TWO FLOODLIGHT UNITS ARE SLOW TO START" above).
+# preload holds their H.264 producers open via a permanent probe consumer, so
+# go2rtc's own reconnect logic owns their liveness. "video" = video track only;
+# audio would spend 2.4 GHz airtime on nothing a tile plays.
+# FLOODLIGHTS ONLY, deliberately: preloading all five subs would hold ~5x the
+# substream bitrate on the 2.4 GHz cell 24/7 — that decision waits for a week
+# of the port-322 monitor's data (phase-8 §D).
+preload:
+  wyze_garage_door: "video"
+  wyze_back_yard: "video"

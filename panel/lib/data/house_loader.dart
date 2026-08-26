@@ -99,6 +99,7 @@ House loadHouse({required String houseYaml, required String bindingsYaml}) {
       position: _point(p['position'], 'the position: on $device'),
       entityId: binding.entityId,
       streamName: binding.streamName,
+      substream: binding.substream,
       talkStream: binding.talkStream,
       snapshotEntityId: binding.snapshotEntity,
     );
@@ -307,7 +308,33 @@ void _checkStream(ParsedBinding binding, DeviceKind kind) {
         'the drawing and re-run the converter. The name is not echoed, for '
         "the stream: message's reason below.");
   }
+  // A substream with no stream is a tile that plays a small picture and a
+  // Popup that plays nothing — every time, silently, on a Device that looks
+  // wired. Refused here rather than tolerated, because the two lines sit
+  // together and deleting the wrong one is the likely typo.
+  //
+  // Gated on the kind so that a `substream:` on a *light* is answered by the
+  // video rule below and not by this one: "a light cannot play video" is the
+  // author's actual mistake, and "add a stream:" would be advice towards a
+  // second line that is equally refused.
+  if (specOf(kind).video &&
+      binding.substream != null &&
+      binding.streamName == null) {
+    throw FormatException(
+        'bindings.yaml: ${binding.label} has a substream: and no stream: — '
+        'the substream is what a *tile* plays, and the Popup would still have '
+        'nothing to open. Add the stream:, or delete the substream:. Neither '
+        'name is echoed, for the stream: message\'s reason below.');
+  }
   if (specOf(kind).video) return;
+  if (binding.substream != null) {
+    throw FormatException(
+        'bindings.yaml: ${binding.label} is a ${specOf(kind).slug} and has a '
+        'substream: — only a camera or a doorbell plays video, so nothing '
+        'would ever play it; delete the line, or fix the marker\'s kind in '
+        'the drawing and re-run the converter. The name is not echoed, for '
+        "the stream: message's reason below.");
+  }
   if (binding.streamName != null) {
     throw FormatException(
         'bindings.yaml: ${binding.label} is a ${specOf(kind).slug} and has a '

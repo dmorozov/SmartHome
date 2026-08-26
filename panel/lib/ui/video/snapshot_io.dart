@@ -33,7 +33,12 @@ Future<SnapshotResult> fetchSnapshot(Uri url, {required String token}) async {
 
 Future<SnapshotResult> _get(HttpClient client, Uri url, String token) async {
   final request = await client.getUrl(url);
-  request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+  // No token, no header — the go2rtc source (`Go2rtcStillsConfig`) is
+  // tokenless by design, and a `Bearer ` with nothing after it is a
+  // malformed credential, not an absent one.
+  if (token.isNotEmpty) {
+    request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
+  }
   final response = await request.close();
   if (response.statusCode != HttpStatus.ok) {
     await response.drain<void>();
@@ -43,5 +48,11 @@ Future<SnapshotResult> _get(HttpClient client, Uri url, String token) async {
   await for (final chunk in response) {
     builder.add(chunk);
   }
-  return SnapshotResult.ok(builder.takeBytes());
+  // go2rtc answers a dead camera's `frame.jpeg` with a ZERO-BYTE 200
+  // (measured 2026-08-25) — and `Image.memory` over zero bytes is an
+  // exception in the tile, not a picture. An empty body is a refusal
+  // whatever the status line said.
+  final bytes = builder.takeBytes();
+  if (bytes.isEmpty) return SnapshotResult.refused('empty');
+  return SnapshotResult.ok(bytes);
 }

@@ -77,6 +77,123 @@ binding, no re-authoring.
 Goal: a camera that serves RTSP locally with no cloud dependency —
 `connectivity: local`.
 
+### A2.−1 DONE, 2026-08-15 — all five cameras stream, nothing was flashed
+
+**This section's experiment is over and it succeeded.** Everything below
+in A2.0/A2.1 is the state a few hours earlier the same day, kept because
+the sequence is what a future reader needs; the outcome is here.
+
+The owner enabled RTSP in the Wyze app on **all five** units. No flash on
+any of them — the firmware already carried the feature. All five now serve
+H.264 1920×1080 @ 20 fps through go2rtc, on both transports, with clean
+teardown. **That includes both Floodlight bundles**, which research §3.2
+had flagged UNVERIFIED for this firmware; the caution can be retired.
+
+Three predictions in this plan were wrong, each failing in a way that
+looked like a different problem, and all three are corrected in
+[Ch. 5 §2.2](../../../appliance/commissioning/05-devices-cloud.md):
+
+1. **The path is `/stream0`, not `/live`.** With the right credentials and
+   the wrong path the camera authenticates and then closes in silence —
+   indistinguishable from a bad password until you send a deliberately bad
+   one and get `401` instead. `hub/tool/wyze-fleet.py rtsp` now runs that
+   comparison automatically, because it is the only thing that tells them
+   apart.
+2. **RTSPS on 322, not RTSP on 554.** 554 is open on all five and answers
+   nothing at all, plaintext or TLS.
+3. **go2rtc 1.9.10 cannot dial these over TLS.** Both `rtsps://` and its
+   `rtspx://` no-verify variant time out; the source needs an `ffmpeg:`
+   wrapper with `#video=copy#audio=copy`.
+
+**Five cameras, five streams — not seven.** A "Floodlight bundle" is one
+Wyze Cam v3 on a lamp mount: one lens, one stream. The lamp is an LED
+fixture with its own PIR sensor that switches itself on locally and has no
+video at all, so nothing in `go2rtc.yaml` refers to it. Controlling the
+lamp *from the Panel* is a separate, cloud-only job (Wyze publishes no
+device-control API; only `ha-wyzeapi` via HACS) that is not started and is
+gated on HACS plus a `light-*` Placement being drawn — see Ch. 5 §2.2.1.
+
+One rough edge, characterised rather than filed: the two floodlight units
+take **17–18 s** to first frame where the three plain v3s take **4.6–5.2 s**.
+Web/MSE just shows `connecting` for longer; the appliance's MJPEG request
+returns 200 and **zero bytes** while cold, because go2rtc answers the
+internal DESCRIBE before the upstream producer knows its tracks. RF does
+not explain the split — which units are slow is measured, why is not.
+Full numbers in Ch. 5 §2.2.1.
+
+### A2.0 What the network says today — measured 2026-08-15
+
+Run before touching anything, and re-runnable at any point:
+
+```sh
+hub/tool/wyze-fleet.py scan
+```
+
+It sweeps this host's own subnet, keeps every neighbour carrying Wyze
+Labs' OUI (`d0:3f:27`) and probes each for an RTSP listener. It carries no
+inventory table of its own — the A1 table above stays the single source of
+the human names, and the script prints MAC so the two can be matched.
+
+**Result, 2026-08-15 (9 s for the whole /22):**
+
+```
+192.168.68.54    d0:3f:27:53:25:72  no listener on 554/8554
+192.168.68.57    d0:3f:27:8d:cc:54  no listener on 554/8554
+192.168.68.62    d0:3f:27:4a:95:76  no listener on 554/8554
+192.168.68.63    d0:3f:27:8e:4f:b1  no listener on 554/8554
+192.168.68.69    d0:3f:27:49:b2:f6  no listener on 554/8554
+
+5 Wyze unit(s); 0 serving RTSP.
+```
+
+Three things follow, and they are the state this phase actually starts from:
+
+1. **All five units are present and every MAC↔IP pair matches A1 exactly**,
+   eight days after **C1** reserved them by MAC on the Deco. The drift that
+   made §2.1 of Ch. 5 warn against writing IPs down is fixed; an address may
+   now go into `go2rtc.yaml`, and the reservation is the reason it may.
+2. **Not one of them serves RTSP.** That is not a fault and not evidence
+   against the firmware — the feature ships **off** and is enabled per
+   camera in the app. It is, however, the proof that **nobody has done step
+   1 yet**, which the plan could not previously distinguish from "done and
+   not working".
+3. **This is as far as anything on this box can get.** Every remaining
+   branch — toggle present, toggle absent, RTSP vs RTSPS, the invented
+   credentials — is on the other side of a phone. See A2.1.
+
+### A2.1 The owner action this phase is waiting on
+
+Open the Wyze app on a **plain v3** — Family Room (`.57`), Living Room
+(`.69`) or Back Yard Door (`.63`); **not** the Garage Door or Back Yard
+units, which are Floodlight bundles carrying a second firmware that §3.2 of
+the research doc flags as an untested combination — and look for
+**Settings → Advanced Settings → RTSP**.
+
+- **Toggle present** (expected — these are v3s on 4.36.16.7064, newer than
+  the 4.36.16.5654 that carried RTSP to production): enable it, invent a
+  user and password there, and note whether the URL it prints is `rtsp://`
+  or `rtsps://`. Nothing external issues those credentials; the app is the
+  only place they exist. Then, before they are written into any config:
+
+  ```sh
+  WYZE_RTSP_USER=<the user you invented> hub/tool/wyze-fleet.py rtsp 192.168.68.57
+  ```
+
+  It prompts for the password, never prints it, and does a real
+  `OPTIONS`/`DESCRIBE` handshake with Digest auth. It separates three
+  outcomes that a black tile in the Panel cannot: nothing listening, `401`
+  (serving, wrong credentials), and `200` with an SDP naming H.264 — only
+  the last is worth configuring. `--tls` for RTSPS, which is also a
+  different port (322).
+- **Toggle absent**: only then does step 1 below — the `demo_V3_RTSP`
+  sideload — apply at all, and E3's "flash one and decide the fleet"
+  premise comes back with it.
+
+Everything downstream of that tap is a session's work and none of it is
+blocked: the go2rtc entries are pre-written and commented, with the
+reserved addresses already in them, in `hub/go2rtc/go2rtc.example.yaml`;
+the Panel needs no new code, only a `stream:` line per camera (§A4).
+
 1. **Verify the firmware is still obtainable** (2026 status UNVERIFIED —
    this is the experiment's first gate): the official Wyze RTSP firmware
    for v3 (`demo_V3_RTSP` line, last known 4.61.0.3). If Wyze no longer
@@ -522,6 +639,14 @@ case — it is.
 
 ## Done when
 
+Status re-read **2026-08-15**. **B3 is closed** (2026-08-07): the A1 table
+above is filled in for all five units, and **C1** reserved every one of their
+addresses by MAC the same day. Re-measured from this host on 2026-08-15
+(§A2.0): all five present at exactly those addresses, **none serving RTSP**.
+So what gates this phase is no longer an inventory and no longer a purchase —
+it is **one tap in the Wyze app on one plain v3**, written out in §A2.1, and
+everything on this side of it is ready for it.
+
 Status re-read **2026-08-07**. **E8 is closed. G4 is closed** — the Linux
 release binary builds, runs, and has rendered live video from go2rtc in the
 doorbell Popup under Xvfb (phase-0 item 14 has the full evidence and the four
@@ -534,12 +659,15 @@ owner-blocked is **B3** for the Wyze inventory — i.e. a camera to
 point at. Separately, the *kiosk* claim is still unproven: that needs `cage`
 installed (**G6**) and the **A7** spike day, neither of which phase 4 gates on.
 
-- ⬜ **Open — owner-blocked (B3).** Every Wyze unit either serves RTSP locally
-  (flashed) or restreams via wyze-bridge; all visible in the go2rtc UI; the A1
-  inventory table in this file records which path each took. **A1 is still
-  empty**: five `D0:3F:27` MACs is not five cameras, and the model per unit is
-  what E3's flash decision branches on. Nothing here can start until the
-  owner reads the Deco and Wyze apps.
+- ⬜ **Open — owner-blocked on one tap (E3/D1).** Every Wyze unit either serves
+  RTSP locally or restreams via wyze-bridge; all visible in the go2rtc UI; the
+  A1 inventory table in this file records which path each took. **A1 is no
+  longer empty** — it was filled in on 2026-08-07 and the five units are named,
+  modelled and firmware-versioned, which is what E3's decision branches on.
+  What is left is §A2.1: enable RTSP in the app on one plain v3, prove it with
+  `hub/tool/wyze-fleet.py rtsp`, then two config lines per camera. Measured
+  2026-08-15, none of the five serves RTSP yet, so the count of units on
+  *either* path is still zero.
 - ⬜ **Open — owner-blocked (B3/B2), and one thing this host cannot do.** Popup
   plays live video for at least: one Wyze camera and the Ring doorbell; close =
   stream teardown (verify in go2rtc UI: consumer count drops to 0). Of the

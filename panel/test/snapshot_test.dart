@@ -52,6 +52,40 @@ void main() {
     });
   });
 
+  group('Go2rtcStillsConfig.urlFor', () {
+    const config = Go2rtcStillsConfig(
+        go2rtcUrl: 'http://hub.local:1984', fetch: _never);
+
+    test('builds the frame grab with the cache window that bounds its cost',
+        () {
+      final url = config.urlFor('wyze_garage_door_sub')!;
+      expect(url.path, '/api/frame.jpeg');
+      expect(url.queryParameters,
+          {'src': 'wyze_garage_door_sub', 'cache': '45s'});
+    });
+
+    test('an empty base is absent, not a localhost the Panel invented', () {
+      expect(const Go2rtcStillsConfig(fetch: _never).urlFor('x'), isNull);
+    });
+
+    test('no stream, no URL', () {
+      expect(config.urlFor(null), isNull);
+      expect(config.urlFor(''), isNull);
+    });
+
+    test('an address with no host is a typo, refused as one', () {
+      const typo =
+          Go2rtcStillsConfig(go2rtcUrl: 'localhost:1984', fetch: _never);
+      expect(typo.urlFor('x'), isNull);
+    });
+
+    test('https is not downgraded', () {
+      const tls = Go2rtcStillsConfig(
+          go2rtcUrl: 'https://hub.local:1984', fetch: _never);
+      expect(tls.urlFor('x')!.scheme, 'https');
+    });
+  });
+
   group('fetchSnapshot (appliance branch, real socket)', () {
     late HttpServer server;
 
@@ -77,6 +111,33 @@ void main() {
       expect(auth, 'Bearer secret-token');
       expect(result.status, 'ok');
       expect(result.bytes, [1, 2, 3]);
+    });
+
+    test('an empty token sends no Authorization header at all', () async {
+      String? auth;
+      final url = await serve((request) {
+        auth = request.headers.value(HttpHeaders.authorizationHeader);
+        request.response
+          ..headers.contentType = ContentType('image', 'jpeg')
+          ..add([1, 2, 3])
+          ..close();
+      });
+      // The go2rtc source (`Go2rtcStillsConfig`) is tokenless by design;
+      // a `Bearer ` with nothing after it would be a malformed credential,
+      // not an absent one.
+      final result = await fetchSnapshot(url, token: '');
+      expect(auth, isNull);
+      expect(result.status, 'ok');
+    });
+
+    test('a zero-byte 200 is a refusal, not an empty image', () async {
+      // What go2rtc's `frame.jpeg` answers for a camera whose RTSP daemon
+      // is dead (measured 2026-08-25) — and `Image.memory` over zero bytes
+      // throws in the tile.
+      final url = await serve((request) => request.response.close());
+      final result = await fetchSnapshot(url, token: 't');
+      expect(result.bytes, isNull);
+      expect(result.status, 'empty');
     });
 
     test('a non-200 is the status code, drained and done', () async {

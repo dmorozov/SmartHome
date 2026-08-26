@@ -104,9 +104,9 @@ services:
     restart: unless-stopped
 
   go2rtc:
-    # Same image pin as the appliance stack (the version Frigate 0.17 embeds,
-    # per docs/research/frigate-amd-acceleration.md).
-    image: alexxit/go2rtc:1.9.10
+    # Same image pin as the appliance stack (1.9.14 since phase-8 — preload +
+    # frame.jpeg caching; see hub/compose.yaml for the pin's full story).
+    image: alexxit/go2rtc:1.9.14
     container_name: go2rtc-dev
     environment:
       # Talkback: the `mic` stream captures with `ffmpeg -f pulse -i default`,

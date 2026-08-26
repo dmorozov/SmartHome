@@ -73,6 +73,7 @@ Future<void> pumpPanel(
       hubLabel: hubLabel,
       video: video,
       snapshots: snapshots,
+      stills: const Go2rtcStillsConfig(),
       talk: talk));
   await tester.pumpAndSettle();
 }

@@ -109,6 +109,6 @@ devices:
         sourceLabel: 'panel/assets/house/house.yaml');
     expect(package.text,
         File('../hub/dev/ha-config/packages/panel_dev.yaml').readAsStringSync());
-    expect(devices, hasLength(33));
+    expect(devices, hasLength(36));
   });
 }

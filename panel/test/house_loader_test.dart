@@ -275,6 +275,62 @@ bindings:
       );
     });
 
+    test('a camera may name a substream, and it rides beside the stream '
+        'rather than replacing it — a tile and a Popup want different sizes',
+        () {
+      final camera = loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: cam-den
+    name: "Den Camera"
+    kind: camera
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  cam-den:
+    stream: den_cam
+    substream: den_cam_sub
+    connectivity: local
+''').floors.single.rooms.single.devices.single;
+      expect(camera.streamName, 'den_cam');
+      expect(camera.substream, 'den_cam_sub');
+    });
+
+    test('a substream with no stream is refused: the tile would play and the '
+        'Popup would have nothing to open', () {
+      // The two lines sit together, so deleting the wrong one is the likely
+      // typo — and the result looks wired up from the Dollhouse and is not.
+      expect(
+        () => loadHouse(houseYaml: _plan(placements: '''
+devices:
+  - key: cam-den
+    name: "Den Camera"
+    kind: camera
+    room: den
+    position: [1, 1]
+'''), bindingsYaml: '''
+bindings:
+  cam-den:
+    substream: den_cam_sub
+    connectivity: local
+'''),
+        _rejects('has a substream: and no stream:'),
+      );
+    });
+
+    test('a substream on a light is refused, like the stream it shadows', () {
+      expect(
+        () => loadHouse(houseYaml: _plan(), bindingsYaml: '''
+bindings:
+  light-den:
+    entity: input_boolean.light_den
+    substream: den_cam_sub
+    connectivity: local
+'''),
+        _rejects('only a camera or a doorbell plays video'),
+      );
+    });
+
     test('a snapshot on a light is refused: nothing would ever fetch it', () {
       // The same wrong-belief failure as a stream on a light: the author
       // thinks a still face is wired up, and nothing will ever read it.

@@ -6,6 +6,7 @@ import 'package:panel/ui/hub_controller.dart';
 import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/snapshot.dart';
+import 'package:panel/ui/video/stream_director.dart';
 
 import 'test_house.dart';
 
@@ -31,19 +32,25 @@ import 'test_house.dart';
 
 /// [house] with one Device given a go2rtc stream name.
 ///
-/// The shipped `bindings.yaml` names no stream on any placeholder *camera*:
-/// no go2rtc feed exists for them, and a `stream:` pointing at nothing
-/// would be a confident wrong answer in the one file a human hand-edits.
-/// (The doorbell is the exception since 2026-08-05 — it is real hardware
-/// with a real `ring_doorbell` stream and a snapshot face.) So a test about
-/// camera video states the fact itself, here, rather than teaching the
-/// assets something for a test's benefit.
+/// A test about camera video states the wiring itself, here, rather than
+/// inheriting whatever the shipped `bindings.yaml` happens to say — pair
+/// this with [houseWithoutCameraStreams] so the scene is stated in full.
 ///
-/// Rebuilds the House rather than mutating it: [Device] is immutable and
-/// [House] is a tree of `const` values, which is exactly the property that
-/// makes a golden reproducible.
+/// **This used to be unnecessary and the reason it became necessary is the
+/// point.** Until 2026-08-15 the shipped file named a stream on no camera
+/// at all: none of them had a go2rtc feed, and a `stream:` pointing at
+/// nothing would have been a confident wrong answer in the one file a human
+/// hand-edits. (The doorbell was the exception from 2026-08-05 — real
+/// hardware, a real `ring_doorbell` stream, a snapshot face.) Then the Wyze
+/// fleet came up, `cam-garage` and `cam-living` became real cameras with
+/// real streams, and ten Cameras-view cases that had quietly been asserting
+/// "nothing here is wired" started failing on a change that was nothing to
+/// do with them. A test that reads the house's wiring out of the shipped
+/// assets breaks every time the house gains a camera, which is a thing the
+/// house is supposed to do.
+///
 House houseWithStream(House house, String deviceId, String streamName,
-    {String? snapshotEntity}) {
+    {String? snapshotEntity, String? substream, bool clearSnapshot = false}) {
   Device retarget(Device device) => device.id == deviceId
       ? Device(
           id: device.id,
@@ -53,9 +60,49 @@ House houseWithStream(House house, String deviceId, String streamName,
           position: device.position,
           entityId: device.entityId,
           streamName: streamName,
-          snapshotEntityId: snapshotEntity ?? device.snapshotEntityId,
+          substream: substream,
+          // `??` keeps the device's own binding by default — the doorbell
+          // scenes rely on it. [clearSnapshot] is for the one scene that
+          // needs the opposite: a device wired for video with NO snapshot
+          // face at all, which `??` cannot express.
+          snapshotEntityId: clearSnapshot
+              ? null
+              : (snapshotEntity ?? device.snapshotEntityId),
         )
       : device;
+  return _rebuilt(house, retarget);
+}
+
+/// [house] with every *camera*'s stream name removed, the doorbell's kept.
+///
+/// The blank sheet a Cameras-view test starts from, so that what it is
+/// about — which sessions exist when, and that closing the view closes all
+/// of them — is decided by the case and not by how many Wyze units the
+/// family happens to own this month. Layer the wiring back on with
+/// [houseWithStream].
+///
+/// The doorbell is deliberately untouched: several cases assert that it
+/// starts *off* despite having a stream (#177014 — an open Ring session
+/// suppresses dings), and that is a statement about a Device that has one.
+House houseWithoutCameraStreams(House house) => _rebuilt(
+      house,
+      (device) => device.kind == DeviceKind.camera && device.streamName != null
+          ? Device(
+              id: device.id,
+              name: device.name,
+              kind: device.kind,
+              connectivity: device.connectivity,
+              position: device.position,
+              entityId: device.entityId,
+              snapshotEntityId: device.snapshotEntityId,
+            )
+          : device,
+    );
+
+/// Rebuilds rather than mutates: [Device] is immutable and [House] is a tree
+/// of `const` values, which is exactly the property that makes a golden
+/// reproducible.
+House _rebuilt(House house, Device Function(Device) retarget) {
   return House(
     name: house.name,
     floors: [
@@ -93,11 +140,15 @@ Widget panelApp(
   String hubLabel = 'FAKE HUB',
   VideoConfig video = const VideoConfig(),
   SnapshotConfig snapshots = const SnapshotConfig(),
+  Go2rtcStillsConfig stills = const Go2rtcStillsConfig(),
   TalkConfig talk = const TalkConfig(),
+  StreamDirector? director,
 }) =>
     PanelApp(
         controller: controller,
         hubLabel: hubLabel,
         video: video,
         snapshots: snapshots,
-        talk: talk);
+        stills: stills,
+        talk: talk,
+        director: director);

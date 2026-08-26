@@ -167,6 +167,7 @@ class Device {
     required this.position,
     this.entityId,
     this.streamName,
+    this.substream,
     this.talkStream,
     this.snapshotEntityId,
   });
@@ -191,6 +192,24 @@ class Device {
   /// contract is pure *answers* about how a Device looks and behaves, and a
   /// stream name is neither — it is a fact the House Plan states.
   final String? streamName;
+
+  /// The smaller go2rtc stream a *tile* plays, when the camera offers one —
+  /// e.g. `wyze_living_room_sub`. Null means the camera has one size and a
+  /// tile plays [streamName].
+  ///
+  /// **What it is for**: the Cameras view draws a grid of ~400 px tiles, and
+  /// a tile does not need 1920×1080. On this house's fleet the substream is
+  /// 640×360, roughly a ninth of the pixels, and the Popup — the one place a
+  /// person is actually looking closely — keeps the full size. Measured
+  /// 2026-08-15, five 1080p tiles at once were reliably knocking one or two
+  /// cameras off the air, because Wyze v3s are 2.4 GHz-only and this Hub is
+  /// on Wi-Fi as well, so every frame crosses the air twice.
+  ///
+  /// **Not derivable from [streamName]**, and deliberately not a `_sub`
+  /// suffix rule: what exists in `go2rtc.yaml` is stated there and named
+  /// here, never guessed by the Panel. Same argument as [talkStream], and
+  /// the same one that rejected a `_mjpeg` transport suffix.
+  final String? substream;
 
   /// The go2rtc stream this Device's push-to-talk button pushes into, e.g.
   /// `ring`. Null on everything that is not a doorbell, and null on those too

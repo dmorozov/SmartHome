@@ -17,9 +17,11 @@ import 'ui/edge_tab.dart';
 import 'ui/hub_controller.dart';
 import 'ui/theme.dart';
 import 'ui/audio/talk.dart';
+import 'ui/video/camera_health.dart';
 import 'ui/video/live_video.dart';
 import 'ui/video/live_video_keepalive.dart';
 import 'ui/video/snapshot.dart';
+import 'ui/video/stream_director.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -111,6 +113,22 @@ Future<void> main() async {
   // through the seam they already use, and `test/fixtures.dart` still
   // defaults to the raw opener.
   final keepAlive = LiveVideoKeepAlive();
+  // The Stream Director (phase-8), one per process like the pool and never
+  // disposed here for the pool's reason: it holds admission and retry
+  // Timers for as long as the Panel runs. Composed ABOVE the pool — it
+  // dials through `keepAlive.open`, so a feed the Director stops is a
+  // stream the pool may linger — and BELOW every surface: the Cameras view
+  // attaches managed feeds, and the Popup path's `VideoConfig` below opens
+  // through `director.open`, counted but not managed (its arbitration is
+  // `doorbell_popup_host.dart`'s own).
+  final director = StreamDirector(
+    video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
+    // Camera Health off the Hub's own port-322 probes (phase-8 A2): the
+    // Director will not dial a camera whose daemon the Hub says is dead —
+    // each failed dial costs that camera two connections, and the recovery
+    // dial rides the probe flipping back, not a timer.
+    health: HubCameraHealth(controller: boot.controller),
+  );
   // `video` travels beside `controller`/`hubLabel` and deliberately not
   // through `bootPanel`: boot's contract is that it fails "in exactly three
   // ways" and brings up two things, the House and the Hub adapter. go2rtc is
@@ -120,11 +138,17 @@ Future<void> main() async {
     PanelApp(
       controller: boot.controller,
       hubLabel: boot.hubLabel,
-      video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
+      director: director,
+      video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: director.open),
       // The Hub's own address and token, reused: a camera snapshot is an HA
       // REST fetch authenticated exactly like the socket. The token travels
       // in this object to become a header — never a URL part (snapshot.dart).
       snapshots: SnapshotConfig(haUrl: config.url, token: config.token),
+      // The same go2rtc `video` dials, for the Wyze tiles' still faces
+      // (phase-8 A7): a `frame.jpeg` grab off the substream, tokenless,
+      // bounded by its `cache=45s`. The doorbell never uses this source —
+      // its still stays HA-held through `snapshots` (#177014).
+      stills: Go2rtcStillsConfig(go2rtcUrl: config.go2rtcUrl),
       // The same go2rtc, reached over the same address, for the other half of
       // the doorbell: `video` plays what the camera sees, `talk` pushes a
       // microphone back into it. Two configs and not one because every camera
@@ -167,10 +191,18 @@ class PanelApp extends StatelessWidget {
     required this.hubLabel,
     required this.video,
     required this.snapshots,
+    required this.stills,
     required this.talk,
+    this.director,
   });
 
   final HubController controller;
+
+  /// The process-wide Stream Director, when `main()` composed one. Null in
+  /// every hermetic fixture — the Cameras view then builds its own over
+  /// [video], which is the same policy over the same opener, minus the
+  /// cross-surface census only the wall cares about.
+  final StreamDirector? director;
 
   /// What the Hub badge calls the Hub. Passed in rather than read from the
   /// build's dart-defines, so this widget knows nothing about which Hub it
@@ -189,6 +221,11 @@ class PanelApp extends StatelessWidget {
   /// test-fixture fact wearing a Panel costume — `test/fixtures.dart` is
   /// where it defaults, and it defaults to unconfigured.
   final SnapshotConfig snapshots;
+
+  /// go2rtc's frame-grab source, for the Wyze tiles' still faces — the
+  /// other half of the Cameras view's stills, beside [snapshots]. Required
+  /// for [video]'s reason, and defaulted to unconfigured in the same place.
+  final Go2rtcStillsConfig stills;
 
   /// Where the doorbell's push-to-talk pushes. Required for [video]'s reason:
   /// an unconfigured default here would be a fact about test fixtures wearing
@@ -221,6 +258,10 @@ class PanelApp extends StatelessWidget {
     return MaterialApp(
       title: 'Panel',
       debugShowCheckedModeBanner: false,
+      // How the Cameras route hears a Popup ride over it — `didPushNext`
+      // into `StreamDirector.overlaid`. An observer, not a visibility
+      // callback: visibility is blind to routes pushed on top.
+      navigatorObservers: [camerasRouteObserver],
       theme: PanelTheme.data(),
       home: Scaffold(
         // Inside MaterialApp, so the host has a Navigator to push onto; and
@@ -322,6 +363,8 @@ class PanelApp extends StatelessWidget {
                               controller: controller,
                               video: video,
                               snapshots: snapshots,
+                              stills: stills,
+                              director: director,
                             ),
                           ),
                         ),

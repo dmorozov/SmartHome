@@ -41,14 +41,14 @@ void main() {
       // Freshly converted geometry satisfies the gatekeeper's invariants —
       // loadHouse would have thrown otherwise.
       final devices = house.floors.expand((f) => f.devices).toList();
-      expect(devices, hasLength(33));
+      expect(devices, hasLength(36));
       // The whole seam, end to end: these Devices came out of marker
       // positions in the drawing, were assigned Rooms by the converter,
       // and were bound to Hub entities by the one hand-maintained file.
       // Nothing about them was typed twice.
-      expect(devices.where((d) => d.entityId != null), hasLength(33),
+      expect(devices.where((d) => d.entityId != null), hasLength(36),
           reason: 'every Key should bind through bindings.yaml');
-      expect(devices.map((d) => d.id).toSet(), hasLength(33),
+      expect(devices.map((d) => d.id).toSet(), hasLength(36),
           reason: 'Keys are Device identity and must be unique');
       // Room membership was computed, not declared — and the loader's
       // independent _checkPin walk accepted every one of them.

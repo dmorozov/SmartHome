@@ -11,6 +11,9 @@
 #   ev-charger       sensor.tesla_wall_connector
 #   energy-monitor   sensor.emporia_vue
 #   cam-garage       sensor.garage_cam
+#   cam-family       sensor.family_room_cam
+#   cam-backyard     sensor.back_yard_cam
+#   cam-backyard-door sensor.back_yard_door_cam
 #   tv-family        input_boolean.tv_family
 #   light-family     input_boolean.light_family
 #   light-reading    input_boolean.light_reading
@@ -137,6 +140,18 @@ input_text:
     name: "Garage Cam — status"
     initial: "Live"
     max: 255
+  cam_family_status:
+    name: "Family Room Cam — status"
+    initial: "Live"
+    max: 255
+  cam_backyard_status:
+    name: "Back Yard Cam — status"
+    initial: "Live"
+    max: 255
+  cam_backyard_door_status:
+    name: "Back Yard Door Cam — status"
+    initial: "Live"
+    max: 255
   oven_status:
     name: "Oven — status"
     initial: "Off"
@@ -191,6 +206,15 @@ template:
       - name: "Garage Cam"
         unique_id: dev_cam_garage
         state: "{{ states('input_text.cam_garage_status') }}"
+      - name: "Family Room Cam"
+        unique_id: dev_cam_family
+        state: "{{ states('input_text.cam_family_status') }}"
+      - name: "Back Yard Cam"
+        unique_id: dev_cam_backyard
+        state: "{{ states('input_text.cam_backyard_status') }}"
+      - name: "Back Yard Door Cam"
+        unique_id: dev_cam_backyard_door
+        state: "{{ states('input_text.cam_backyard_door_status') }}"
       - name: "Oven"
         unique_id: dev_oven
         state: "{{ states('input_text.oven_status') }}"

@@ -74,3 +74,75 @@ http:
   cors_allowed_origins:
     - "*"
   login_attempts_threshold: 5
+
+# --- Wyze RTSP daemon monitors (phase-8 A2) -----------------------------------
+# One binary_sensor per camera, TCP-probing RTSPS port 322 once a minute.
+# WHY: the Wyze RTSP-beta firmware's daemon dies after hours/days of uptime —
+# measured 2026-08-25: 4 of 5 cameras answered pings at 0% loss while actively
+# REFUSING port 322 (instant RST, stable over 7+ minutes). That daemon death,
+# not bandwidth, is what makes Cameras tiles fail intermittently. These
+# sensors do double duty:
+#   1. long-horizon uptime history per camera (recorder charts it), which is
+#      the data the preload-scope and wyze:// decisions wait on;
+#   2. real per-camera entities the Panel's Hub availability seam can consume
+#      ("Camera Health" — the Stream Director will not dial a camera whose
+#      probe says the daemon is down).
+# The probe is credential-free (a bare TCP connect, no RTSP handshake) and
+# cannot wake, stream, or otherwise touch the camera. The Ring doorbell has
+# no row here on purpose: its reachability is ring-mqtt's business and
+# probing anything Ring risks a cloud session (#177014).
+# Command shape: connect_ex returns non-zero on refusal (daemon dead -> OFF);
+# a TIMEOUT (camera off Wi-Fi entirely) raises, python exits non-zero, and
+# `|| echo OFF` keeps the sensor honest instead of unavailable.
+# See docs/plans/device-integrations/phase-8-cameras-streaming.md.
+command_line:
+  - binary_sensor:
+      name: Wyze Family Room RTSP
+      unique_id: wyze_family_room_rtsp
+      device_class: connectivity
+      scan_interval: 60
+      command_timeout: 10
+      payload_on: "ON"
+      payload_off: "OFF"
+      command: >-
+        python3 -c "import socket;s=socket.socket();s.settimeout(3);print('ON' if s.connect_ex(('192.168.68.57',322))==0 else 'OFF')" 2>/dev/null || echo OFF
+  - binary_sensor:
+      name: Wyze Living Room RTSP
+      unique_id: wyze_living_room_rtsp
+      device_class: connectivity
+      scan_interval: 60
+      command_timeout: 10
+      payload_on: "ON"
+      payload_off: "OFF"
+      command: >-
+        python3 -c "import socket;s=socket.socket();s.settimeout(3);print('ON' if s.connect_ex(('192.168.68.69',322))==0 else 'OFF')" 2>/dev/null || echo OFF
+  - binary_sensor:
+      name: Wyze Back Yard Door RTSP
+      unique_id: wyze_back_yard_door_rtsp
+      device_class: connectivity
+      scan_interval: 60
+      command_timeout: 10
+      payload_on: "ON"
+      payload_off: "OFF"
+      command: >-
+        python3 -c "import socket;s=socket.socket();s.settimeout(3);print('ON' if s.connect_ex(('192.168.68.63',322))==0 else 'OFF')" 2>/dev/null || echo OFF
+  - binary_sensor:
+      name: Wyze Garage Door RTSP
+      unique_id: wyze_garage_door_rtsp
+      device_class: connectivity
+      scan_interval: 60
+      command_timeout: 10
+      payload_on: "ON"
+      payload_off: "OFF"
+      command: >-
+        python3 -c "import socket;s=socket.socket();s.settimeout(3);print('ON' if s.connect_ex(('192.168.68.54',322))==0 else 'OFF')" 2>/dev/null || echo OFF
+  - binary_sensor:
+      name: Wyze Back Yard RTSP
+      unique_id: wyze_back_yard_rtsp
+      device_class: connectivity
+      scan_interval: 60
+      command_timeout: 10
+      payload_on: "ON"
+      payload_off: "OFF"
+      command: >-
+        python3 -c "import socket;s=socket.socket();s.settimeout(3);print('ON' if s.connect_ex(('192.168.68.62',322))==0 else 'OFF')" 2>/dev/null || echo OFF

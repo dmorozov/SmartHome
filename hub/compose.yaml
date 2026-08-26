@@ -170,14 +170,24 @@ services:
     restart: unless-stopped
 
   go2rtc:
-    # 1.9.10 per docs/research/frigate-amd-acceleration.md (the version Frigate
-    # 0.17 embeds) — keeps the phase-1 restream layer aligned with the future
-    # Frigate deployment so cameras slot in without rework.
-    image: alexxit/go2rtc:1.9.10
+    # 1.9.14 since phase-8 (2026-08-24): the Cameras work needs `preload:`
+    # (1.9.11) for the slow floodlight units and frame.jpeg caching (1.9.14)
+    # for tile stills. This consciously supersedes the earlier 1.9.10 pin
+    # (the version Frigate 0.17 embeds, docs/research/frigate-amd-acceleration.md);
+    # re-align deliberately if/when Frigate actually lands. 1.9.12's security
+    # additions (local_auth, allow_paths) are opt-in — the unauthenticated
+    # LAN setup and api.origin "*" keep working, re-verified on upgrade.
+    image: alexxit/go2rtc:1.9.14
     container_name: go2rtc
     # host networking for WebRTC (dynamic UDP ports + correct candidate IPs).
     # API/UI :1984, RTSP :8554, WebRTC :8555.
     network_mode: host
+    # The host's GPUs, for ffmpeg hardware encoding (#hardware=vaapi on the
+    # MJPEG transcodes). Without this the container has no /dev/dri at all and
+    # /api/ffmpeg/hardware reports ERROR for every engine (measured 2026-08-25
+    # on 1.9.10 while the host exposed two render nodes).
+    devices:
+      - /dev/dri:/dev/dri
     volumes:
       # ADR-0010: the live stream config (may embed camera credentials) lives
       # at ~/.sh_keys/go2rtc/go2rtc.yaml, not in the repo tree — mounted as a

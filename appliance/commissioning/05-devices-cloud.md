@@ -245,24 +245,35 @@ grep -i D03F27 /usr/share/ieee-data/oui.txt
 # D0-3F-27   (hex)		Wyze Labs Inc
 ```
 
-| IP (2026-08-04) | IP (re-measured 2026-08-07) | MAC |
-|---|---|---|
-| 192.168.68.54 | 192.168.68.54 | d0:3f:27:53:25:72 |
-| 192.168.68.57 | 192.168.68.57 | d0:3f:27:8d:cc:54 |
-| 192.168.68.62 | **192.168.68.63** | d0:3f:27:8e:4f:b1 |
-| 192.168.68.63 | **192.168.68.62** | d0:3f:27:4a:95:76 |
-| 192.168.68.69 | 192.168.68.69 | d0:3f:27:49:b2:f6 |
+| IP (2026-08-04) | IP (re-measured 2026-08-07) | IP (2026-08-15) | MAC |
+|---|---|---|---|
+| 192.168.68.54 | 192.168.68.54 | 192.168.68.54 | d0:3f:27:53:25:72 |
+| 192.168.68.57 | 192.168.68.57 | 192.168.68.57 | d0:3f:27:8d:cc:54 |
+| 192.168.68.62 | **192.168.68.63** | 192.168.68.63 | d0:3f:27:8e:4f:b1 |
+| 192.168.68.63 | **192.168.68.62** | 192.168.68.62 | d0:3f:27:4a:95:76 |
+| 192.168.68.69 | 192.168.68.69 | 192.168.68.69 | d0:3f:27:49:b2:f6 |
 
-**Two of the five already drifted IPs in three days** — `.8e:4f:b1` and
-`.4a:95:76` swapped between `.62` and `.63`. This is the live proof for why
-identification and later binding must key on **MAC**, never IP: no DHCP
-reservation exists yet for any of these (that's **C1**), so the address any
-one of them holds today is not the address it holds next week. Match by MAC
-in both the Deco app and the Wyze app; don't write an IP into anything that
-has to stay true.
+**Two of the five drifted IPs in three days** — `.8e:4f:b1` and `.4a:95:76`
+swapped between `.62` and `.63` between the first two columns. That was the
+live proof for why identification must key on **MAC**, never IP, and it is
+also what **C1** then fixed: since 2026-08-07 all five hold Deco address
+reservations made by MAC, and the third column is those reservations holding
+eight days later, unchanged. So an IP may now be written into
+`go2rtc.yaml` — but it is still read *back* by MAC, and the reservation is
+the only reason the address is allowed to appear anywhere.
 
-To re-list them at any time (unprivileged; the pings are only there to
-populate the neighbour cache):
+To re-list them at any time — unprivileged, no table to keep in step, and it
+also answers the question §2.2 turns on:
+
+```sh
+hub/tool/wyze-fleet.py scan
+```
+
+It sweeps this host's own subnet, keeps every neighbour carrying the Wyze
+OUI, and probes each for an RTSP listener. **Measured 2026-08-15: five units,
+none serving RTSP** — 554 and 8554 both refused on all five, which is what a
+v3 looks like before anyone enables the toggle, not a fault. The two-liner it
+replaces still works and needs nothing but coreutils:
 
 ```sh
 for i in 54 57 62 63 69; do ping -c1 -W1 192.168.68.$i >/dev/null 2>&1; done
@@ -294,44 +305,264 @@ anywhere in this chapter.
 
 Per §3.2, Wyze promoted RTSP/RTSPS from beta to **production firmware on
 2026-02-02** for Cam v3 (4.36.16.5654) and Cam Pan v3 (4.50.16.5654),
-app ≥ 3.9, enabled in the camera's Advanced Settings. So the first check
-is not a flash at all:
+app ≥ 3.9, enabled in the camera's Advanced Settings. **B3 read the
+firmware off every unit on 2026-08-07 and all five are Cam v3 on
+4.36.16.7064 — newer than the build that carries RTSP.** So the first
+check is not a flash at all, and on this fleet a flash is unlikely to be
+needed anywhere:
 
 1. **Look in the Wyze app** for an RTSP option in the target camera's
-   advanced settings once it is on current firmware. Whether these
-   specific units are already on that firmware is **UNVERIFIED** — read
-   it off the app.
+   advanced settings. Do a **plain v3 first** — Family Room (`.57`),
+   Living Room (`.69`) or Back Yard Door (`.63`); the Garage Door and
+   Back Yard units are Floodlight bundles and carry a second firmware for
+   the light controller, which §3.2 flags as an untested combination.
+   **This is the step nothing else can be done without, and it is
+   owner-only** — it is a phone, an account and a tap, none of which a
+   session on this box has.
 2. Only if the toggle is absent does the older sideload path apply
    (FAT32 microSD, `demo.bin` in the root, hold setup while powering).
    Note that phase-4 §A2 still describes that older `demo_V3_RTSP` line
    (4.61.0.3) — it predates the production firmware in §3.2. **If the
    production firmware exposes RTSP, use it and skip the demo build.**
-3. Set the stream credentials in the app and note the URL:
-   `rtsp://user:pass@<cam-ip>/live`.
-4. Reserve the camera's address by MAC in the Deco app, then add it to
-   `hub/go2rtc/go2rtc.yaml` (gitignored — stream URLs embed camera
-   credentials):
+3. Set the stream credentials in the app — you invent them there, nothing
+   external issues them — then **tap Generate URL and read the whole URL
+   off that screen**. Do not reconstruct it from memory or from this
+   document. On the firmware this fleet runs it is
+   `rtsps://user:pass@<cam-ip>:322/stream0`, and **all three of scheme,
+   port and path differ from what this chapter said until 2026-08-15**:
+
+   - **`/stream0`, not `/live`.** `/live` belonged to the old sideloaded
+     demo firmware. `/stream1` is the substream.
+   - **RTSPS on 322, not RTSP on 554**, whenever the app's RTSPS toggle is
+     on — which is its default. Turning it off is offered on the same
+     screen (with a security warning to accept) and is defensible here:
+     ADR-0008 puts this on a LAN with no port-forward. It would also let
+     go2rtc dial the camera natively — see step 5.
+   - **554 stays open and mute.** All five accept a TCP connection there
+     and answer nothing at all, plaintext or TLS. A port scan reads that
+     as success; every client hangs on it.
+4. **Ask the camera before you write the password down anywhere.** The
+   address is already reserved by MAC (**C1**, 2026-08-07 — that step used
+   to live here and is done):
+
+   ```sh
+   WYZE_RTSP_USER=<the user you invented> \
+     hub/tool/wyze-fleet.py rtsp 192.168.68.57 --tls
+   ```
+
+   It prompts for the password, never echoes it, and DESCRIBEs the stream
+   — one request per connection, because these cameras close the socket
+   after answering and a client that pipelines reads EOF and blames the
+   credentials. Outcomes it separates, which a black tile in the Panel
+   cannot:
+
+   | what you see | what it means |
+   |---|---|
+   | `connect FAILED` | nothing listening on that port — wrong transport, or the toggle is off |
+   | `DESCRIBE 401` | serving, credentials wrong |
+   | `DESCRIBE 200` + an SDP naming H.264 | good — configure it |
+   | **connection closed, no reply** | **ambiguous, and this is the trap** |
+
+   That last one is why the tool then re-runs with a **deliberately wrong**
+   password. A camera that answers `401 Invalid Authorization` to nonsense
+   but closes silently on your real password has *accepted* the login and
+   objected to something else — nearly always the path. Without that
+   comparison, a wrong path is indistinguishable from a wrong password, and
+   on 2026-08-15 it cost several rounds of chasing the wrong thing.
+5. Add it to `~/.sh_keys/go2rtc/go2rtc.yaml` — outside the repo, because
+   stream URLs embed camera credentials (ADR-0010) — as **two producers,
+   not one**. The second line is not optional and leaving it out fails
+   *silently*: go2rtc will not transcode for a format no producer offers,
+   so the appliance build's `/api/stream.mjpeg` gets HTTP 200 and zero
+   bytes (phase-4 §B1). The five entries are pre-written, commented, with
+   their reserved addresses already in them, in
+   [`hub/go2rtc/go2rtc.example.yaml`](../../hub/go2rtc/go2rtc.example.yaml) —
+   copy the one you enabled and add the password:
 
    ```yaml
    streams:
-     wyze_<location>: rtsp://user:pass@<cam-ip>/live
+     wyze_family_room:
+       - ffmpeg:rtsps://user:pass@192.168.68.57:322/stream0#video=copy#audio=copy
+       - ffmpeg:wyze_family_room#video=mjpeg
    ```
+
+   **The `ffmpeg:` wrapper is required, not stylistic.** go2rtc 1.9.10's
+   own RTSP client cannot talk TLS to these cameras — plain `rtsps://` and
+   the `rtspx://` prefix (its documented skip-verification variant, meant
+   for UniFi) both time out reading the socket, logging
+   `read tcp …: i/o timeout` while the camera is perfectly healthy.
+   ffmpeg has no such trouble, and `#video=copy#audio=copy` remuxes rather
+   than transcodes, so it costs a process, not CPU. If you turn RTSPS off
+   in the app instead, the wrapper is unnecessary and a bare
+   `rtsp://user:pass@<ip>:554/stream0` works natively.
+
+   **One RTSP session per camera.** Do not give the mjpeg producer the
+   camera URL directly to save a hop: measured 2026-08-15, two producers
+   dialling the same camera make *both* return nothing. The second reads
+   from go2rtc's own stream name, exactly as above.
 
    ```sh
    docker compose -f /home/dmorozov/Work/SmartHome/hub/compose.yaml restart go2rtc
    ```
 
-   Verify at `http://192.168.68.81:1984/` → the stream → **links → MSE**.
+   Verify at `http://192.168.68.81:1984/` → the stream → **links → MSE**,
+   and verify the *second* producer separately, because the UI does not
+   show it:
 
-Known limits, to accept knowingly: **no RTSP for Cam v4** (a firmware
-change actually broke bridge RTSP there), and whether the Feb-2026
-firmware covers the v3-based Floodlight bundle is **UNVERIFIED** —
-floodlights are not candidates until a plain v3 succeeds and a floodlight
-is tested deliberately.
+   ```sh
+   curl -m 8 -o /dev/null -w '%{size_download}\n' \
+     'http://127.0.0.1:1984/api/stream.mjpeg?src=wyze_family_room'
+   ```
 
-**Gate:** one flashed unit streaming reliably for a few days → flash the
-remaining v3-class units one at a time. Firmware unobtainable or stream
-flaky → everything goes through the bridge.
+   Anything other than `0` is a pass. `0` means the `ffmpeg:` line is
+   missing or misspelled — or the camera is one of the two floodlights,
+   see the defect below.
+6. Bind it on the Panel: one `stream:` line in
+   `panel/assets/house/bindings.yaml` next to the camera's `entity:`,
+   naming the go2rtc key and nothing else (`wyze_family_room` — never a
+   URL; the parser refuses `:`/`/`/`@` precisely so a pasted RTSP password
+   cannot reach the Panel's log). Only `cam-garage` and `cam-living` have
+   a Key to bind to today — see §2.4.
+
+### 2.2.1 Result — all five, 2026-08-15
+
+Enabled in the app and measured from the Hub host the same day. **Nothing
+was flashed**: the firmware already had it.
+
+| Camera | H.264 (web/MSE) | MJPEG (appliance) |
+|---|---|---|
+| Family Room `.57` | ✅ | ✅ |
+| Living Room `.69` | ✅ | ✅ |
+| Back Yard Door `.63` | ✅ | ✅ |
+| Garage Door `.54` *(floodlight)* | ✅ | ⚠️ cold-start defect |
+| Back Yard `.62` *(floodlight)* | ✅ | ⚠️ cold-start defect |
+
+Stream format is **H.264 1920×1080 @ 20 fps** plus PCM mu-law audio.
+Teardown is clean — every consumer returns to 0 and every producer to an
+idle stub when the last viewer leaves, so the #177014 discipline the Ring
+doorbell needs holds for these too.
+
+**The floodlight question is settled: the Feb-2026 RTSP firmware DOES
+cover the v3-based Floodlight bundle.** Research §3.2 marked that
+UNVERIFIED and this chapter told you not to try one until a plain v3 had
+succeeded. Both floodlights serve H.264 exactly like the plain v3s.
+
+#### What a "Floodlight bundle" actually is — one camera, one lamp
+
+Owner clarification, 2026-08-15, and worth stating because the phrase
+invites the wrong reading. A Floodlight bundle is **one Wyze Cam v3 on a
+lamp mount**:
+
+| Half | What it is | In the video path? |
+|---|---|---|
+| **Camera** | a Wyze Cam v3 — one lens, one RTSP stream | yes: `wyze_garage_door`, `wyze_back_yard` |
+| **Floodlight** | LED fixture + its own PIR sensor | **no** — it has no video at all |
+
+So **five cameras, five streams — not seven.** The second firmware version
+in the A1 table (`1.0.0.55`) is the light controller's, not a second
+camera's. The lamp switches itself on from its own onboard motion sensor,
+entirely locally, with no involvement from the Hub, go2rtc or the Panel —
+it worked before any of this and keeps working if the Hub is off.
+
+**Controlling the lamp from the Panel is a separate, cloud-only job that
+has not been started.** Wyze publishes no device-control API (§3.0 of the
+HACS table below); the only path is `SecKatie/ha-wyzeapi` via HACS, which
+reverse-engineers the Wyze app's cloud API. So the same physical unit
+would be **`local` for its video and `cloud` for its light** — the video
+path earned `local` here, and nothing about that transfers to the lamp.
+Two further gates: HACS is not installed yet, and there is no `light-*`
+Key drawn for either lamp, so a Placement would have to be authored in
+Sweet Home 3D first (ADR-0005, same session as **F1a**).
+
+#### ⚠️ The two floodlight units are slow to start
+
+Not a defect in this config — a property of those two units. Measured
+cold, time to first frame on the H.264 path:
+
+| Unit | Cold start |
+|---|---|
+| Family Room, Living Room, Back Yard Door | **4.6 – 5.2 s** |
+| Garage Door, Back Yard *(floodlight)* | **17.0 – 17.9 s** |
+
+No overlap between the groups, and **RF does not explain it** — Family
+Room has *worse* ping latency (17.2 ms avg) than Back Yard (12.6 ms) and
+still starts in 5 s. Which units are slow is measured; *why* is not. The
+lamp fixture is the only known difference between the groups, so the
+correlation is stated and the causation is not.
+
+**What that costs, per transport:**
+
+- **Web (H.264/MSE)** — works on all five; the floodlights just take ~18 s
+  to picture instead of ~5 s. Well inside the Popup's 30 s deadline, but
+  `LiveVideoPhase.connecting` will be on screen a long time, which is
+  exactly why §B insists that phase be honest rather than cosmetic.
+- **Appliance (MJPEG)** — a **cold** request to either floodlight returns
+  HTTP 200 and **zero bytes**. The mjpeg producer reads from go2rtc's own
+  stream name, and go2rtc answers that DESCRIBE before the upstream
+  producer has established what tracks exist, so ffmpeg gets an empty SDP
+  and exits with `Output file does not contain any stream`. Warm the
+  source — pull `/api/stream.mp4` for a few seconds — and the same camera
+  serves MJPEG normally (12.25 MB, first byte at 6.5 s). The three plain
+  v3s start inside the race and never hit it. This is the silent
+  zero-bytes failure §B1 warns about, arriving from a direction §B1 did
+  not anticipate.
+
+**Tried and does not work:** `#timeout=30` on the mjpeg producer. That
+param sets the RTSP *input* timeout and this is not a timeout — ffmpeg
+connects fine and finds nothing to map. Measured 2026-08-15; recorded so
+the next reader does not spend the same hour.
+
+#### 2.2.2 Five cameras at once needs the substream — this is a Wi-Fi house
+
+The finding that shaped the Cameras view, measured 2026-08-15 after all five
+were streaming individually:
+
+| How they are opened | Result |
+|---|---|
+| One at a time | **all five work**, every time |
+| All five at once | 1–2 fail, and *which* ones changes per run |
+| Staggered 2 s apart | still 1–2 fail, a different pair again |
+
+The error is ffmpeg's `Host is unreachable` — an *immediate* network
+failure, not a timeout, so no deadline anywhere can fix it. The cause is the
+topology:
+
+- **Wyze Cam v3 is 2.4 GHz only.** The Hub host is on **5 GHz at −66 dBm**.
+  So every frame crosses the air **twice** — camera→AP on 2.4, AP→host on 5.
+- Packet loss to the cameras is **10–20% even at idle**, and it moves around.
+
+**There is no cable coming.** Owner constraint, stated 2026-08-15: this
+environment is **Wi-Fi only, permanently**. The Hub host has an `enp162s0`
+and it will never be plugged in. Anyone reading a `Host is unreachable` here
+and reaching for Ethernet is reaching for something that does not exist.
+
+So the fix is to spend less airtime, and the cameras already offer the means:
+**`/stream1` is 640×360** against `/stream0`'s 1920×1080 — about a ninth of
+the pixels. Both can be pulled from one camera *simultaneously* (measured).
+The Panel therefore:
+
+- plays the **substream in every Cameras-view tile** (`substream:` in
+  `bindings.yaml`, `wyze_*_sub` in `go2rtc.yaml`) — a tile is ~400 px wide
+  and has no use for 1080p;
+- plays the **full stream only when one camera fills the screen** — tapping a
+  tile zooms it, which replaces the grid and so stops the other four.
+
+Measured after the change: **all five substreams opened at once, all five
+delivered.** That is the difference between the Cameras view working here and
+not.
+
+**Bandwidth, measured:** H.264 ~100 kB/s per camera; MJPEG ~1.3 MB/s.
+That MJPEG figure is **7× what phase-4 §B measured** against the 640×480
+selftest pattern, because these are 1080p — five tiles of it is roughly
+50 Mbit, which is the number to size the Cameras view against.
+
+Known limit that still stands: **no RTSP for Cam v4** (a firmware change
+actually broke bridge RTSP there). Not relevant to this fleet — all five
+units are v3.
+
+**Gate: passed.** All five stream, so nothing here goes through the
+bridge (§2.3) and no unit is ever flashed. Path B stays written down for
+a future non-v3 camera, not for these.
 
 ### 2.3 Path B — docker-wyze-bridge for the rest
 
@@ -367,15 +598,35 @@ Pin camera firmware and **disable auto-update** on every bridge-dependent
 unit. Wyze's firmware churn broke every bridge fork for months in 2025;
 treat it as a standing reliability risk, not a one-off.
 
-### 2.4 There are three camera Keys and up to five cameras
+### 2.4 Three camera Keys, five cameras — and only two of them line up
 
 `house.yaml` has exactly three `cam-*` Keys — `cam-garage`, `cam-living`,
-`cam-office` — plus `doorbell`. If four or five of the Wyze units turn
-out to be cameras worth showing, **the extra ones have nowhere to bind**.
+`cam-office` — plus `doorbell`. B3 settled what they have to cover, and the
+conditional this section used to be written as is now a fact: **all five
+Wyze units are cameras**, and the fit is worse than a shortfall of two.
+
+| Camera (A1) | Key |
+|---|---|
+| Garage Door Cam | `cam-garage` — name match |
+| Living Room Cam | `cam-living` — name match |
+| Family Room Cam | **none** |
+| Back Yard Cam | **none** |
+| Back Yard Door Cam | **none** |
+| — | `cam-office`: a Key with **no camera behind it** |
+
+So **two** cameras can be bound today, three have nowhere to go, and one
+Key points at a camera this house does not own. Do not be tempted to spend
+`cam-office` on one of the homeless three: a Key carries the Placement it
+was drawn at, so binding the Family Room camera to `cam-office` puts its
+pin in the Office and makes the Dollhouse lie about where the picture comes
+from — the one thing the Dollhouse is for.
+
 Per ADR-0005 a new Key is authored in the drawing (Sweet Home 3D on the
 Mac → `tool/sh3d_to_yaml.py` → `dart run tool/gen_dev_entities.dart`), not
-by editing `bindings.yaml`. Plan for that session, or decide deliberately
-that two cameras stay off the Panel.
+by editing `bindings.yaml`. That session is **F1a** in TODO.md, which names
+the three tags to draw (`cam-family`, `cam-backyard`, `cam-backyard-door`)
+and is owner-only. It does not block §2.2: enable RTSP and bind the two
+that fit, and the other three land the moment their tags exist.
 
 ---
 

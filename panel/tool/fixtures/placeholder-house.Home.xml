@@ -122,6 +122,23 @@
     <property name="kind" value="camera"/>
     <property name="placementKey" value="cam-garage"/>
   </pieceOfFurniture>
+  <!-- The other three real Wyze cameras, added 2026-08-15 so the placeholder
+       house can carry all five units the family owns instead of two. These
+       are the Keys F1a plans to draw into the REAL house; positions here are
+       placeholders and the whole point of a Key is that moving the marker
+       later costs nothing downstream. -->
+  <pieceOfFurniture id="pf-cam-family" catalogId="SmartHome#camera" name="Family Room Cam" creator="SmartHome" level="level0" x="1150" y="450" width="10" depth="10" height="10">
+    <property name="kind" value="camera"/>
+    <property name="placementKey" value="cam-family"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-cam-backyard" catalogId="SmartHome#camera" name="Back Yard Cam" creator="SmartHome" level="level0" x="1640" y="150" width="10" depth="10" height="10">
+    <property name="kind" value="camera"/>
+    <property name="placementKey" value="cam-backyard"/>
+  </pieceOfFurniture>
+  <pieceOfFurniture id="pf-cam-backyard-door" catalogId="SmartHome#camera" name="Back Yard Door Cam" creator="SmartHome" level="level0" x="1250" y="950" width="10" depth="10" height="10">
+    <property name="kind" value="camera"/>
+    <property name="placementKey" value="cam-backyard-door"/>
+  </pieceOfFurniture>
   <pieceOfFurniture id="pf-tv-family" catalogId="SmartHome#tv" name="Family Room TV" creator="SmartHome" level="level0" x="950" y="70" width="10" depth="10" height="10">
     <property name="kind" value="tv"/>
     <property name="placementKey" value="tv-family"/>

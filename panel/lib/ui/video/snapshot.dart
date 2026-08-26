@@ -95,3 +95,75 @@ class SnapshotConfig {
     return base.replace(pathSegments: ['api', 'camera_proxy', entityId]);
   }
 }
+
+/// The second still source (phase-8 A7): go2rtc's own frame grab, for the
+/// cameras HA holds no JPEG for — the Wyze fleet, whose `snapshot:` binding
+/// does not exist and should not: an HA camera entity per Wyze would be a
+/// heavier integration bought for a picture go2rtc already has.
+///
+/// A sibling of [SnapshotConfig], not a mode of it: the two sources differ
+/// in every fact that matters. This one is **tokenless** — go2rtc is
+/// unauthenticated on this LAN (owner decision, phase-4 §B0) — so callers
+/// pass `token: ''` and the fetchers send no Authorization header at all
+/// (which on web also keeps the request simple: no CORS preflight for
+/// go2rtc to fail). And unlike `camera_proxy`, **a fetch here can wake a
+/// device**: a cache-miss `frame.jpeg` on a stream with no running producer
+/// dials the camera for one keyframe (~3 s, measured 2026-08-25). The
+/// `cache=45s` parameter is what bounds that: within the window go2rtc
+/// answers from cache — byte-identical, sub-millisecond, no dial (measured)
+/// — so a remount storm after a zoom-and-back costs the camera nothing.
+///
+/// **The doorbell never reaches this class.** Any go2rtc consumer on the
+/// Ring stream — a frame grab included — opens a real Ring cloud session
+/// and suppresses dings (HA core #177014). The call site enforces it by
+/// kind (`DeviceKind.camera` only) and the doorbell's still stays HA-held
+/// through [SnapshotConfig].
+/// The go2rtc frame-grab cache window — how long a repeat `frame.jpeg` is
+/// answered from cache (byte-identical, sub-millisecond, no camera dial;
+/// measured) before the next fetch dials for a fresh keyframe.
+///
+/// **Deliberately shorter than the tile's refresh cadence**
+/// (`kCamerasSnapshotRefresh`, 60 s): each periodic tick lands past the
+/// window and gets a fresh frame, while remount storms inside it — a
+/// zoom-and-back, a view reopen — are free. Raise this past the cadence and
+/// every tick silently returns the same cached bytes (a frozen face logging
+/// `snapshot_ok`); lower the cadence below this and ticks silently
+/// coalesce. The ordering is pinned by a test in `cameras_view_test.dart`.
+const kGo2rtcStillCache = Duration(seconds: 45);
+
+@immutable
+class Go2rtcStillsConfig {
+  const Go2rtcStillsConfig({this.go2rtcUrl = '', this.fetch = fetchSnapshot});
+
+  /// Base address of go2rtc, e.g. `http://192.168.68.81:1984` — the same
+  /// value `VideoConfig.go2rtcUrl` carries, spelled here again because this
+  /// config travels to a surface (the still loop) that must not reach into
+  /// the video seam for it. Empty means unconfigured: [urlFor] answers null
+  /// and the tile simply has no go2rtc still face.
+  final String go2rtcUrl;
+
+  final SnapshotFetcher fetch;
+
+  /// `http://host:1984` + `wyze_garage_door_sub` ->
+  /// `http://host:1984/api/frame.jpeg?src=wyze_garage_door_sub&cache=45s`.
+  ///
+  /// Null instead of throwing, mirroring [SnapshotConfig.urlFor] and
+  /// `VideoConfig.urlFor` clause for clause: a bad address must only ever
+  /// cost the picture.
+  Uri? urlFor(String? streamName) {
+    if (go2rtcUrl.isEmpty || streamName == null || streamName.isEmpty) {
+      return null;
+    }
+    final base = Uri.tryParse(go2rtcUrl);
+    // The same generosity guard as the siblings: `localhost:1984` parses as
+    // scheme `localhost` with no host at all.
+    if (base == null || base.host.isEmpty) return null;
+    return base.replace(
+      path: '/api/frame.jpeg',
+      queryParameters: {
+        'src': streamName,
+        'cache': '${kGo2rtcStillCache.inSeconds}s',
+      },
+    );
+  }
+}

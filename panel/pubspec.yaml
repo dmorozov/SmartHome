@@ -17,6 +17,7 @@ dependencies:
   # import of an undeclared dependency is a lint away from being an error and
   # a `pub upgrade` away from disappearing.
   web: ^1.1.1
+  visibility_detector: ^0.4.0+2
 
 dev_dependencies:
   flutter_test:

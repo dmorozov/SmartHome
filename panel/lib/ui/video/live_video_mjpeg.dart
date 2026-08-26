@@ -32,10 +32,24 @@ const liveVideoIsAvailable = true;
 /// browser's WebSocket path does not pay it (101 ms in real Chrome) and why
 /// has not been measured, so nothing here is sized on an explanation.
 ///
-/// Fifteen seconds is well clear of both — the point of the margin is that a
-/// slow start must show [LiveVideoPhase.connecting] honestly rather than be
-/// called a failure.
-const kMjpegFirstFrameTimeout = Duration(seconds: 15);
+/// **Twenty-five seconds since 2026-08-15, matching [kMseOpenTimeout], and
+/// for the reason recorded there:** those numbers above are the `selftest`
+/// pattern, and real cameras are slower by a lot. The Wyze fleet's cold time
+/// to first frame is 4.6–5.2 s for the three plain v3s and **17.0–17.9 s**
+/// for the two floodlight units, so fifteen failed working hardware by about
+/// three seconds every time. The point of the margin is that a slow start
+/// must show [LiveVideoPhase.connecting] honestly rather than be called a
+/// failure.
+///
+/// The two branches are kept equal deliberately. They answer the same
+/// question about the same producer, and a wall that gives up sooner than the
+/// browser — or later — is a difference nobody would think to look for.
+///
+/// Note this deadline is not the floodlights' only problem on this transport:
+/// a *cold* MJPEG request to one returns HTTP 200 and zero bytes because
+/// go2rtc answers its own internal DESCRIBE before the upstream producer
+/// knows its tracks. No timeout here can fix that; see Ch. 5 §2.2.1.
+const kMjpegFirstFrameTimeout = Duration(seconds: 25);
 
 /// How long a stream that *was* playing may go silent before it is failed.
 ///

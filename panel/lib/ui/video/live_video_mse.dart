@@ -19,12 +19,30 @@ const liveVideoIsAvailable = true;
 /// How long go2rtc has to answer the codec offer with a picture.
 ///
 /// The socket itself connects in milliseconds on a LAN; what takes time is
-/// go2rtc starting the producer, measured at 2.10 s for the transcoding case
-/// and 4.10 s cold. The same fifteen seconds the appliance branch allows, for
-/// the same reason
-/// — a slow start must read as [LiveVideoPhase.connecting] and not as a
-/// failure somebody goes looking for a cause of.
-const kMseOpenTimeout = Duration(seconds: 15);
+/// go2rtc starting the producer — a slow start must read as
+/// [LiveVideoPhase.connecting] and not as a failure somebody goes looking for
+/// a cause of.
+///
+/// **Twenty-five seconds since 2026-08-15, and it was fifteen until real
+/// cameras arrived.** Fifteen was sized against the `selftest` pattern —
+/// 2.10 s warm, 4.10 s cold — which turned out to be nothing like a camera.
+/// Measured cold time to first frame on the Wyze fleet:
+///
+/// * Family Room, Living Room, Back Yard Door — **4.6 – 5.2 s**
+/// * Garage Door, Back Yard (floodlight units) — **17.0 – 17.9 s**
+///
+/// So the old value failed the two floodlights by about three seconds, every
+/// time, on a camera that was working perfectly: the wall said `Live view
+/// failed` while go2rtc was still dutifully starting the producer. That is
+/// the exact failure ADR-0007 exists to forbid — a fault reported for
+/// something that is not faulty.
+///
+/// Twenty-five is chosen against the *measured* worst case plus ~40% head,
+/// not doubled for luck, and it stays under [kDoorbellPopupDeadline]'s 30 s so
+/// the Popup's own deadline is still the outer bound rather than a race.
+/// If a future camera is slower than this, raise it against a measurement and
+/// move the Popup deadline with it.
+const kMseOpenTimeout = Duration(seconds: 25);
 
 /// How long a playing stream may go silent before it is failed.
 ///
@@ -189,7 +207,24 @@ class MseLiveVideoSession implements LiveVideoSession {
     _video.style
       ..width = '100%'
       ..height = '100%'
-      ..objectFit = 'contain';
+      ..objectFit = 'contain'
+      // The video must not eat the touch that lands on it.
+      //
+      // A platform view on web is a real DOM element composited ABOVE the
+      // Flutter canvas, so a `<video>` filling a Cameras tile takes every
+      // pointer event and the tile's own [GestureDetector] never sees one.
+      // Measured 2026-08-15 on the wall: tapping a tile that was *playing*
+      // did nothing, while a tile showing `Connecting…` or `Live view
+      // failed` — Flutter-drawn text, no platform view — zoomed as intended.
+      // That is a control that works only when it has nothing to show.
+      //
+      // `pointer-events: none` here rather than an invisible Flutter widget
+      // stacked over the video: the element is ours, the rule is one line,
+      // and an overlay would have to be maintained at every call site that
+      // ever renders [view]. Nothing inside this element is interactive —
+      // there are no native controls, `muted` is set for autoplay and the
+      // Panel's own chrome is drawn by Flutter — so nothing is lost.
+      ..pointerEvents = 'none';
 
     _restartWatchdog(
         openTimeout, 'go2rtc sent no picture in ${openTimeout.inSeconds}s');
@@ -315,7 +350,11 @@ class MseLiveVideoSession implements LiveVideoSession {
       final host = element as web.HTMLElement;
       host.style
         ..width = '100%'
-        ..height = '100%';
+        ..height = '100%'
+        // Both, not just the video: this div is the platform view itself and
+        // is composited above the Flutter canvas whether or not the `<video>`
+        // inside it happens to fill it. See the note on `_video.style`.
+        ..pointerEvents = 'none';
       host.appendChild(_video);
       // Post-frame, and not inline here. `onElementCreated` runs while `host`
       // is still detached, and the removing steps this very `appendChild`
@@ -327,9 +366,44 @@ class MseLiveVideoSession implements LiveVideoSession {
       // at `readyState` 4 with `currentTime` marching forward only in the jumps
       // [_trim] gave it. A post-frame callback lands after Flutter has put the
       // platform view into the DOM, which is after that checkpoint.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _resume());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _resume();
+        _letTouchesThrough(host);
+      });
     },
   );
+
+  /// Makes Flutter's own platform-view wrapper transparent to pointers, so a
+  /// tap on a playing tile reaches the widget underneath it.
+  ///
+  /// **Why this is not solved by `pointer-events: none` on our own elements.**
+  /// It was tried first and it is necessary but not sufficient. Flutter wraps
+  /// the element it hands us in an `<flt-platform-view>` of its own, and that
+  /// wrapper carries `pointer-events: auto`. With the video and its host made
+  /// transparent, `document.elementFromPoint` over a tile still answered
+  /// `FLT-PLATFORM-VIEW#flt-pv-3` — measured 2026-08-15 — and that element is
+  /// not `<flt-glass-pane>`, which is the only place Flutter listens. So the
+  /// touch was swallowed one level above anything this file owned, and the
+  /// Cameras view's tap-to-zoom worked on every tile that was *not* playing.
+  ///
+  /// Walks up at most a few levels and only ever touches an element whose tag
+  /// is `FLT-PLATFORM-VIEW`, so a Flutter version that renames or restructures
+  /// this leaves the tree alone rather than blanking pointers on something
+  /// load-bearing. If that happens the failure is the old one — a tile that
+  /// ignores taps while it plays — and this comment is where to start.
+  ///
+  /// Safe because nothing inside is interactive: no native controls, `muted`
+  /// for autoplay, and every control the Panel draws is a Flutter widget.
+  static void _letTouchesThrough(web.HTMLElement host) {
+    web.Element? node = host;
+    for (var i = 0; node != null && i < 4; i++) {
+      if (node.tagName.toUpperCase() == 'FLT-PLATFORM-VIEW') {
+        (node as web.HTMLElement).style.pointerEvents = 'none';
+        return;
+      }
+      node = node.parentElement;
+    }
+  }
 
   /// Puts a re-parented `<video>` back on the live edge and starts it again.
   ///
@@ -530,8 +604,35 @@ class MseLiveVideoSession implements LiveVideoSession {
     } else {
       _append(buffer, bytes);
     }
-    _noteBytesArrived();
+    // The init segment does not start the decode clock — it carries no
+    // frames, so "6 s of video the browser could not decode" would be a
+    // statement about a segment that contains no video.
+    if (!_isInitSegment(bytes)) _noteBytesArrived();
   }
+
+  /// Whether this is the `ftyp`+`moov` header rather than a media segment.
+  ///
+  /// **This is what made the two slow cameras unplayable.** go2rtc sends the
+  /// init segment ~0.1 ms after the handshake, whatever the camera is doing;
+  /// media segments wait for the producer. Arming [decodeTimeout] on the
+  /// first *binary frame* therefore started a 6 s clock at t≈0 on a camera
+  /// whose first frame was coming at t≈17 s, and the tile failed with
+  /// `go2rtc sent 6s of video the browser could not decode` — about a
+  /// stream that had sent no video at all yet. Measured on the wall
+  /// 2026-08-15: the two Wyze floodlight units failed every single time and
+  /// the three fast ones never did, which is exactly the shape of a deadline
+  /// that starts before the thing it is timing.
+  ///
+  /// Checked by box type rather than by counting frames: "the first binary
+  /// frame is the init segment" is true of the protocol as measured, but a
+  /// reconnect or a codec change puts another one on the wire, and a counter
+  /// would arm the clock on it.
+  static bool _isInitSegment(Uint8List bytes) =>
+      bytes.length >= 8 &&
+      bytes[4] == 0x66 && // f
+      bytes[5] == 0x74 && // t
+      bytes[6] == 0x79 && // y
+      bytes[7] == 0x70; //  p
 
   /// Copies [bytes] into the staging buffer, or drops the segment whole.
   ///

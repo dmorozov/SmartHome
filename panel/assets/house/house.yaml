@@ -111,6 +111,21 @@ devices:
     kind: camera
     room: garage
     position: [0.6, 2.6]
+  - key: cam-family
+    name: "Family Room Cam"
+    kind: camera
+    room: family-room
+    position: [11.5, 4.5]
+  - key: cam-backyard
+    name: "Back Yard Cam"
+    kind: camera
+    room: kitchen
+    position: [16.4, 1.5]
+  - key: cam-backyard-door
+    name: "Back Yard Door Cam"
+    kind: camera
+    room: hall
+    position: [12.5, 9.5]
   - key: tv-family
     name: "Family Room TV"
     kind: tv

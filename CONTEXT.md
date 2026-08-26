@@ -71,3 +71,11 @@ _Avoid_: dashboard, camera wall, NVR view
 **Talk**:
 Speaking from the Panel to a Device that has a speaker — today the doorbell alone. Held, never toggled, and **one direction only**: the door cannot yet be heard back, so Talk is not a conversation and the Panel never implies one.
 _Avoid_: two-way audio (that is the thing this is half of), intercom, talkback (the vendor's word for the whole duplex)
+
+**Stream Director**:
+The Panel module that decides which camera streams play: which stream a surface gets (substream for a tile, main for a zoom), when a stream may start (admission spacing, visibility, Camera Health), when it stops (debounced scroll-out, zoom, close), and the one implementation of the session lifecycle. Every video surface opens through it; what it does not actively manage (the Popup) it still counts. Its policy is data — auto-live today, stills-first is a swap, not a rewrite (phase-8).
+_Avoid_: stream manager, video controller, budget (that is one input to it, not the thing)
+
+**Camera Health**:
+The Panel's per-camera reachability fact — is this camera's stream worth dialling right now — fed by the Hub's RTSP port-probe entities, by session outcomes, and by still fetches. Expressed only as per-tile state (an aged still, an "offline" badge); it never reorders the grid, and the Stream Director consults it before dialling.
+_Avoid_: online (ambiguous with the Hub connection), sorting (rejected, phase-8)

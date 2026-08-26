@@ -21,6 +21,7 @@ class ParsedBinding {
     required this.ordinal,
     required this.entityId,
     required this.streamName,
+    required this.substream,
     required this.talkStream,
     required this.snapshotEntity,
     required this.connectivity,
@@ -49,6 +50,30 @@ class ParsedBinding {
   /// may carry one; the loader is what enforces that, because only it knows
   /// the Device's kind.
   final String? streamName;
+
+  /// The go2rtc stream a *tile* plays, when the camera offers a smaller one —
+  /// e.g. `wyze_living_room_sub`. Null means "there is only one size", and
+  /// the tile plays [streamName].
+  ///
+  /// **Why a second name rather than a suffix convention.** Same reason
+  /// `talk:` is its own key: nothing derives one go2rtc stream name from
+  /// another, and a `_sub` rule in code would be the Panel deciding what
+  /// exists in `go2rtc.yaml` — the exact mistake the rejected `_mjpeg`
+  /// convention would have made. A camera with no substream simply has no
+  /// line here.
+  ///
+  /// **Why it exists at all**, measured 2026-08-15: the Cameras view is a
+  /// grid of ~400 px tiles and every one of them was pulling 1920×1080. On
+  /// this house's fleet the substream is 640×360 — about a ninth of the
+  /// pixels — and the full-size stream stays where a person is actually
+  /// looking at it, in the Popup. That mattered because these cameras are
+  /// 2.4 GHz-only and the Hub is on Wi-Fi too, so a tile's bytes cross the
+  /// air twice, and five tiles at once was reliably knocking one or two
+  /// cameras off with `Host is unreachable`.
+  ///
+  /// Only a video kind may carry one, and only alongside a [streamName] —
+  /// the loader enforces both, because only it knows the Device's kind.
+  final String? substream;
 
   /// The go2rtc stream this Device's push-to-talk button pushes **into**, e.g.
   /// `ring`. Null is the normal case and stays normal — a doorbell with no
@@ -397,6 +422,18 @@ Map<String, ParsedBinding> parseBindings(String yaml) {
     // One camera watched from two rooms is a house this must not refuse;
     // the `streams=` count on `house.loaded` is the copy-paste safety net.
 
+    // Held to exactly [_streamName]'s rule, for exactly its reason: this
+    // name is handed to go2rtc as a `?src=` too, so a URL here would tell it
+    // to go and dial that instead of looking a stream up.
+    final substream = _text(binding, key, ordinal, 'substream');
+    if (substream != null && !_streamName.hasMatch(substream)) {
+      throw _refuses(key, ordinal, 'substream',
+          'is not a go2rtc stream name (one or more of letters, digits, dot, '
+          'dash and underscore, and nothing else) — name the stream in '
+          'go2rtc.yaml and put that name here; a URL here would tell go2rtc '
+          'to go and dial it');
+    }
+
     // Held to exactly [_streamName]'s rule, and refused with the same
     // reasoning: a URL here would tell go2rtc to go and dial it, and this key
     // reaches go2rtc as a `dst=` that go2rtc pushes a live microphone into.
@@ -431,6 +468,7 @@ Map<String, ParsedBinding> parseBindings(String yaml) {
       ordinal: ordinal,
       entityId: entityId,
       streamName: streamName,
+      substream: substream,
       talkStream: talkStream,
       snapshotEntity: snapshotEntity,
       // Deliberately no default: a planned Ring camera is a Cloud Device
