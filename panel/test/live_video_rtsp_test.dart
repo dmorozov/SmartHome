@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/ui/video/live_video.dart';
@@ -48,6 +49,99 @@ void main() {
           Uri.parse('ws://hub:1984/api/ws?src=wyze_garage_door_sub'));
       expect(url.path, '/wyze_garage_door_sub');
       expect(url.query, isEmpty);
+    });
+  });
+
+  group('the frame pulse', () {
+    // A global, so every case here puts it back — a leaked `false` would
+    // silently unpin the wall's only defence against a frozen picture.
+    tearDown(() => rtspFramePulse = true);
+
+    test(
+      'a playing view carries the pulse by default — without it the '
+      'GTK/Wayland embedder only re-samples the texture when something '
+      'else makes the engine draw, and the wall updates on scroll alone',
+      () {
+        fakeAsync((async) {
+          final session = RtspLiveVideoSession(
+            _url,
+            controllerFor: (_) => _FakeController(),
+          );
+          // Not a bare player: something wraps it to keep frames coming.
+          expect(session.view, isNot(isA<VideoPlayer>()));
+          session.close();
+        });
+      },
+    );
+
+    test('VIDEO_REPAINT_PULSE=off hands back the plain player', () {
+      fakeAsync((async) {
+        rtspFramePulse = false;
+        final session = RtspLiveVideoSession(
+          _url,
+          controllerFor: (_) => _FakeController(),
+        );
+        expect(session.view, isA<VideoPlayer>());
+        session.close();
+      });
+    });
+
+    testWidgets(
+      'the pulse actually ticks — a ticker that is never started repaints '
+      'nothing, and reads exactly like a wall with no fix at all',
+      (tester) async {
+        final session = RtspLiveVideoSession(
+          _url,
+          controllerFor: (_) => _FakeController(),
+        );
+        final before = tester.binding.transientCallbackCount;
+        await tester.pumpWidget(
+          Directionality(textDirection: TextDirection.ltr, child: session.view),
+        );
+        // A running Ticker holds a transient frame callback. This was the
+        // whole bug: `late final Ticker _ticker = createTicker(...)` is
+        // initialised on first read, nothing read it, and the shipped
+        // "fix" ticked zero times.
+        expect(tester.binding.transientCallbackCount, greaterThan(before));
+
+        // Unmount first so the ticker is disposed, then close so the open
+        // watchdog does not outlive the case.
+        await tester.pumpWidget(const SizedBox.shrink());
+        session.close();
+        await tester.pump();
+      },
+    );
+
+    testWidgets('with the pulse off nothing is scheduled at all', (
+      tester,
+    ) async {
+      rtspFramePulse = false;
+      final session = RtspLiveVideoSession(
+        _url,
+        controllerFor: (_) => _FakeController(),
+      );
+      final before = tester.binding.transientCallbackCount;
+      await tester.pumpWidget(
+        Directionality(textDirection: TextDirection.ltr, child: session.view),
+      );
+      expect(tester.binding.transientCallbackCount, before);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      session.close();
+      await tester.pump();
+    });
+
+    test('the view is still built once, pulse or no pulse', () {
+      fakeAsync((async) {
+        final session = RtspLiveVideoSession(
+          _url,
+          controllerFor: (_) => _FakeController(),
+        );
+        // The pinned invariant this must not break: a fresh widget on every
+        // read would remount the texture on every phase change.
+        expect(identical(session.view, session.view), isTrue);
+        session.close();
+      });
     });
   });
 

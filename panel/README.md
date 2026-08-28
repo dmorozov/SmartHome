@@ -1159,6 +1159,72 @@ cloud side effects, and an open Ring session can suppress the *next* real ding.
 It is per-kind for ADR-0006's reason — per-Device would invite hand-editing the
 safety back off.
 
+**The grid is the person's to arrange.** Press and hold a tile (`kLongPressTimeout`,
+500 ms) and it lifts; drop it on another and it takes that slot. There is no
+arrange mode and there are no handles — the whole discoverability budget is the
+subtitle, `Tap a camera to fill the screen · hold to move it`. Two alternatives were
+built and driven on the wall before this one was picked: an explicit *Arrange*
+mode that replaced the grid with a static board (and stopped every stream
+while you worked, which is real airtime on a 2.4 GHz fleet), and a drag-handle
+rail beside a live grid. Direct manipulation won because on a screen you stand
+in front of, the shortest path from "that one should be first" to it being
+first is to move it.
+
+**The lift delay is the scroll's, not the tap's**, and it was 300 ms on the
+opposite belief until an adversarial review measured it. The grid scrolls on
+the wall — at 1280×800 the viewport is 687 px against 887 px of content — and
+the tiles *are* the scroll surface, so once the delayed recogniser wins, the
+Scrollable has lost that pointer. At 300 ms a finger resting 400 ms and then
+flicking up moved a camera, scrolled nothing, and wrote the new order to
+storage; the sweep put the boundary exactly at the delay (250 ms scrolled,
+300 ms rearranged). `kLongPressTimeout` is the platform's own answer and is
+what `ReorderableListView` uses for the same job.
+
+The residual is real and accepted: rest a full half-second, then flick, and you
+still rearrange. Three things make that survivable — the `NOT SET UP` rule and
+the tail below it are inert scroll surface (~121 px of the viewport on this
+house), the gesture is its own undo, and **`Reset order`** appears in the
+header the moment an arrangement exists, for when nobody remembers what the old
+order was. No arrangement, no button.
+
+Two implementation facts are load-bearing rather than incidental, and both have
+tests:
+
+- **The lifted tile keeps playing in the hole it came from.** No
+  `childWhenDragging` is passed, because handing one in replaces the tile's
+  subtree, which unmounts `CameraTile` and releases its feed — every drag
+  would tear the camera's stream down and dial it again on the drop.
+- **Each slot carries a `GlobalKey`.** A sliver list is not a `Row`:
+  `SliverChildListDelegate` updates whatever element sits at an index, so a
+  `ValueKey` that no longer matches gets the old element *deactivated* and a
+  new one inflated. Measured before the fix — one two-tile swap opened a second
+  go2rtc session and left both tiles reading "Connecting…" over a picture that
+  had been up a moment earlier. `LiveVideoKeepAlive`'s 20 s linger would have
+  hidden most of that on the wall, and hiding a cost is not paying none.
+
+**A camera the House Plan never wired up sits last, behind a `NOT SET UP`
+rule**, cannot be lifted, and nothing can be dropped past it. This is the one
+part of the order a person cannot change, and it is a *plan* fact — no
+`stream:` and no `snapshot:` — never a health fact: a camera whose RTSP daemon
+is dead right now is set-up-and-offline and holds its place, or this fleet's
+firmware would resort the wall every week. On the shipped plan that rule alone
+fixes a real annoyance: plan order put the unwired Office Cam ahead of the Ring
+Doorbell.
+
+**The arrangement survives a restart, per screen.** `CameraOrderStore`
+(`ui/cameras/camera_order.dart`) holds it and writes through a seam;
+`data/camera_order_prefs.dart` binds that to `SharedPreferencesAsync` — the
+Panel's first persistence of anything. `main()` awaits the load before
+`runApp`, so the grid's first frame is already the person's order rather than
+plan order rearranging itself a frame later. Per screen and not house-wide is
+the decision, not an accident: a second screen in another room may want a
+different camera first. The alternative — an HA `input_text` helper, one order
+shared everywhere — was rejected because the arrangement would then fail
+exactly when the Hub is unreachable, which is the moment the Panel is supposed
+to keep working alone (ADR-0007). A write that fails is logged and swallowed;
+losing an arrangement is a disappointment next boot, not something to interrupt
+the wall with.
+
 **The view returns itself to the Dollhouse when nobody is watching.**
 `kCamerasIdleReturn` is 5 minutes; `kCamerasIdleWarning` (30 s, *part of* that
 5 minutes rather than added to it) is the "Still watching?" prompt that softens
@@ -1167,7 +1233,7 @@ a Ring session open on purpose.
 
 ### `cameras.*` — the log vocabulary
 
-Eleven events. The view's own lifecycle, then each tile's.
+Fifteen events. The view's own lifecycle, then each tile's, then the order.
 
 | Line | When |
 |---|---|
@@ -1182,6 +1248,10 @@ Eleven events. The view's own lifecycle, then each tile's.
 | `I cameras.tile_closed name=… reason=…` | the stream was let go |
 | `D cameras.snapshot_ok entity=…` | a still landed. Logged **on change only** — a broken Hub would otherwise write once a minute forever |
 | `W cameras.snapshot_failed entity=… status=…` | `status` is an HTTP code or an exception's bare **type name** — never exception text, which embeds the request URL, and that request carries the Hub token |
+| `I cameras.order_loaded saved=N` | boot: how many device ids the saved arrangement had. `saved=0` is a screen nobody has arranged, not a failure |
+| `W cameras.order_load_failed error=…` | storage would not answer at boot; the grid comes up in plan order rather than not coming up |
+| `I cameras.rearranged device=… to=N` | somebody dropped a tile into slot `to`, counting from 0 among the set-up cameras |
+| `W cameras.order_save_failed error=…` | the arrangement is on screen but did not reach storage, so it will not survive a restart. `error` is a bare **type name** for `snapshot_failed`'s reason — a storage exception's text carries a path |
 
 The `snapshot:` binding key that feeds all of this is documented for the
 author in [HOUSE-PLAN.md](HOUSE-PLAN.md); the Popup uses the same key for its

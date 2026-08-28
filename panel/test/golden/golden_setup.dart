@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/main.dart';
+import 'package:panel/ui/cameras/camera_order.dart';
 import 'package:panel/ui/hub_controller.dart';
 import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/video/live_video.dart';
@@ -74,7 +75,10 @@ Future<void> pumpPanel(
       video: video,
       snapshots: snapshots,
       stills: const Go2rtcStillsConfig(),
-      talk: talk));
+      talk: talk,
+      // Empty: a golden is a picture of plan order, never of somebody's
+      // arrangement.
+      order: CameraOrderStore()));
   await tester.pumpAndSettle();
 }
 

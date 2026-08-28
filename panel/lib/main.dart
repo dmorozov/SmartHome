@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,10 +7,13 @@ import 'package:flutter/services.dart';
 import 'boot.dart';
 import 'config/hub_config.dart';
 import 'config/runtime_env.dart';
+import 'data/camera_order_prefs.dart';
 import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
 import 'diagnostics/url_redaction.dart';
 import 'domain/house.dart';
+import 'ui/cameras/camera_grid.dart';
+import 'ui/cameras/camera_order.dart';
 import 'ui/cameras/cameras_view.dart';
 import 'ui/device_popup.dart';
 import 'ui/dollhouse/dollhouse_view.dart';
@@ -111,11 +116,83 @@ Future<void> main() async {
       ? 'mse'
       : environment['VIDEO_TRANSPORT'] ?? _buildVideoTransport ?? 'rtsp';
   if (!const {'mse', 'mjpeg', 'rtsp'}.contains(videoTransport)) {
-    Log.warn('panel', 'video_transport_unknown',
-        {'asked': videoTransport, 'using': 'mjpeg'});
+    Log.warn('panel', 'video_transport_unknown', {
+      'asked': videoTransport,
+      'using': 'mjpeg',
+    });
   }
   final rawOpen = videoTransport == 'rtsp' ? openRtspVideo : openLiveVideo;
   Log.info('panel', 'video_transport', {'transport': videoTransport});
+  // Which decoders the RTSP player may use, resolved environment-first like
+  // every operational setting above. `rtspVideoDecoders` carries the why —
+  // in short, fvp prefers hardware decoders that on this Hub render
+  // scrambled pictures rather than failing, so the shipped default is
+  // software and the escape hatch must not need a rebuild:
+  //
+  //     VIDEO_DECODERS=CUDA,FFmpeg   try the discrete GPU, fall back
+  //     VIDEO_DECODERS=auto          fvp's own list, hardware first
+  //
+  // Set before the first open and never after: fvp registers once per
+  // process, so this is a composition-root decision by construction.
+  final askedDecoders =
+      environment['VIDEO_DECODERS'] ?? _buildVideoDecoders ?? 'FFmpeg';
+  rtspVideoDecoders = askedDecoders.trim().toLowerCase() == 'auto'
+      ? null
+      : [
+          for (final name in askedDecoders.split(','))
+            if (name.trim().isNotEmpty) name.trim(),
+        ];
+  // fvp's `lowLatency`, off by default because every value above zero drops
+  // the stream's first key frame and paints macroblocks until the camera
+  // sends another — `rtspLowLatency` carries the evidence. The knob is here
+  // to reproduce that, not to tune it.
+  rtspLowLatency =
+      int.tryParse(
+        environment['VIDEO_LOW_LATENCY'] ?? _buildLowLatency ?? '',
+      ) ??
+      0;
+  // Whether a playing stream keeps the engine drawing. On by default because
+  // the GTK/Wayland embedder does not reliably turn a texture's
+  // frame-available signal into a Flutter frame — without it the camera wall
+  // only updates while somebody is scrolling it. `rtspFramePulse` carries
+  // the measurement; `VIDEO_REPAINT_PULSE=off` is how to find out whether a
+  // given machine still needs it.
+  final askedPulse =
+      (environment['VIDEO_REPAINT_PULSE'] ?? _buildRepaintPulse ?? 'on')
+          .trim()
+          .toLowerCase();
+  rtspFramePulse = askedPulse != 'off';
+  // `jiggle` additionally nudges the texture's transform each frame — the
+  // one thing scrolling does that a repaint does not. See `rtspFrameJiggle`.
+  rtspFrameJiggle = askedPulse == 'jiggle';
+  // Which Cameras grid to draw — a temporary bisect for the frozen-video
+  // hunt: `new` (default), `nodrag`, `legacy`, `probe`, `probepool`.
+  // `camerasGridMode` says what each isolates and when to delete them.
+  camerasGridMode = (environment['CAMERAS_GRID'] ?? 'new').trim().toLowerCase();
+  // Which tile shell to draw around the picture — the second bisect, aimed
+  // at what only CameraTile wraps: `full` (default), `novis`, `nokeepalive`,
+  // `nooverlay`, `bare`, `early`, `raw`, plus the raw+one-piece arms
+  // `rawvis`, `rawoverlay`, `rawcard`, `rawclip`, `rawshadow`, `rawbar`.
+  // `cameraTileMode` says what each isolates.
+  cameraTileMode = (environment['VIDEO_TILE'] ?? 'full').trim().toLowerCase();
+  // The subset `VIDEO_TILE=rawmix` composes — see `cameraTileMix`.
+  cameraTileMix = {
+    for (final piece
+        in (environment['VIDEO_MIX'] ?? '').toLowerCase().split(','))
+      if (piece.trim().isNotEmpty) piece.trim(),
+  };
+  // `CAMERAS_OPEN=auto` walks the app onto the Cameras view by itself two
+  // seconds after boot. For the validation rig (`tool/freeze_probe.sh`):
+  // Wayland offers no scripted taps, so the app cooperates instead.
+  camerasAutoOpen =
+      (environment['CAMERAS_OPEN'] ?? '').trim().toLowerCase() == 'auto';
+  // Once-per-second instrumentation of the render path — off unless asked
+  // for. `rtspVideoDebug` documents how to read the line it writes.
+  rtspVideoDebug =
+      (environment['VIDEO_DEBUG'] ?? _buildVideoDebug ?? '')
+          .trim()
+          .toLowerCase() ==
+      'on';
   // The House Plan (ADR-0005): everything drawn — geometry and Device
   // Placements — generated into house.yaml, joined with the hand-maintained
   // Hub bindings.
@@ -134,6 +211,11 @@ Future<void> main() async {
   // through the seam they already use, and `test/fixtures.dart` still
   // defaults to the raw opener.
   final keepAlive = LiveVideoKeepAlive(opener: rawOpen);
+  // The Cameras tile order, read from this screen's own storage before the
+  // first frame. Awaited here and not lazily in the view for the reason
+  // given at the `order:` argument below; never throws, so a corrupt
+  // preferences file costs plan order and not a boot.
+  final order = await loadCameraOrder();
   // The Stream Director (phase-8), one per process like the pool and never
   // disposed here for the pool's reason: it holds admission and retry
   // Timers for as long as the Panel runs. Composed ABOVE the pool — it
@@ -176,6 +258,12 @@ Future<void> main() async {
       // Popup in the house carries the first and only a doorbell can use the
       // second (ADR-0011; `ui/audio/talk.dart`).
       talk: TalkConfig(go2rtcUrl: config.go2rtcUrl),
+      // The tile order somebody dragged into place, read back off this
+      // screen's own storage. Awaited above rather than resolved inside the
+      // view, so the grid's first frame is already the person's order — a
+      // grid that renders in plan order and then rearranges itself is a
+      // wall that looks broken for one frame every time it wakes.
+      order: order,
     ),
   );
 }
@@ -207,6 +295,18 @@ const String? _buildGo2rtcUrl = bool.hasEnvironment('GO2RTC_URL')
 const String? _buildVideoTransport = bool.hasEnvironment('VIDEO_TRANSPORT')
     ? String.fromEnvironment('VIDEO_TRANSPORT')
     : null;
+const String? _buildVideoDecoders = bool.hasEnvironment('VIDEO_DECODERS')
+    ? String.fromEnvironment('VIDEO_DECODERS')
+    : null;
+const String? _buildLowLatency = bool.hasEnvironment('VIDEO_LOW_LATENCY')
+    ? String.fromEnvironment('VIDEO_LOW_LATENCY')
+    : null;
+const String? _buildRepaintPulse = bool.hasEnvironment('VIDEO_REPAINT_PULSE')
+    ? String.fromEnvironment('VIDEO_REPAINT_PULSE')
+    : null;
+const String? _buildVideoDebug = bool.hasEnvironment('VIDEO_DEBUG')
+    ? String.fromEnvironment('VIDEO_DEBUG')
+    : null;
 
 class PanelApp extends StatelessWidget {
   const PanelApp({
@@ -217,6 +317,7 @@ class PanelApp extends StatelessWidget {
     required this.snapshots,
     required this.stills,
     required this.talk,
+    required this.order,
     this.director,
   });
 
@@ -256,6 +357,11 @@ class PanelApp extends StatelessWidget {
   /// the costume of a fact about the Panel. `test/fixtures.dart` is where it
   /// defaults, and it defaults to unconfigured.
   final TalkConfig talk;
+
+  /// The person's camera-tile order. Required for [video]'s reason, and
+  /// defaulted in the same place to a store that forgets at process exit —
+  /// a widget test must not touch a platform channel to draw a grid.
+  final CameraOrderStore order;
 
   /// Whether the House has anything the Cameras view could show. Decides
   /// the tab's existence, not its behaviour: a tab onto an empty grid is
@@ -388,6 +494,7 @@ class PanelApp extends StatelessWidget {
                               video: video,
                               snapshots: snapshots,
                               stills: stills,
+                              order: order,
                               director: director,
                             ),
                           ),
@@ -395,6 +502,20 @@ class PanelApp extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (camerasAutoOpen && _hasCameras)
+                  Builder(
+                    builder: (context) => _AutoOpenCameras(
+                      open: () => showCamerasView(
+                        context,
+                        controller: controller,
+                        video: video,
+                        snapshots: snapshots,
+                        stills: stills,
+                        order: order,
+                        director: director,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -402,6 +523,44 @@ class PanelApp extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Whether the app walks itself onto the Cameras view after boot — the
+/// validation rig's knob (`CAMERAS_OPEN=auto`), never set on the wall.
+bool camerasAutoOpen = false;
+
+/// Renders nothing; two seconds after mounting it opens the Cameras view,
+/// exactly as a tap on [CamerasTab] would. Two seconds is for the Hub badge
+/// and the House to settle, not a magic number a run depends on — the rig's
+/// own warmup dwarfs it.
+class _AutoOpenCameras extends StatefulWidget {
+  const _AutoOpenCameras({required this.open});
+
+  final VoidCallback open;
+
+  @override
+  State<_AutoOpenCameras> createState() => _AutoOpenCamerasState();
+}
+
+class _AutoOpenCamerasState extends State<_AutoOpenCameras> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer(const Duration(seconds: 2), () {
+      if (mounted) widget.open();
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 /// Hub reachability, always visible: a wall display has nobody watching a

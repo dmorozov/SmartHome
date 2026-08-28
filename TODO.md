@@ -45,12 +45,7 @@ flutter run -d web-server --web-port 8080 --web-hostname 127.0.0.1 --profile \
 
 or Linux (real HUB)
 
-HUB=ha \                                                                                                            1 ↵
-HA_URL=http://127.0.0.1:8123 \
-HA_TOKEN="$(tr -d '[:space:]' < ~/.sh_keys/token)" \
-GO2RTC_URL=http://127.0.0.1:1984 \
-VIDEO_TRANSPORT=rtsp \
-flutter run -d linux --release
+VIDEO_DECODERS=auto VIDEO_LOW_LATENCY=0 HUB=ha HA_TOKEN="$(tr -d '[:space:]' < ~/.sh_keys/token)" GO2RTC_URL=http://127.0.0.1:1984 flutter run -d linux --release
 
 Then open http://localhost:8080.
 
@@ -84,3 +79,12 @@ Where that leaves the transport decision, which is yours: the two things standin
 And the RTSP figure flatters MJPEG: those 35% included selftest's own ffmpeg pattern generator, so the camera-only cost of serving RTSP copies is lower still. The reason is structural — on the MJPEG path go2rtc runs one ffmpeg per watched stream, re-encoding H.264 into JPEG frames at 10 fps forever; on the RTSP path it just relays the camera's already-encoded H.264 bytes. That's also the ~7× difference on the Wi-Fi: ~186 kB/s per MJPEG tile versus roughly 25–30 kB/s for the substream's H.264.
 
 Panel-side is the unmeasured cell: the fvp prototype cost ~55% of one core for six streams including software-GL rendering under Xvfb (a real GPU session renders cheaper), while the MJPEG Panel path was never run through the same harness — but it does a JPEG decode per frame per tile on the CPU by construction, so theory points the same direction. If you want that cell filled before flipping the default, the fair test is running your live Panel once per transport and comparing ps on the panel process — two minutes of work, say the word.
+
+
+
+
+
+N7 — stills-first flip                                     │ you wanting the airtime     │ your call, ~an evening  │
+│                                                            │ headroom                    │                         │
+├────────────────────────────────────────────────────────────┼─────────────────────────────┼─────────────────────────┤
+│ N9 — web second-screen (overlay ceiling, IdleReturn dedup) │ web Panel work resuming     │ your call

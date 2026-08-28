@@ -531,6 +531,57 @@ everything else). What landed, against the plan below it:
   the live go2rtc config) is OFF the table**: the fallback needs them
   serving. Revisit only if the owner ever demotes MJPEG outright.
 
+**Step 2½ — the frozen wall (2026-08-27, hunt OPEN).** The gauntlet item
+"texture clips under `PanelTheme`'s rounded corners (needs a real GPU
+session)" turned out to be the whole ballgame: **the RTSP wall has never
+played on the appliance stack** — five tiles show a never-updated texture
+(uninitialized-FBO confetti or one stale frame) while decode advances,
+the engine draws 60 fps, and only scrolling refreshes the picture. MJPEG
+unaffected; the commit-bisect that seemed to show a regression was
+measuring the transport default flip (`f43c52f` "worked" because it was
+silently on MJPEG; forced to RTSP it freezes too).
+
+What the bisect campaign established, each line carrying its method:
+
+- **Exonerated** (probe apps, `CAMERAS_GRID` arms `nodrag`/`legacy`/
+  `probe`/`probepool`, `VIDEO_TILE` arms, zoom behaviour): the grid
+  skeleton and drag rewrite, decoders both ways, `lowLatency`, the frame
+  pulse, Impeller-vs-Skia, texture count per se (a clean-room probe plays
+  N=5), the app shell (the transplanted probe grid plays inside the full
+  Panel), the Stream Director and keep-alive pool (`probepool` plays;
+  `raw` — bare early-mounted tiles through the full Director — plays).
+- **Convicted:** (1) **mount-after-frames** — a Texture widget mounted
+  after its stream is already delivering frames shows one stale frame
+  forever (`bare` vs `raw` differ only in this and only `raw` plays);
+  (2) **the rounded clip** in any form over the five-texture wall
+  (`Container` ClipPath, `ClipRRect`, `Clip.hardEdge` — all frozen, per
+  the owner's eyes on Wayland); (3) **combination load**: shadow, rounded
+  background, corner-notch paint, and name bar each play alone
+  (rig-verified) yet freeze together (`fixcorners`) — a threshold, not a
+  single guilty widget. Pairwise cells are UNKNOWN (the first pair sweep
+  was voided by a blanked screen; re-run pending).
+- **Mechanism** (research, primary sources): the engine provably never
+  caches texture content, so a stale picture means fvp's `renderVideo()`
+  stopped drawing — it runs only inside texture-populate, into a
+  GL-context-bound FBO, and the ≥3.32 GTK compositor rework can change
+  the current context around texture work once saveLayer-class effects
+  enter the scene (fvp#271, fvp#266, flutter#120815, flutter#150668).
+  The zoom (one texture, same card) playing fits the load-dependence.
+- **The validation rig:** `panel/tool/freeze_probe.sh` — autonomous
+  launch/capture/verdict, calibrated both directions (known-playing reads
+  5/6 moving with the idle doorbell cell frozen; known-frozen reads 0/6).
+  Method and trust rules: `.claude/skills/flutter-linux-eyes/SKILL.md`.
+  Supporting knobs shipped for it: `CAMERAS_OPEN=auto`, `VIDEO_TILE`
+  arms incl. `rawmix`+`VIDEO_MIX`, `VIDEO_DEBUG` pulse+pixel lines (the
+  pixel sampler segfaults release GLES runs — rig leaves it off).
+
+Owed once the hunt closes: delete every bisect arm (`CAMERAS_GRID`,
+`VIDEO_TILE`, `VIDEO_MIX`), revert the `VIDEO_DECODERS=FFmpeg` pin to
+auto (disproved both directions), decide the frame pulse's fate against
+measurements, and either ship the no-clip tile design that survives or
+carry the upstream report (the clean-room probe is the repro) to
+flutter/fvp.
+
 The original plan, for reference:
 - New file `panel/lib/ui/video/live_video_rtsp.dart`: a
   `LiveVideoSession` implementation over the chosen player. It must keep
@@ -566,6 +617,60 @@ them.
 **Non-goals:** flutter_webrtc/WHEP on the kiosk (an ICE/DTLS/SRTP stack to
 reach localhost buys nothing); touching ADR-0011's talk path (separate
 `TalkConfig`, unaffected).
+
+**Addendum 2026-08-26 — hardware decoding scrambles the wall; the shipped
+default is now software.** First real look at the RTSP transport driving the
+*whole grid* on the Hub's own display: of four live tiles, one decoded
+cleanly, two rendered as macroblock garbage (red/yellow, then green/purple
+noise) and one stayed blank — all four wearing the LIVE badge, because the
+sessions were healthy and only the pictures were not.
+
+Not the cameras, and not the air. The same three substreams software-decoded
+inside the go2rtc container for 6–8 s each with **zero ffmpeg warnings**, at
+`h264 640x360` and 15–20 fps — so go2rtc's relay and the 2.4 GHz link were
+both fine, and the fault was entirely Panel-side.
+
+**First hypothesis, and it was wrong**: fvp's Linux list prefers hardware
+(`['VAAPI', 'CUDA', 'VDPAU', 'hap', 'FFmpeg', 'dav1d']`) and the Hub is
+hybrid graphics (Intel Raptor Lake-S UHD iGPU + NVIDIA RTX 4090 Laptop,
+driver 595.84, no `vainfo`, no host `ffmpeg`), so the decoder looked guilty.
+Pinning `['FFmpeg']` **did not fix it** — the corruption changed character
+(macroblocks became a washed-out overlay) and spread to the one tile that had
+been clean. A cause that survives replacing the decoder is not the decoder.
+
+**Actual cause: `lowLatency: 1`**, the single option the Panel passed to
+`fvp.registerWith` since the transport landed. fvp's own source says what it
+does, one line above applying it:
+
+```dart
+// +nobuffer: the 1st key-frame packet is dropped. -nobuffer: high latency
+player.setProperty('avformat.fflags', '+nobuffer');
+```
+
+It **drops the first key frame**. H.264 is differential, so a decoder given
+the packets after an IDR but not the IDR has nothing to reference: it paints
+garbage and keeps painting until the camera sends another key frame — a long
+time on a long-GOP Wyze substream, and with error propagation sometimes never
+resolving. That is why plain `ffmpeg`, which drops nothing, decoded the same
+substreams flawlessly, and why swapping decoders changed only the flavour.
+
+Fix: two operational settings in `live_video_rtsp_io.dart`, both resolved by
+`main()` environment-first exactly like `VIDEO_TRANSPORT`, both logged at
+boot as `panel.video_player`:
+
+| setting | shipped | notes |
+|---|---|---|
+| `VIDEO_LOW_LATENCY` | `0` | **the fix.** Every value > 0 sets `+nobuffer`, so 0 is the only safe one; the knob exists to reproduce the fault, not to tune it. Costs mdk's ordinary buffering — slower first frame, some delay behind real time |
+| `VIDEO_DECODERS` | `FFmpeg` | software, portable across the dev box's NVIDIA and the appliance's AMD. `auto` restores fvp's hardware-first list |
+
+**Open:** whether hardware decode was ever a problem at all is now unknown —
+it was only ever observed alongside the dropped key frame. Worth one run at
+`VIDEO_DECODERS=auto` with `VIDEO_LOW_LATENCY=0` before treating software as
+required, since the appliance is a modest AMD Radeon rather than this dev
+laptop and would rather not spend a core on decode. Software is affordable at
+tile size regardless (640×360 × 6; the phase-8 prototype measured ~half a
+core for six streams including software GL under Xvfb); the 1080p zoom is the
+case to re-measure.
 
 ### N6 — go2rtc-direct stills for the Wyze tiles *(IMPLEMENTED 2026-08-25 — the record below; prereq for N7 now satisfied)*
 

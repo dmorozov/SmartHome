@@ -1,2 +1,11 @@
 # Standard Flutter lint set; the spike app must stay lint-clean.
+analyzer:
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+    - windows/**
+    - macos/**
+    - linux/**
 include: package:flutter_lints/flutter.yaml

@@ -1,11 +1,14 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show KeepAliveParentDataMixin;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/house.dart';
 import 'package:panel/ui/close_button.dart';
+import 'package:panel/main.dart' show camerasAutoOpen;
+import 'package:panel/ui/cameras/camera_grid.dart';
 import 'package:panel/ui/cameras/cameras_view.dart';
 import 'package:panel/ui/dollhouse/dollhouse_view.dart';
 import 'package:panel/ui/video/live_video.dart';
@@ -1012,6 +1015,314 @@ void main() {
       expect(go2rtc.only.closes, 1);
       await unmount(tester);
       keepAlive.dispose();
+    });
+  });
+
+  group('the tile-shell bisect (VIDEO_TILE)', () {
+    // A global, so every case puts it back. Each arm is pinned to actually
+    // remove the wrapper its name claims: bisect scaffolding that silently
+    // does nothing has already cost this hunt two runs (the probe whose
+    // multi-stream field was un-testable, the drag wrapper that built
+    // itself) — and an arm that lies here sends the whole investigation
+    // down the wrong branch.
+    tearDown(() => cameraTileMode = 'full');
+
+    Future<void> pumpPlayingTile(WidgetTester tester) async {
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      go2rtc.only.plays();
+      await tester.pump();
+      expect(find.text('a moving picture'), findsOneWidget);
+    }
+
+    /// Whether the sliver would spare the playing tile on scroll-out — read
+    /// from the render tree's parent data, which is where the truth lives:
+    /// [AutomaticKeepAlive] answers a [KeepAliveNotification] by applying
+    /// the flag to the sliver child's parent data *out of turn*, without
+    /// rebuilding, so the [KeepAlive] widget instance still says `false`
+    /// while the sliver already keeps the child (measured here first).
+    bool tileKeptAlive(WidgetTester tester) {
+      RenderObject? node = tester
+          .element(find.byKey(const ValueKey('tile-cam-living')))
+          .renderObject;
+      while (node != null && node.parentData is! KeepAliveParentDataMixin) {
+        node = node.parent;
+      }
+      final data = node?.parentData;
+      return data is KeepAliveParentDataMixin && data.keepAlive;
+    }
+
+    testWidgets('full wears the detector and the keep-alive bracket — the '
+        'positive control the stripped arms are measured against',
+        (tester) async {
+      await pumpPlayingTile(tester);
+      expect(
+        find.descendant(
+          of: find.byType(CameraTile),
+          matching: find.byType(VisibilityDetector),
+        ),
+        findsWidgets,
+      );
+      expect(
+        tileKeptAlive(tester),
+        isTrue,
+        reason: 'a live tile asks the sliver to keep it',
+      );
+      await unmount(tester);
+    });
+
+    testWidgets('novis strips every VisibilityDetector', (tester) async {
+      cameraTileMode = 'novis';
+      await pumpPlayingTile(tester);
+      expect(find.byType(VisibilityDetector), findsNothing);
+      await unmount(tester);
+    });
+
+    testWidgets('nokeepalive pins the sliver bracket false even for a '
+        'playing tile', (tester) async {
+      cameraTileMode = 'nokeepalive';
+      await pumpPlayingTile(tester);
+      expect(tileKeptAlive(tester), isFalse);
+      await unmount(tester);
+    });
+
+    testWidgets('nooverlay removes the tap catcher — the honest cost is '
+        'that a tile no longer zooms', (tester) async {
+      cameraTileMode = 'nooverlay';
+      await pumpPlayingTile(tester);
+      await tester.tap(
+        find.byKey(const ValueKey('tile-cam-living')),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(ZoomedCamera), findsNothing);
+      await unmount(tester);
+    });
+
+    testWidgets('early mounts the picture under the connecting notice — '
+        'the shipped wall waits for playing, and mount-after-frames is '
+        'the difference this arm wears', (tester) async {
+      cameraTileMode = 'early';
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      // Still connecting: the notice is up AND the view is already
+      // mounted beneath it.
+      expect(find.text('Connecting…'), findsOneWidget);
+      expect(find.text('a moving picture'), findsOneWidget);
+      final before = tester.element(find.text('a moving picture'));
+
+      go2rtc.only.plays();
+      await tester.pump();
+      expect(find.text('Connecting…'), findsNothing);
+      expect(find.text('a moving picture'), findsOneWidget);
+      // The arm's whole point, pinned: the view's ELEMENT survives the
+      // connecting→playing boundary. The first cut of the arm swapped
+      // tree shapes here, remounted the Texture at exactly the moment
+      // frames began, and measured nothing — this assertion is what
+      // would have caught it.
+      expect(
+        identical(before, tester.element(find.text('a moving picture'))),
+        isTrue,
+        reason: 'the view was remounted at the playing boundary',
+      );
+      await unmount(tester);
+    });
+
+    testWidgets('raw is bare and early at once — the view from birth, no '
+        'shell, one element for its whole life', (tester) async {
+      cameraTileMode = 'raw';
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      // Dialing (connecting): the view is already up, and none of the
+      // shell is — no detector, no card, no notice.
+      expect(find.text('a moving picture'), findsOneWidget);
+      expect(find.byType(VisibilityDetector), findsNothing);
+      expect(find.text('Connecting…'), findsNothing);
+      final tile = find.ancestor(
+        of: find.text('a moving picture'),
+        matching: find.byType(CameraTile),
+      );
+      expect(
+        find.descendant(of: tile, matching: find.byType(Container)),
+        findsNothing,
+      );
+      final before = tester.element(find.text('a moving picture'));
+
+      go2rtc.only.plays();
+      await tester.pump();
+      expect(
+        identical(before, tester.element(find.text('a moving picture'))),
+        isTrue,
+        reason: 'the view was remounted at the playing boundary',
+      );
+      await unmount(tester);
+    });
+
+    testWidgets('each raw* arm adds back exactly the piece it names, with '
+        'the view still held from birth', (tester) async {
+      Finder inTile(Finder what) => find.descendant(
+        of: find.byType(CameraTile),
+        matching: what,
+      );
+
+      cameraTileMode = 'rawvis';
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      expect(find.text('a moving picture'), findsOneWidget,
+          reason: 'rawvis keeps view-from-birth');
+      expect(find.byType(VisibilityDetector), findsWidgets);
+      expect(inTile(find.byType(GestureDetector)), findsNothing);
+      expect(inTile(find.byType(Container)), findsNothing);
+      await unmount(tester);
+
+      cameraTileMode = 'rawoverlay';
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      expect(find.text('a moving picture'), findsOneWidget,
+          reason: 'rawoverlay keeps view-from-birth');
+      expect(find.byType(VisibilityDetector), findsNothing);
+      // The overlay is real: a tap on the tile still zooms.
+      await tester.tap(find.byKey(const ValueKey('tile-cam-living')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ZoomedCamera), findsOneWidget);
+      await unmount(tester);
+
+      cameraTileMode = 'rawcard';
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      expect(find.text('a moving picture'), findsOneWidget,
+          reason: 'rawcard keeps view-from-birth');
+      expect(find.byType(VisibilityDetector), findsNothing);
+      expect(inTile(find.byType(Container)), findsWidgets);
+      await unmount(tester);
+    });
+
+    testWidgets('the card sub-arms carry exactly the piece they name', (
+      tester,
+    ) async {
+      // The discriminators, read off the playing tile's own card: whether
+      // the decoration blurs (shadows) and whether the name bar row is
+      // under the face (bar). An arm that quietly carries the wrong piece
+      // convicts the wrong widget.
+      (bool, bool) cardShape(WidgetTester tester) {
+        final tile = find.ancestor(
+          of: find.text('a moving picture'),
+          matching: find.byType(CameraTile),
+        );
+        final containers = tester.widgetList<Container>(
+          find.descendant(of: tile, matching: find.byType(Container)),
+        );
+        final shadows = containers.any(
+          (c) => switch (c.decoration) {
+            final BoxDecoration d => (d.boxShadow ?? const []).isNotEmpty,
+            _ => false,
+          },
+        );
+        final bar = tester.any(
+          find.descendant(of: tile, matching: find.byType(Column)),
+        );
+        return (shadows, bar);
+      }
+
+      for (final (mode, expected) in [
+        ('rawclip', (false, false)),
+        ('rawshadow', (true, false)),
+        ('rawbar', (false, true)),
+        ('rawcard', (true, true)),
+        // The clip-implementation splits: shape asserted below, after the
+        // loop — here they only prove view-from-birth and no shadows/bar.
+        ('rawrrect', (false, false)),
+        ('rawhard', (false, false)),
+      ]) {
+        cameraTileMode = mode;
+        await pumpPanel(tester, autoLiveStream: 'cam_living');
+        await openCameras(tester);
+        expect(find.text('a moving picture'), findsOneWidget,
+            reason: '$mode keeps view-from-birth');
+        expect(cardShape(tester), expected, reason: mode);
+        if (mode == 'rawrrect') {
+          expect(
+            find.ancestor(
+              of: find.text('a moving picture'),
+              matching: find.byType(ClipRRect),
+            ),
+            findsOneWidget,
+            reason: 'rawrrect clips through ClipRRect, not Container',
+          );
+        }
+        if (mode == 'rawhard') {
+          final tile = find.ancestor(
+            of: find.text('a moving picture'),
+            matching: find.byType(CameraTile),
+          );
+          final card = tester
+              .widgetList<Container>(
+                find.descendant(of: tile, matching: find.byType(Container)),
+              )
+              .single;
+          expect(card.clipBehavior, Clip.hardEdge, reason: 'rawhard');
+        }
+        await unmount(tester);
+      }
+    });
+
+    testWidgets('bare leaves a playing tile as the picture and nothing '
+        'else', (tester) async {
+      cameraTileMode = 'bare';
+      await pumpPlayingTile(tester);
+      expect(find.byType(VisibilityDetector), findsNothing);
+      final tile = find.ancestor(
+        of: find.text('a moving picture'),
+        matching: find.byType(CameraTile),
+      );
+      expect(tile, findsOneWidget);
+      // No card, no clip, no name bar between the slot and the picture —
+      // the unwired tail keeps its placeholder bodies, so the check is
+      // scoped to the tile that plays.
+      expect(
+        find.descendant(of: tile, matching: find.byType(Container)),
+        findsNothing,
+      );
+      await unmount(tester);
+    });
+  });
+
+  group('the validation rig', () {
+    tearDown(() => camerasAutoOpen = false);
+
+    testWidgets('CAMERAS_OPEN=auto walks onto the Cameras view by itself — '
+        'what lets tool/freeze_probe.sh run with nobody tapping', (
+      tester,
+    ) async {
+      camerasAutoOpen = true;
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      expect(find.byType(CamerasView), findsNothing,
+          reason: 'not before its two-second settle');
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pumpAndSettle();
+      expect(find.byType(CamerasView), findsOneWidget);
+      await unmount(tester);
+    });
+  });
+
+  group('the probe-pool grid (CAMERAS_GRID=probepool)', () {
+    tearDown(() => camerasGridMode = 'new');
+
+    testWidgets('dials through the wall\'s VideoConfig.open — the pool — '
+        'with no tiles, and closes what it opened', (tester) async {
+      camerasGridMode = 'probepool';
+      // pumpPanel wires go2rtc.open as VideoConfig.open, so a session in
+      // [go2rtc.opened] IS proof the dial went through the seam this arm
+      // exists to include (the raw `probe` arm never touches it — its own
+      // suite pins that with a booby-trapped open).
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      expect(find.byType(CameraTile), findsNothing);
+      expect(go2rtc.opened, hasLength(1));
+      expect(go2rtc.only.name, 'cam_living');
+
+      await unmount(tester);
+      expect(go2rtc.only.closes, 1);
     });
   });
 }

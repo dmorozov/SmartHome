@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:panel/data/fake_hub.dart';
 import 'package:panel/domain/house.dart';
 import 'package:panel/main.dart';
+import 'package:panel/ui/cameras/camera_order.dart';
 import 'package:panel/ui/hub_controller.dart';
 import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/video/live_video.dart';
@@ -142,6 +143,7 @@ Widget panelApp(
   SnapshotConfig snapshots = const SnapshotConfig(),
   Go2rtcStillsConfig stills = const Go2rtcStillsConfig(),
   TalkConfig talk = const TalkConfig(),
+  CameraOrderStore? order,
   StreamDirector? director,
 }) =>
     PanelApp(
@@ -151,4 +153,9 @@ Widget panelApp(
         snapshots: snapshots,
         stills: stills,
         talk: talk,
+        // A store with no writer: it remembers an arrangement for as long as
+        // the scene is up — which is what a case about reopening the view
+        // needs — and touches no platform channel, which is what every other
+        // case needs.
+        order: order ?? CameraOrderStore(),
         director: director);
