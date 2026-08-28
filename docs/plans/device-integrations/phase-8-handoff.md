@@ -555,11 +555,28 @@ What the bisect campaign established, each line carrying its method:
   forever (`bare` vs `raw` differ only in this and only `raw` plays);
   (2) **the rounded clip** in any form over the five-texture wall
   (`Container` ClipPath, `ClipRRect`, `Clip.hardEdge` — all frozen, per
-  the owner's eyes on Wayland); (3) **combination load**: shadow, rounded
-  background, corner-notch paint, and name bar each play alone
-  (rig-verified) yet freeze together (`fixcorners`) — a threshold, not a
-  single guilty widget. Pairwise cells are UNKNOWN (the first pair sweep
-  was voided by a blanked screen; re-run pending).
+  the owner's eyes on Wayland; single observations each — re-grade under
+  the 2026-08-28 finding below before treating as absolute).
+- **REFUTED 2026-08-28** (the full sweep, issue #5): the 2026-08-27
+  "combination load threshold" was an artifact — the `fixcorners` arm sat
+  behind a `startsWith('raw')` gate it could never pass and silently
+  measured the FULL design (the fourth arm of this hunt to test nothing;
+  caught by the rig's own grab — the doorbell wore the full design's
+  still face). With the gate fixed and the arm pinned by a widget test:
+  every pair and every triple of {shadow, radius, notch, bar} plays, and
+  the four-piece no-clip card plays too (`rawmix` all-four 3/3 runs,
+  `fixcorners` 2/3). The one exception is the finding: one `fixcorners`
+  run stopped WHOLE — five textures at one instant, synchronized
+  burned-in camera clocks, pixel-identical 3 s later — so the sever is a
+  **wall-wide, probabilistic event** whose odds grow with paint load,
+  not a guilty widget. Corollaries: (a) single-run verdicts near the
+  boundary are insufficient — repeat, and read the burned-in clocks: a
+  cell whose clock LAGS its neighbours is a stalled stream (roving Wyze
+  daemon stalls polluted five sweep runs), one whose clock MATCHES while
+  pixels hold still is a severed texture; (b) the no-clip four-piece
+  card is the leading design candidate, carrying a wall-stop risk
+  observed once in three runs that the mechanism/patch tickets (#10,
+  #13) must retire.
 - **Mechanism** (research, primary sources): the engine provably never
   caches texture content, so a stale picture means fvp's `renderVideo()`
   stopped drawing — it runs only inside texture-populate, into a

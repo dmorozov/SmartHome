@@ -917,7 +917,7 @@ class CameraTileState extends State<CameraTile>
     // `visible` simply keeps its born-true default — the viewport stop and
     // the grab gate go blind, which is acceptable for the experiment's
     // lifetime and for nothing else.
-    if (cameraTileMode.startsWith('raw')) {
+    if (cameraTileMode.startsWith('raw') || cameraTileMode == 'fixcorners') {
       // The combination cells the single-variable arms above cannot reach.
       // `raw` (bare + early at once — probepool's exact shape through the
       // Director) PLAYED on 2026-08-27, and against `bare` (same shell
@@ -973,10 +973,17 @@ class CameraTileState extends State<CameraTile>
           ),
         );
       }
-      // `fixcorners` froze with NO clip (2026-08-27, rig) — so the card
-      // holds a third freezer among its remaining pieces. One factor per
-      // arm, rig-validated: square shadow only; rounded background paint
-      // only; corner notches only; Column+name bar only.
+      // 2026-08-27's "fixcorners froze" measured the FULL design: the
+      // raw-family gate above read `startsWith('raw')` only, so this
+      // branch never ran (caught 2026-08-28 — the doorbell wore the full
+      // design's still face in the rig's own grab). Re-measured with the
+      // gate fixed: every pair and triple of pieces plays, the four-piece
+      // card plays most runs — and one run in three the wall stopped
+      // WHOLE, five textures at one instant with synchronized burned-in
+      // clocks. The sever is a wall-wide probabilistic event whose odds
+      // grow with paint load, not a guilty widget. One factor per arm,
+      // rig-validated: square shadow only; rounded background paint only;
+      // corner notches only; Column+name bar only.
       if (cameraTileMode == 'rawshadow2') {
         view = DecoratedBox(
           decoration: BoxDecoration(

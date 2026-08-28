@@ -1266,6 +1266,60 @@ void main() {
       }
     });
 
+    testWidgets('fixcorners is the no-clip card: notches over a square '
+        'picture, no clip layer anywhere', (tester) async {
+      // The dead-gate scar (2026-08-28): this arm once sat behind a
+      // `startsWith('raw')` gate it could never pass, fell through to the
+      // full design, and convicted an innocent combination of card pieces.
+      // The VisibilityDetector is the tell — the raw family never builds
+      // one, the full design always does.
+      cameraTileMode = 'fixcorners';
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      expect(find.text('a moving picture'), findsOneWidget,
+          reason: 'fixcorners keeps view-from-birth');
+      expect(find.byType(VisibilityDetector), findsNothing);
+      final tile = find.ancestor(
+        of: find.text('a moving picture'),
+        matching: find.byType(CameraTile),
+      );
+      // One rounded, shadowed card paints BEHIND the square picture...
+      final cards = tester
+          .widgetList<DecoratedBox>(
+            find.descendant(of: tile, matching: find.byType(DecoratedBox)),
+          )
+          .map((w) => w.decoration)
+          .whereType<BoxDecoration>()
+          .where((d) =>
+              d.borderRadius != null && (d.boxShadow ?? const []).isNotEmpty);
+      expect(cards, hasLength(1), reason: 'one rounded, shadowed card');
+      expect(
+        find.descendant(of: tile, matching: find.byType(Column)),
+        findsWidgets,
+        reason: 'the name bar rides its Column',
+      );
+      // ...with its top corners faked by two notch paints, never a clip.
+      final notches = tester
+          .widgetList<CustomPaint>(
+            find.descendant(of: tile, matching: find.byType(CustomPaint)),
+          )
+          .where(
+            (w) => w.painter.runtimeType.toString() == '_CornerNotchPainter',
+          );
+      expect(notches, hasLength(2), reason: 'two corner notches');
+      expect(
+        find.descendant(of: tile, matching: find.byType(ClipRRect)),
+        findsNothing,
+      );
+      final clipped = tester
+          .widgetList<Container>(
+            find.descendant(of: tile, matching: find.byType(Container)),
+          )
+          .where((c) => c.clipBehavior != Clip.none);
+      expect(clipped, isEmpty, reason: 'no clip layer above the texture');
+      await unmount(tester);
+    });
+
     testWidgets('bare leaves a playing tile as the picture and nothing '
         'else', (tester) async {
       cameraTileMode = 'bare';

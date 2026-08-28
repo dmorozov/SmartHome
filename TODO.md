@@ -83,8 +83,4 @@ Panel-side is the unmeasured cell: the fvp prototype cost ~55% of one core for s
 
 
 
-
-N7 — stills-first flip                                     │ you wanting the airtime     │ your call, ~an evening  │
-│                                                            │ headroom                    │                         │
-├────────────────────────────────────────────────────────────┼─────────────────────────────┼─────────────────────────┤
-│ N9 — web second-screen (overlay ceiling, IdleReturn dedup) │ web Panel work resuming     │ your call
+The map at Wayfinder map: the frozen RTSP camera wall now indexes all three decisions. The frontier: the pairwise sweep (still needs the screen awake), the mount-order experiment, the renderer A/B, and mechanism confirmation. The fix decision stays blocked until those close. Charting is one session's work, so I'm stopping here per the skill — invoke /mattpocock-skills:wayfinder with the map (or just tell me to work it) and I'll claim the first frontier ticket; if the screen is awake, the sweep and the renderer A/B together are about ten unattended minutes.

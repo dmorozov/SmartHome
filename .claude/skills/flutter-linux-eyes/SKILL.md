@@ -32,6 +32,17 @@ collapsed it to ~40 s, unattended.
    sweep that comes back uniform re-runs a control before its results are
    used — every all-frozen sweep so far that skipped this was measuring a
    broken rig, not the app.
+5. **Read the burned-in camera clocks before trusting a frozen cell.** A
+   cell whose clock LAGS its neighbours is a stalled STREAM (hub-side —
+   the Wyze daemons stall and rove between cameras); one whose clock
+   MATCHES the wall while its pixels hold still is a severed TEXTURE.
+   Mean-diff cannot tell them apart — five "frozen" verdicts in one
+   sweep were stalls (2026-08-28).
+6. **Near a behavioural boundary, one run proves nothing.** The wall-wide
+   sever is probabilistic: the same pinned arm read 0/6, then 5/6, then
+   render-healthy 3/6 across three runs. Repeat until the split is
+   legible and grade arms as odds, not booleans — a single-observation
+   conviction is a hypothesis wearing a verdict's clothes.
 
 ## Seeing an app X tools cannot see
 
