@@ -55,6 +55,22 @@ static void my_application_activate(GApplication* application) {
   gtk_window_set_default_size(window, 1280, 720);
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
+  // Renderer decision (frozen-wall hunt, issue #11, 2026-08-28): the
+  // appliance DEFAULTS TO SKIA. Impeller — the engine's Linux default
+  // since Flutter 3.47 — leaves the five-texture fvp wall born dead
+  // (issue #12's A/B), and under Skia the shipped design is rig-proven
+  // healthy. PANEL_RENDERER=impeller flips back for testing future SDKs
+  // (upstream report: issue #14; the Skia opt-out is slated for removal
+  // upstream, so re-test Impeller before any SDK upgrade). The pin
+  // lives here in the runner because release builds compile out the
+  // engine's own env switches; the stderr line prints BOTH ways because
+  // an arm whose off-position prints nothing has measured nothing
+  // before (see the flutter-linux-eyes skill).
+  const gchar* renderer = g_getenv("PANEL_RENDERER");
+  gboolean use_impeller = g_strcmp0(renderer, "impeller") == 0;
+  fl_dart_project_set_enable_impeller(project, use_impeller);
+  g_printerr("panel.renderer impeller=%s (PANEL_RENDERER=%s)\n",
+             use_impeller ? "true" : "false", renderer ? renderer : "");
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
 

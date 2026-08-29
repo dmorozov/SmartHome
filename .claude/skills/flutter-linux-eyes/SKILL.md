@@ -80,10 +80,23 @@ Trust rules, each bought with a voided experiment:
 GLES runs on this stack — rig runs leave `VIDEO_DEBUG` off and trust the
 screenshots; use the sampler only in log-only sessions.
 
+The runner defaults the appliance to **Skia** (decision, map issue #11 —
+Impeller leaves the fvp wall born dead); `PANEL_RENDERER=impeller`
+re-enables Impeller for testing future SDKs, and the engine's own
+`Using the Impeller rendering backend` banner is the positive control.
+The pin lives in the runner because the engine's
+`FLUTTER_ENGINE_SWITCHES` env route is compiled out of **release**
+builds and silently measures nothing there. Renderer artifacts read
+differently in grabs: the edge-confetti bands on tile borders appeared
+only under Impeller — treat them as renderer artifacts, not stream
+corruption, until re-proven.
+
 Instrument the OFF state too. A knob whose off-position does the same
 nothing as its on-position reads as "ruled out" while measuring nothing —
 the shipped `late final Ticker` that never started was caught only by a
-`ticks=0` line, after both positions "reproduced" the freeze.
+`ticks=0` line, after both positions "reproduced" the freeze; the
+runner's renderer knob prints `panel.renderer impeller=…` both ways for
+the same reason.
 
 ## Bisect discipline
 

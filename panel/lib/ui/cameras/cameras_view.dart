@@ -920,11 +920,14 @@ class CameraTileState extends State<CameraTile>
     if (cameraTileMode.startsWith('raw') || cameraTileMode == 'fixcorners') {
       // The combination cells the single-variable arms above cannot reach.
       // `raw` (bare + early at once — probepool's exact shape through the
-      // Director) PLAYED on 2026-08-27, and against `bare` (same shell
-      // strip, view mounted at playing — frozen) it confirmed
-      // mount-after-frames as one real freezer. The `raw*` arms hold
-      // view-from-birth constant and add back ONE shell piece each, to
-      // name the second freezer that kept `early` frozen.
+      // Director) PLAYED on 2026-08-27. The bare-vs-raw split that seemed
+      // to convict mount-after-frames did not survive repeats: the 2×2
+      // factorial {shell, mount order} at three rig runs per cell
+      // (2026-08-28, stalled-stream cells discounted by their burned-in
+      // clocks) reads bare 3/3 and raw 3/3 healthy against early and full
+      // 0/6 every run — mount order changes nothing, the shell decides.
+      // The `raw*` arms hold view-from-birth constant and add back ONE
+      // shell piece each, to name the freezer inside the shell.
       Widget view = ColoredBox(
         color: const Color(0xFF11151F),
         child: _feed.view,
