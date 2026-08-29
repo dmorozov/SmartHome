@@ -23,8 +23,9 @@
 #    Doorbell tile — 5/6 moving is a healthy wall.
 #
 # Usage — the knobs ride the environment, exactly like a hand run:
-#   VIDEO_TILE=raw tool/freeze_probe.sh
-#   VIDEO_TILE=rawmix VIDEO_MIX=shadow,radius tool/freeze_probe.sh
+#   tool/freeze_probe.sh                        the shipped wall (Skia)
+#   PANEL_RENDERER=impeller tool/freeze_probe.sh   re-test Impeller before an
+#                                               SDK upgrade (ADR-0012)
 #
 # Extra knobs of its own:
 #   WARMUP  seconds before the first grab (default 25 — dial + first frame)
@@ -46,9 +47,12 @@ mkdir -p "$OUT"
 # running, the log looks healthy, and every capture is a stale lie that
 # reads "frozen" (measured 2026-08-27 — a whole pairwise sweep was voided
 # by this). No capture without a live compositor.
-if gdbus call --session --dest org.gnome.ScreenSaver \
+screen_blanked() {
+  gdbus call --session --dest org.gnome.ScreenSaver \
     --object-path /org/gnome/ScreenSaver \
-    --method org.gnome.ScreenSaver.GetActive 2>/dev/null | grep -q true; then
+    --method org.gnome.ScreenSaver.GetActive 2>/dev/null | grep -q true
+}
+if screen_blanked; then
   echo "the screen is blanked or locked — wake it, then rerun" >&2
   exit 3
 fi
@@ -97,6 +101,14 @@ kill -0 "$PANEL" 2>/dev/null || { echo "panel died during warmup (see $OUT/panel
 import -window "$WID" "$OUT/a.png"
 sleep "$GAP"
 import -window "$WID" "$OUT/b.png"
+# The guard again, AFTER the grabs: the inhibitor has been observed losing
+# the race (2026-08-28 — a run blanked mid-warmup and read a healthy wall as
+# 0/6, every pixel of both grabs identical including the window chrome). A
+# verdict from a blanked screen is not a weak verdict, it is a false one.
+if screen_blanked; then
+  echo "the screen blanked DURING the run — verdict void, wake it and rerun" >&2
+  exit 3
+fi
 
 python3 - "$OUT/a.png" "$OUT/b.png" <<'PY'
 import sys

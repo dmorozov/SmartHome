@@ -63,10 +63,9 @@ var _fvpRegistered = false;
 /// a proven fix — say so honestly.** fvp's own Linux list prefers hardware
 /// (`['VAAPI', 'CUDA', 'VDPAU', 'hap', 'FFmpeg', 'dav1d']`), and pinning
 /// `FFmpeg` was the first attempt at the broken wall of 2026-08-26. It did
-/// not fix it. The two causes that did were [rtspLowLatency] (a dropped key
-/// frame, which is what the macroblocks were) and [rtspFramePulse] (a
-/// retained texture layer, which is what the frozen pictures were). Hardware
-/// decoding was never actually convicted of anything.
+/// not fix it. The macroblocks were [rtspLowLatency] dropping the first key
+/// frame; the frozen pictures were the Impeller renderer (ADR-0012).
+/// Hardware decoding was never actually convicted of anything.
 ///
 /// It stays software for now because the one property worth having here is
 /// that a broken *picture* is indistinguishable from a broken *camera* to
@@ -114,66 +113,28 @@ int rtspLowLatency = 0;
 
 /// Whether a playing stream keeps the engine drawing frames.
 ///
-/// **This is a workaround for the embedder, not a feature**, and it is on by
-/// default because without it the wall does not move. Measured 2026-08-26 on
-/// the Hub (GNOME on **Wayland**, rendering on the Intel iGPU): the camera
-/// grid updated its pictures *only while being scrolled*, and sat on a stale
-/// frame the moment the finger stopped.
+/// **A workaround for the embedder, not a feature.** Built 2026-08-26, when
+/// the wall updated its pictures *only while being scrolled* and sat on a
+/// stale frame the moment the finger stopped. The mechanism it exploits is
+/// one line of Flutter's rendering layer — `TextureBox.isRepaintBoundary`
+/// is `true`, so a texture's layer is retained and nothing above it can
+/// dirty it; scrolling worked because it changed the transform above the
+/// texture and forced the scene to be rebuilt. [_FramePulse] reaches the
+/// `TextureBox` itself and calls `markNeedsPaint()` on it once per vsync,
+/// which rebuilds that layer and re-resolves the texture. It stops with the
+/// session, and with `TickerMode` under a covering route.
 ///
-/// Not the decoder, not the stream and not the plugin. The same substreams
-/// software-decoded flawlessly under `ffmpeg`, and the **web build plays
-/// them perfectly** — a browser's `<video>` element paints itself, which is
-/// what narrows this to the Linux texture path. fvp does its part too,
-/// calling `fl_texture_registrar_mark_texture_frame_available()` from mdk's
-/// render callback for every frame.
-///
-/// The mechanism is one line of Flutter's own rendering layer:
-///
-/// ```dart
-/// class TextureBox extends RenderBox {
-///   bool get isRepaintBoundary => true;   // its own retained layer
-/// ```
-///
-/// **A `Texture` is its own repaint boundary.** Nothing above it can dirty
-/// it, so its `TextureLayer` is retained across frames and the engine
-/// re-uses the layer it already has. Drawing more frames does not help —
-/// measured: an idle [Ticker] that merely asked for a frame every vsync
-/// changed nothing at all, because every one of those frames re-used the
-/// same retained layer. Scrolling works because it changes the transform
-/// *above* the texture, which forces the scene to be rebuilt and the
-/// texture resolved again.
-///
-/// So [_FramePulse] reaches the `TextureBox` itself and calls
-/// `markNeedsPaint()` on it once per vsync, which rebuilds its layer and
-/// re-resolves the texture. It costs one small repaint boundary per frame
-/// for as long as a stream is on screen — which is what showing live video
-/// costs anyway — and it stops when the session closes or `TickerMode` goes
-/// false under a covering route.
-///
-/// `VIDEO_REPAINT_PULSE=off` turns it off, which is how to check whether a
-/// given machine needs it: if the picture still moves, that embedder is
-/// delivering texture frames on its own and this is dead weight there.
+/// **It is probably dead weight now, and it still ships on (2026-08-28).**
+/// That symptom is also Impeller's signature, and the wall now pins Skia
+/// (ADR-0012). Measured since: `VIDEO_REPAINT_PULSE=off` through
+/// `tool/freeze_probe.sh` plays **3 runs out of 3** — this embedder
+/// delivers texture frames on its own, and the pulse buys nothing here. It
+/// stays on anyway, deliberately: the evidence is from the dev box's
+/// Intel/NVIDIA stack, the appliance is different silicon, and the cost of
+/// being wrong is the wall. **Flip it in production first**
+/// (`VIDEO_REPAINT_PULSE=off`, no rebuild); delete this and [_FramePulse]
+/// once a week on the wall says nothing was lost.
 bool rtspFramePulse = true;
-
-/// Whether the pulse also nudges the texture's *transform* each frame.
-///
-/// `VIDEO_REPAINT_PULSE=jiggle`. A sub-pixel vertical translate, alternating
-/// between 0 and 0.01 logical pixels — invisible, and deliberately the one
-/// thing that is known to work on this wall.
-///
-/// The evidence it is built on: with the pulse running properly, an idle
-/// screen and a scrolled screen produce **numerically identical** debug
-/// lines — `ticks≈60 frames≈60 pos≈+1000ms paint=clean` in both — yet the
-/// picture moves only while scrolling. Nothing measurable from Dart
-/// separates the two cases. What scrolling changes that a repaint does not
-/// is the *geometry* of the layers above the texture, which is what this
-/// reproduces on purpose.
-///
-/// If this works and [rtspFramePulse]'s `markNeedsPaint` does not, the fault
-/// is a cached raster being reused for a subtree whose contents changed —
-/// and this is a genuinely ugly workaround for it, kept only until the real
-/// answer comes back from upstream.
-bool rtspFrameJiggle = false;
 
 /// Once-per-second instrumentation of the render path, `VIDEO_DEBUG=on`.
 ///
@@ -486,10 +447,6 @@ class _FramePulseState extends State<_FramePulse>
   final _boundaryKey = GlobalKey();
   int? _lastPixelHash;
 
-  /// Alternates with [rtspFrameJiggle], moving the texture half a hundredth
-  /// of a pixel so the layer above it is never the same two frames running.
-  var _nudged = false;
-
   @override
   void initState() {
     super.initState();
@@ -504,7 +461,6 @@ class _FramePulseState extends State<_FramePulse>
   void _pulse(Duration _) {
     if (!mounted) return;
     _ticks++;
-    if (rtspFrameJiggle) setState(() => _nudged = !_nudged);
     if (!rtspFramePulse) return; // debug-only run: measure, change nothing
     final held = _texture;
     if (held != null && held.attached) {
@@ -618,18 +574,9 @@ class _FramePulseState extends State<_FramePulse>
   @override
   Widget build(BuildContext context) {
     // `widget.child` is the same instance every build, so the player's
-    // element is never rebuilt — only the wrappers above it change, and
-    // each wrapper is constant for a whole run (both globals are set once
-    // in `main()`).
-    Widget child = widget.child;
-    if (rtspVideoDebug) {
-      child = RepaintBoundary(key: _boundaryKey, child: child);
-    }
-    if (!rtspFrameJiggle) return child;
-    return Transform.translate(
-      offset: Offset(0, _nudged ? 0.01 : 0),
-      transformHitTests: false,
-      child: child,
-    );
+    // element is never rebuilt — and the one wrapper above it is constant
+    // for a whole run (the global is set once in `main()`).
+    if (!rtspVideoDebug) return widget.child;
+    return RepaintBoundary(key: _boundaryKey, child: widget.child);
   }
 }

@@ -1,13 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/gestures.dart' show kLongPressTimeout;
 import 'package:flutter/material.dart';
 
 import '../../diagnostics/log.dart';
 import '../../domain/house.dart';
 import '../theme.dart';
-import '../video/live_video.dart';
-import '../video/live_video_rtsp.dart';
 import 'camera_order.dart';
 
 /// The Cameras grid, and the one gesture that rearranges it.
@@ -23,37 +19,10 @@ import 'camera_order.dart';
 /// The lifted tile **keeps playing in the hole it came from**. See the
 /// no-`childWhenDragging` note in [_CameraSlot] — it is a correctness point,
 /// not a flourish.
-//
-// (The class this describes is [CameraGrid], below [camerasGridMode].)
-
-/// Which grid to draw — a temporary bisect for the frozen-video hunt of
-/// 2026-08-26, set from `main()` by `CAMERAS_GRID`.
 ///
-/// * `new` (default) — this file: sliver grids, a `NOT SET UP` rule, and
-///   every tile wrapped in `DragTarget` → `Stack` → `LongPressDraggable`
-///   with a `GlobalKey` on the slot.
-/// * `nodrag` — the same grids and rule, but the tiles are rendered bare.
-///   Isolates the drag wrapper and the global key.
-/// * `legacy` — the plain `GridView.count` this replaced, in plan order,
-///   with no arranging at all. Isolates the whole feature.
-/// * `probe` — [CamerasProbeGrid]: the clean-room probe app transplanted
-///   into the Panel. Raw `openRtspVideo` sessions in a bare sliver grid —
-///   no tiles, no Director, no keep-alive, no admission gate. The probe
-///   plays standalone while the wall freezes, and every wrapper between
-///   them is now exonerated; this arm forks what is left — if it plays
-///   here, the session plumbing is the freezer; if it freezes, the app
-///   shell above the grid is. **Run 2026-08-27: it plays** — the shell is
-///   exonerated, and the hunt moved into the plumbing.
-/// * `probepool` — the same grid dialling through `VideoConfig.open` (the
-///   wall's keep-alive pool) instead of raw `openRtspVideo`. Splits the
-///   plumbing that `probe` cleared: frozen here indicts the pool, playing
-///   here squeezes the Director and the tile's mount timing.
-///
-/// The question it answers: the wall's video updates only while scrolling,
-/// and nobody ever confirmed it moved *before* the arrangeable grid landed.
-/// Delete all the arms once that is settled.
-String camerasGridMode = 'new';
-
+/// This grid was suspect #1 in the 2026-08-27 frozen-wall hunt and came out
+/// exonerated: the freeze was the renderer, not the widgets
+/// (`docs/adr/0012-panel-renders-with-skia-on-linux.md`).
 class CameraGrid extends StatefulWidget {
   const CameraGrid({
     super.key,
@@ -171,19 +140,16 @@ class _CameraGridState extends State<CameraGrid> {
               childAspectRatio: 16 / 11,
               children: [
                 for (var i = 0; i < widget.arranged.wired.length; i++)
-                  if (camerasGridMode == 'nodrag')
-                    widget.tileBuilder(widget.arranged.wired[i])
-                  else
-                    _CameraSlot(
-                      key: _slotKey(widget.arranged.wired[i].id),
-                      device: widget.arranged.wired[i],
-                      index: i,
-                      lifted: _lifted,
-                      liftAfter: _liftAfter,
-                      onLift: _setLifted,
-                      onDrop: _drop,
-                      child: widget.tileBuilder(widget.arranged.wired[i]),
-                    ),
+                  _CameraSlot(
+                    key: _slotKey(widget.arranged.wired[i].id),
+                    device: widget.arranged.wired[i],
+                    index: i,
+                    lifted: _lifted,
+                    liftAfter: _liftAfter,
+                    onLift: _setLifted,
+                    onDrop: _drop,
+                    child: widget.tileBuilder(widget.arranged.wired[i]),
+                  ),
               ],
             ),
             if (unwired.isNotEmpty) ...[
@@ -408,122 +374,6 @@ class NotSetUpRule extends StatelessWidget {
           Expanded(child: Container(height: 1, color: const Color(0xFFD3D9E6))),
         ],
       ),
-    );
-  }
-}
-
-/// The clean-room probe app, transplanted — `CAMERAS_GRID=probe`.
-///
-/// The standalone probe (`scratchpad/fvp_probe`) plays five streams under
-/// every widget shape this grid uses, while the wall freezes; every wrapper
-/// between them has been bisected clean (`camerasGridMode`, `VIDEO_TILE`).
-/// What no experiment has separated yet is the two remaining differences,
-/// and this arm cuts exactly between them:
-///
-/// * it keeps the Panel's **app shell** — same `MaterialApp`, same pushed
-///   route and slide, same Dollhouse mounted beneath;
-/// * it drops the Panel's **session plumbing** — sessions come straight
-///   from [openRtspVideo], no Director, no keep-alive pool, no `CameraFeed`.
-///
-/// If this plays, the plumbing froze the wall; if this freezes, the shell
-/// did. Debug scaffolding: plan order, no tap, no zoom, no faces — and
-/// deliberately not neumorphic, stated here per the Panel rule (it exists
-/// to look like the probe, and drawing the wall's chrome around it would
-/// re-add wrappers this arm exists to remove).
-///
-/// The doorbell is excluded structurally — only [DeviceKind.camera] dials,
-/// the same kind wall every other go2rtc consumer keeps (#177014: no
-/// consumer on the Ring stream outside a person-opened view).
-///
-/// Dials are staggered one per second rather than burst five-at-once: the
-/// Director's admission gate exists because simultaneous camera dials fight
-/// for 2.4 GHz airtime, and a debug arm does not get to ignore the doctrine
-/// (the standalone probe's sequential awaits amounted to the same pacing).
-class CamerasProbeGrid extends StatefulWidget {
-  const CamerasProbeGrid({
-    super.key,
-    required this.devices,
-    required this.video,
-    this.opener,
-  });
-
-  final List<Device> devices;
-
-  /// Only [VideoConfig.urlFor] is consulted — never [VideoConfig.open],
-  /// which on the wall is the keep-alive pool this arm exists to bypass.
-  final VideoConfig video;
-
-  /// The dial, injectable for the hermetic suite; the wall uses
-  /// [openRtspVideo] itself.
-  final LiveVideoOpener? opener;
-
-  @override
-  State<CamerasProbeGrid> createState() => _CamerasProbeGridState();
-}
-
-class _CamerasProbeGridState extends State<CamerasProbeGrid> {
-  final _sessions = <(String, LiveVideoSession)>[];
-  late final List<(String, Uri)> _streams;
-  Timer? _stagger;
-
-  @override
-  void initState() {
-    super.initState();
-    _streams = [
-      for (final d in widget.devices)
-        if (d.kind == DeviceKind.camera)
-          if ((d.substream ?? d.streamName) case final s?)
-            if (widget.video.urlFor(s) case final u?) (s, u),
-    ];
-    Log.info('cameras', 'probe_grid', {'streams': _streams.length});
-    _openNext();
-  }
-
-  void _openNext() {
-    if (_streams.isEmpty || _sessions.length >= _streams.length) return;
-    final (name, url) = _streams[_sessions.length];
-    final open = widget.opener ?? openRtspVideo;
-    setState(() => _sessions.add((name, open(url, name: name))));
-    if (_sessions.length < _streams.length) {
-      _stagger = Timer(const Duration(seconds: 1), _openNext);
-    }
-  }
-
-  @override
-  void dispose() {
-    _stagger?.cancel();
-    for (final (_, session) in _sessions) {
-      session.close();
-    }
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth > 900 ? 3 : 2;
-        return CustomScrollView(
-          slivers: [
-            SliverGrid.count(
-              crossAxisCount: columns,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 16 / 11,
-              children: [
-                for (final (name, session) in _sessions)
-                  ColoredBox(
-                    key: ValueKey('probe-$name'),
-                    // The probe app's backdrop, so a not-yet-decoded cell
-                    // reads as "opening" rather than a hole in the wall.
-                    color: const Color(0xFF11151F),
-                    child: session.view,
-                  ),
-              ],
-            ),
-          ],
-        );
-      },
     );
   }
 }

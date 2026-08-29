@@ -83,4 +83,4 @@ Panel-side is the unmeasured cell: the fvp prototype cost ~55% of one core for s
 
 
 
-The map at Wayfinder map: the frozen RTSP camera wall now indexes all three decisions. The frontier: the pairwise sweep (still needs the screen awake), the mount-order experiment, the renderer A/B, and mechanism confirmation. The fix decision stays blocked until those close. Charting is one session's work, so I'm stopping here per the skill — invoke /mattpocock-skills:wayfinder with the map (or just tell me to work it) and I'll claim the first frontier ticket; if the screen is awake, the sweep and the renderer A/B together are about ten unattended minutes.
+The frozen camera wall is FIXED (2026-08-28): the cause was the Impeller renderer, the Flutter 3.47 Linux default, and the runner now pins Skia — reasoning, what it rules out, and the re-check before any SDK upgrade are in docs/adr/0012-panel-renders-with-skia-on-linux.md. Left for you: file the two upstream drafts in docs/upstream/ under your own account (the flutter one wants your `flutter doctor -v`), and decide whether the ~9 MB evidence PNGs stay in git.

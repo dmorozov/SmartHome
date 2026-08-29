@@ -37,5 +37,3 @@ LiveVideoSession openRtspVideo(Uri url, {required String name}) {
 /// paints its own `<video>`, so there is nothing here to measure.
 bool rtspVideoDebug = false;
 
-/// The web branch's half of the jiggle experiment — nothing to nudge.
-bool rtspFrameJiggle = false;

@@ -421,6 +421,30 @@ the Hub host 2026-08-04 (**G4**, done — [TODO.md](../TODO.md)) and in the devc
 server, but its `HtmlElementView` was never *mounted* in a widget tree. Both
 gaps are stated again in the code, at the class that carries them.
 
+### A third transport: RTSP through fvp, and why the appliance pins Skia
+
+Since 2026-08-26 the appliance's default is neither row above: it plays
+go2rtc's **H.264 RTSP restream** (`live_video_rtsp_io.dart`, fvp over
+`video_player`) because relaying already-encoded bytes costs the Hub 35 % CPU
+and 117 MiB against MJPEG's 52 % and 573 MiB, and the Panel no longer decodes a
+JPEG per frame per tile. MJPEG stays a first-class peer, one restart away:
+`VIDEO_TRANSPORT=mjpeg`, environment-first like every operational setting. Web
+ignores all of this — a browser's transport is MSE.
+
+Two settings around it are not tuning knobs but scar tissue, each carrying its
+evidence in `live_video_rtsp_io.dart`: **`VIDEO_LOW_LATENCY` must stay 0**
+(every value above it sets ffmpeg's `+nobuffer`, which drops the stream's first
+key frame and paints macroblocks until the camera sends another), and
+`VIDEO_DECODERS` ships as `FFmpeg` — software, affordable at tile size, and
+never actually convicted of anything; `auto` is worth a run.
+
+The appliance also **pins the Skia renderer** in `linux/runner/my_application.cc`:
+under Impeller — the Flutter 3.47 Linux default — the five-texture wall is born
+dead, blank or confetti-filled tiles under LIVE badges while the streams decode
+fine. `PANEL_RENDERER=impeller` flips it back to re-test after an SDK upgrade,
+which [ADR-0012](../docs/adr/0012-panel-renders-with-skia-on-linux.md) asks you
+to do before shipping one, because the opt-out is slated for removal upstream.
+
 ### The grace window: a reopen must not relaunch the producer
 
 `lib/ui/video/live_video_keepalive.dart` sits between both video surfaces and

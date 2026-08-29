@@ -52,72 +52,6 @@ const kCamerasSnapshotRefresh = Duration(seconds: 60);
 /// `PanelApp`; a test that pumps the view bare simply never hears it.
 final camerasRouteObserver = RouteObserver<ModalRoute<void>>();
 
-/// Which tile shell to draw — the second bisect of the frozen-video hunt,
-/// set from `main()` by `VIDEO_TILE`.
-///
-/// The first bisect (`CAMERAS_GRID`) cleared the grid skeleton, and a
-/// clean-room probe then cleared five simultaneous textures, the sliver
-/// grid, the clip, the drag wrappers and the repaint patterns — while the
-/// zoomed view (same process, same route, same player chain) plays. What
-/// remains is what only [CameraTile] itself wraps around the picture:
-///
-/// * `full` (default) — the shipped tile.
-/// * `novis` — no [VisibilityDetector]. Isolates the one layer-protocol
-///   participant unique to the grid path: it registers a composition
-///   callback on the tile's retained layer on every paint.
-/// * `nokeepalive` — [CameraTileState.wantKeepAlive] is pinned false.
-///   Isolates the sliver's KeepAlive bracket around live tiles.
-/// * `nooverlay` — no tap-catcher painted over the face. Isolates the
-///   opaque hit-test overlay above the texture (the web-platform-view fix).
-/// * `bare` — a playing tile is [CameraFeed.view] and nothing else: no
-///   VisibilityDetector, no card, no clip, no shadows, no name bar, no
-///   overlay. Everything at once; if this still freezes, the tile is
-///   exonerated wholesale and the hunt moves outside it.
-/// * `early` — the view is mounted while the feed is still `connecting`,
-///   under the notice, instead of appearing at `playing` — and it keeps
-///   ONE tree position through the playing boundary, so its element (and
-///   the Texture under it) is created exactly once, before frames flow.
-///   Isolates mount timing: the shipped tile mounts each Texture only
-///   after its stream has been decoding for a while, and every
-///   configuration that plays (the probe grids) mounts its Textures
-///   before the first frame; the zoom is the one counter-example, and it
-///   is single-texture. The arm's first cut swapped tree shapes at
-///   `playing` and silently remounted the Texture — frozen, and
-///   correctly so, but it tested nothing.
-/// * `raw` — `bare` and `early` at once: the tile is [CameraFeed.view] in
-///   a [ColoredBox] from birth, no shell, no faces, view element created
-///   once before frames. The probe-pool grid's exact shape fed through
-///   the Director — the combination cell the single-variable arms above
-///   cannot reach. **Played, 2026-08-27** — and against `bare` (same
-///   strip, view mounted at playing, frozen) it convicted
-///   mount-after-frames as one of two freezers.
-/// * `rawvis` / `rawoverlay` / `rawcard` — `raw` plus exactly one shell
-///   piece: the [VisibilityDetector], the opaque tap overlay, or the card
-///   (clip + shadows + name bar). View-from-birth held constant; the arm
-///   that freezes names the second freezer. **Run 2026-08-27: rawvis and
-///   rawoverlay play, rawcard freezes** — the card carries it.
-/// * `rawclip` / `rawshadow` / `rawbar` — the card split three ways on
-///   `raw`: the bare antialiased clip (the probe cleared this shape), the
-///   clip plus the dual blurred BoxShadows, the clip plus Column + name
-///   bar. The arm that freezes names the card's guilty piece. **Run
-///   2026-08-27: all three froze** — the clip itself is the second
-///   freezer, over five textures (the zoom clips one and plays; the
-///   probe cleared the clip one-switch-at-a-time in a Wrap, never
-///   combined with its grid).
-/// * `rawrrect` / `rawhard` — the clip's implementation split: the same
-///   rounded rect via [ClipRRect] (a ClipRRectLayer) versus
-///   `Container(clipBehavior: Clip.hardEdge)` (no antialias). The shipped
-///   card clips via ClipPath; if either of these plays, that difference
-///   is the fix.
-///
-/// Delete together with `CAMERAS_GRID`'s arms once the freeze is settled.
-String cameraTileMode = 'full';
-
-/// The pieces `VIDEO_TILE=rawmix` composes — set from `main()` by
-/// `VIDEO_MIX` (comma-separated: `shadow`, `radius`, `notch`, `bar`,
-/// `clip`). The build-order and nesting live at the `rawmix` arm.
-Set<String> cameraTileMix = const {};
-
 /// The right-edge handle on the Dollhouse that opens the Cameras view.
 ///
 /// Renders nothing when the House has no video Device — a tab onto an empty
@@ -521,45 +455,11 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
                       director: _director,
                       onWent: _tileWent,
                     ),
-                    // `legacy` is the grid this replaced, kept reachable for
-                    // the frozen-video bisect (`camerasGridMode`): plan
-                    // order, one GridView, no slivers, no rule, no drag.
-                    // `probe` is the clean-room probe app transplanted whole
-                    // — raw sessions, no tiles, no Director; its class doc
-                    // says what the fork decides.
-                    null => switch (camerasGridMode) {
-                      'probe' => CamerasProbeGrid(
-                        devices: _devices,
-                        video: widget.video,
-                      ),
-                      // Same bare grid, but dialling through the wall's own
-                      // `VideoConfig.open` — the keep-alive pool — instead
-                      // of raw `openRtspVideo`. With `probe` playing, this
-                      // splits the plumbing: frozen here means the pool,
-                      // playing here squeezes the Director and the tile's
-                      // mount timing (`VIDEO_TILE=early`).
-                      'probepool' => CamerasProbeGrid(
-                        devices: _devices,
-                        video: widget.video,
-                        opener: widget.video.open,
-                      ),
-                      'legacy' => LayoutBuilder(
-                        builder: (context, constraints) => GridView.count(
-                          crossAxisCount: constraints.maxWidth > 900 ? 3 : 2,
-                          mainAxisSpacing: 16,
-                          crossAxisSpacing: 16,
-                          childAspectRatio: 16 / 11,
-                          children: [
-                            for (final device in _devices) _tile(device),
-                          ],
-                        ),
-                      ),
-                      _ => CameraGrid(
-                        arranged: _arranged,
-                        tileBuilder: _tile,
-                        onArrange: widget.order.arrange,
-                      ),
-                    },
+                    null => CameraGrid(
+                      arranged: _arranged,
+                      tileBuilder: _tile,
+                      onArrange: widget.order.arrange,
+                    ),
                   },
                 ),
                 if (_prompting) _StillWatching(),
@@ -727,8 +627,7 @@ class CameraTileState extends State<CameraTile>
   /// which is before [_feed] exists (measured — a `late` read here took the
   /// whole grid down).
   @override
-  bool get wantKeepAlive =>
-      cameraTileMode == 'nokeepalive' ? false : _wasActive;
+  bool get wantKeepAlive => _wasActive;
 
   @override
   void initState() {
@@ -912,259 +811,6 @@ class CameraTileState extends State<CameraTile>
     // A kept-alive live tile is not laid out while scrolled away, so
     // visibleFraction == 0 is also the only "it left" signal such a tile
     // ever gets: its dispose() never runs off-screen.
-    //
-    // Bisect arms ([cameraTileMode]): without the detector the feed's
-    // `visible` simply keeps its born-true default — the viewport stop and
-    // the grab gate go blind, which is acceptable for the experiment's
-    // lifetime and for nothing else.
-    if (cameraTileMode.startsWith('raw') || cameraTileMode == 'fixcorners') {
-      // The combination cells the single-variable arms above cannot reach.
-      // `raw` (bare + early at once — probepool's exact shape through the
-      // Director) PLAYED on 2026-08-27. The bare-vs-raw split that seemed
-      // to convict mount-after-frames did not survive repeats: the 2×2
-      // factorial {shell, mount order} at three rig runs per cell
-      // (2026-08-28, stalled-stream cells discounted by their burned-in
-      // clocks) reads bare 3/3 and raw 3/3 healthy against early and full
-      // 0/6 every run — mount order changes nothing, the shell decides.
-      // The `raw*` arms hold view-from-birth constant and add back ONE
-      // shell piece each, to name the freezer inside the shell.
-      Widget view = ColoredBox(
-        color: const Color(0xFF11151F),
-        child: _feed.view,
-      );
-      // `rawcard` froze (2026-08-27) with `rawvis`/`rawoverlay` playing —
-      // the second freezer is in the card. But the card is three things,
-      // and the standalone probe cleared the bare antialiased clip, so
-      // these split it: `rawclip` (clip+radius+colour only — the probe's
-      // cleared shape), `rawshadow` (clip + the dual blurred BoxShadows),
-      // `rawbar` (clip + Column + name bar).
-      // The FIX CANDIDATE: the shipped card's whole look with no clip
-      // anywhere above the texture. The rounded raised surface paints
-      // BEHIND the video; the video stays square; quarter-circle notches
-      // in the page colour paint OVER its top corners to fake the
-      // rounding. If this plays, it is what the wall ships.
-      if (cameraTileMode == 'fixcorners') {
-        view = DecoratedBox(
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: PanelTheme.raised(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    view,
-                    const Positioned(
-                      top: 0,
-                      left: 0,
-                      child: _CornerNotch(Alignment.topLeft),
-                    ),
-                    const Positioned(
-                      top: 0,
-                      right: 0,
-                      child: _CornerNotch(Alignment.topRight),
-                    ),
-                  ],
-                ),
-              ),
-              _nameBar(),
-            ],
-          ),
-        );
-      }
-      // 2026-08-27's "fixcorners froze" measured the FULL design: the
-      // raw-family gate above read `startsWith('raw')` only, so this
-      // branch never ran (caught 2026-08-28 — the doorbell wore the full
-      // design's still face in the rig's own grab). Re-measured with the
-      // gate fixed: every pair and triple of pieces plays, the four-piece
-      // card plays most runs — and one run in three the wall stopped
-      // WHOLE, five textures at one instant with synchronized burned-in
-      // clocks. The sever is a wall-wide probabilistic event whose odds
-      // grow with paint load, not a guilty widget. One factor per arm,
-      // rig-validated: square shadow only; rounded background paint only;
-      // corner notches only; Column+name bar only.
-      if (cameraTileMode == 'rawshadow2') {
-        view = DecoratedBox(
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            boxShadow: PanelTheme.raised(8),
-          ),
-          child: view,
-        );
-      }
-      if (cameraTileMode == 'rawradius') {
-        view = DecoratedBox(
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: view,
-        );
-      }
-      if (cameraTileMode == 'rawnotch') {
-        view = Stack(
-          fit: StackFit.expand,
-          children: [
-            view,
-            const Positioned(
-              top: 0,
-              left: 0,
-              child: _CornerNotch(Alignment.topLeft),
-            ),
-            const Positioned(
-              top: 0,
-              right: 0,
-              child: _CornerNotch(Alignment.topRight),
-            ),
-          ],
-        );
-      }
-      if (cameraTileMode == 'rawbar2') {
-        view = Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [Expanded(child: view), _nameBar()],
-        );
-      }
-      // The composable cell — `VIDEO_TILE=rawmix` + `VIDEO_MIX=a,b,...`
-      // picks any subset of the card's pieces, because the rig found the
-      // freeze is a THRESHOLD, not a widget: every single factor plays,
-      // all four together freeze (2026-08-27). Pieces: `shadow`, `radius`,
-      // `notch`, `bar`, `clip` — nested exactly as `fixcorners` nests
-      // them, so a subset differs from it only by what it omits.
-      if (cameraTileMode == 'rawmix') {
-        final mix = cameraTileMix;
-        if (mix.contains('notch')) {
-          view = Stack(
-            fit: StackFit.expand,
-            children: [
-              view,
-              const Positioned(
-                top: 0,
-                left: 0,
-                child: _CornerNotch(Alignment.topLeft),
-              ),
-              const Positioned(
-                top: 0,
-                right: 0,
-                child: _CornerNotch(Alignment.topRight),
-              ),
-            ],
-          );
-        }
-        if (mix.contains('bar')) {
-          view = Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [Expanded(child: view), _nameBar()],
-          );
-        }
-        final radius = mix.contains('radius');
-        final shadow = mix.contains('shadow');
-        if (radius || shadow || mix.contains('clip')) {
-          view = Container(
-            clipBehavior:
-                mix.contains('clip') ? Clip.antiAlias : Clip.none,
-            decoration: BoxDecoration(
-              color: PanelTheme.surfaceRaised,
-              borderRadius: radius || mix.contains('clip')
-                  ? BorderRadius.circular(16)
-                  : null,
-              boxShadow: shadow ? PanelTheme.raised(8) : null,
-            ),
-            child: view,
-          );
-        }
-      }
-      // Mechanism probe: the same freezing clip, with a RepaintBoundary
-      // between it and the texture — does an extra layer boundary change
-      // the pass structure the clip forces?
-      if (cameraTileMode == 'rawclip2') {
-        view = Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: RepaintBoundary(child: view),
-        );
-      }
-      // All three card splits froze (2026-08-27): the common piece is the
-      // rounded clip itself, not the shadows or the bar. These two probe
-      // the clip's IMPLEMENTATION: `Container(clipBehavior:)` over a
-      // rounded decoration clips via ClipPath, while [ClipRRect] emits a
-      // ClipRRectLayer — different layer types, identical pixels. If one
-      // plays where the other freezes, that difference is the fix.
-      if (cameraTileMode == 'rawrrect') {
-        view = ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: view,
-        );
-      }
-      if (cameraTileMode == 'rawhard') {
-        view = Container(
-          clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: view,
-        );
-      }
-      const cardArms = {'rawcard', 'rawclip', 'rawshadow', 'rawbar'};
-      if (cardArms.contains(cameraTileMode)) {
-        final shadows =
-            cameraTileMode == 'rawcard' || cameraTileMode == 'rawshadow';
-        final bar = cameraTileMode == 'rawcard' || cameraTileMode == 'rawbar';
-        view = Container(
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            color: PanelTheme.surfaceRaised,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: shadows ? PanelTheme.raised(8) : null,
-          ),
-          child: bar
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [Expanded(child: view), _nameBar()],
-                )
-              : view,
-        );
-      }
-      if (cameraTileMode == 'rawoverlay') {
-        view = Stack(
-          children: [
-            Positioned.fill(child: view),
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: _onTap,
-                behavior: HitTestBehavior.opaque,
-              ),
-            ),
-          ],
-        );
-      }
-      if (cameraTileMode == 'rawvis') {
-        view = VisibilityDetector(
-          key: ValueKey('tile-visibility-${_device.id}'),
-          onVisibilityChanged: (info) {
-            if (!mounted) return;
-            _tileVisible = info.visibleFraction > 0;
-            _feed.visible = _tileVisible;
-          },
-          child: view,
-        );
-      }
-      return view;
-    }
-    if (cameraTileMode == 'bare' && _feed.phase.value == FeedPhase.playing) {
-      return _feed.view;
-    }
-    if (cameraTileMode == 'bare' || cameraTileMode == 'novis') {
-      return _tileBody();
-    }
     return VisibilityDetector(
       key: ValueKey('tile-visibility-${_device.id}'),
       onVisibilityChanged: (info) {
@@ -1212,13 +858,12 @@ class CameraTileState extends State<CameraTile>
         // this overlay is what catches it: painted after the platform view,
         // so Flutter composites it above, and `opaque` so it answers the hit
         // test across the whole tile rather than only where it drew ink.
-        if (cameraTileMode != 'nooverlay')
-          Positioned.fill(
-            child: GestureDetector(
-              onTap: _onTap,
-              behavior: HitTestBehavior.opaque,
-            ),
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: _onTap,
+            behavior: HitTestBehavior.opaque,
           ),
+        ),
       ],
     );
   }
@@ -1226,14 +871,6 @@ class CameraTileState extends State<CameraTile>
   Widget _face() {
     switch (_feed.phase.value) {
       case FeedPhase.playing:
-        // Bisect arm `early`: the SAME Stack shape as the connecting case
-        // below, so the view's element survives the connecting→playing
-        // boundary. The first cut of this arm returned the bare view here,
-        // and that remounted the Texture at exactly the moment the stream
-        // came up — the arm reproduced the suspect instead of removing it.
-        if (cameraTileMode == 'early') {
-          return Stack(fit: StackFit.expand, children: [_feed.view]);
-        }
         return _feed.view;
       // Honest text, never a spinner — the same rule as the Popup, for
       // the same pumpAndSettle and same-lie reasons. A ladder re-dial over
@@ -1245,24 +882,6 @@ class CameraTileState extends State<CameraTile>
         final notice = _sawPlaying && _feed.retryAttempt.value > 0
             ? 'Reconnecting…'
             : 'Connecting…';
-        // Bisect arm `early` ([cameraTileMode]): the view is mounted the
-        // moment a session exists, under the notice, instead of waiting
-        // for `playing`. The shipped wall mounts each Texture only after
-        // its stream has been decoding for a while — the probe grids,
-        // which play, mount theirs before the first frame — and this arm
-        // is the difference worn by the real tile.
-        if (cameraTileMode == 'early') {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              _feed.view,
-              Align(
-                alignment: Alignment.bottomLeft,
-                child: _FaceTag(notice),
-              ),
-            ],
-          );
-        }
         return _FaceNotice(notice);
       // The quiet tile variant of the zoom's counted face: the aged still
       // (where one exists) with the word in the corner — the §C design
@@ -1539,51 +1158,6 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
         return const _FaceNotice('Live view unavailable');
     }
   }
-}
-
-/// A 16×16 page-coloured square with a quarter-circle bitten out — painted
-/// OVER a square video corner to fake the card's rounded corner without a
-/// clip layer anywhere above the texture (the `fixcorners` arm; the clip
-/// is the wall's second freezer, convicted 2026-08-27). A Picture layer
-/// composites above the Texture like any other paint; only CLIPPING the
-/// texture severs its updates.
-class _CornerNotch extends StatelessWidget {
-  const _CornerNotch(this.corner);
-
-  final Alignment corner;
-
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-        size: const Size(16, 16),
-        painter: _CornerNotchPainter(corner),
-      );
-}
-
-class _CornerNotchPainter extends CustomPainter {
-  const _CornerNotchPainter(this.corner);
-
-  final Alignment corner;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // The circle sits at the notch's INNER corner — the point of the tile
-    // the rounding curves toward — so the area outside it, inside this
-    // square, is exactly the sliver the card's rounded corner would have
-    // clipped away. Even-odd leaves the circle's inside unpainted.
-    final center = Offset(
-      corner.x < 0 ? size.width : 0,
-      corner.y < 0 ? size.height : 0,
-    );
-    final path = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRect(Offset.zero & size)
-      ..addOval(Rect.fromCircle(center: center, radius: size.width));
-    canvas.drawPath(path, Paint()..color = PanelTheme.surface);
-  }
-
-  @override
-  bool shouldRepaint(_CornerNotchPainter oldDelegate) =>
-      oldDelegate.corner != corner;
 }
 
 class _FaceNotice extends StatelessWidget {

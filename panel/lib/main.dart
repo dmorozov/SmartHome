@@ -12,7 +12,6 @@ import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
 import 'diagnostics/url_redaction.dart';
 import 'domain/house.dart';
-import 'ui/cameras/camera_grid.dart';
 import 'ui/cameras/camera_order.dart';
 import 'ui/cameras/cameras_view.dart';
 import 'ui/device_popup.dart';
@@ -162,25 +161,6 @@ Future<void> main() async {
           .trim()
           .toLowerCase();
   rtspFramePulse = askedPulse != 'off';
-  // `jiggle` additionally nudges the texture's transform each frame — the
-  // one thing scrolling does that a repaint does not. See `rtspFrameJiggle`.
-  rtspFrameJiggle = askedPulse == 'jiggle';
-  // Which Cameras grid to draw — a temporary bisect for the frozen-video
-  // hunt: `new` (default), `nodrag`, `legacy`, `probe`, `probepool`.
-  // `camerasGridMode` says what each isolates and when to delete them.
-  camerasGridMode = (environment['CAMERAS_GRID'] ?? 'new').trim().toLowerCase();
-  // Which tile shell to draw around the picture — the second bisect, aimed
-  // at what only CameraTile wraps: `full` (default), `novis`, `nokeepalive`,
-  // `nooverlay`, `bare`, `early`, `raw`, plus the raw+one-piece arms
-  // `rawvis`, `rawoverlay`, `rawcard`, `rawclip`, `rawshadow`, `rawbar`.
-  // `cameraTileMode` says what each isolates.
-  cameraTileMode = (environment['VIDEO_TILE'] ?? 'full').trim().toLowerCase();
-  // The subset `VIDEO_TILE=rawmix` composes — see `cameraTileMix`.
-  cameraTileMix = {
-    for (final piece
-        in (environment['VIDEO_MIX'] ?? '').toLowerCase().split(','))
-      if (piece.trim().isNotEmpty) piece.trim(),
-  };
   // `CAMERAS_OPEN=auto` walks the app onto the Cameras view by itself two
   // seconds after boot. For the validation rig (`tool/freeze_probe.sh`):
   // Wayland offers no scripted taps, so the app cooperates instead.

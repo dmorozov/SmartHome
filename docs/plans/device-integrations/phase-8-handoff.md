@@ -531,107 +531,35 @@ everything else). What landed, against the plan below it:
   the live go2rtc config) is OFF the table**: the fallback needs them
   serving. Revisit only if the owner ever demotes MJPEG outright.
 
-**Step 2½ — the frozen wall (2026-08-27, hunt OPEN).** The gauntlet item
+**Step 2½ — the frozen wall: FIXED 2026-08-28.** The gauntlet item
 "texture clips under `PanelTheme`'s rounded corners (needs a real GPU
-session)" turned out to be the whole ballgame: **the RTSP wall has never
-played on the appliance stack** — five tiles show a never-updated texture
-(uninitialized-FBO confetti or one stale frame) while decode advances,
-the engine draws 60 fps, and only scrolling refreshes the picture. MJPEG
-unaffected; the commit-bisect that seemed to show a regression was
-measuring the transport default flip (`f43c52f` "worked" because it was
-silently on MJPEG; forced to RTSP it freezes too).
+session)" turned out to be the whole ballgame: the RTSP wall had never
+played on the appliance — five tiles showing a never-updated texture while
+decode advanced and the engine drew 60 fps, refreshed only by scrolling.
 
-What the bisect campaign established, each line carrying its method:
+**Root cause: the Impeller renderer**, which Flutter 3.47 made the Linux
+default. The fix is a Skia pin in the runner; the wall ships with its
+design unchanged. Everything worth keeping — the mechanism, the fallbacks,
+the full list of what was measured innocent, and the re-check trigger
+before any SDK upgrade — is
+[ADR-0012](../../adr/0012-panel-renders-with-skia-on-linux.md). The hunt is
+closed on GitHub issue #4 (a ticket per decision); the upstream reports
+wait in `docs/upstream/` for the owner to file.
 
-- **Exonerated** (probe apps, `CAMERAS_GRID` arms `nodrag`/`legacy`/
-  `probe`/`probepool`, `VIDEO_TILE` arms, zoom behaviour): the grid
-  skeleton and drag rewrite, decoders both ways, `lowLatency`, the frame
-  pulse, texture count per se (a clean-room probe plays
-  N=5), the app shell (the transplanted probe grid plays inside the full
-  Panel), the Stream Director and keep-alive pool (`probepool` plays;
-  `raw` — bare early-mounted tiles through the full Director — plays).
-- **Convicted:** **the full shell — the rounded clip its prime suspect.**
-  Every arm carrying the clip froze in every observation (`full`,
-  `early`, `rawclip`, `rawshadow`, `rawbar`, `rawrrect`, `rawhard`,
-  `rawcard`: 2026-08-27 single runs, plus `full`×3 and `early`×3 hard
-  0/6 on 2026-08-28); every no-clip arm plays (17+ rig runs, one
-  wall-wide exception below). Failure ages differ: under the shell,
-  tiles are **born dead** — blank faces or uninitialized-FBO confetti
-  under LIVE badges, no frame ever drawn — where the no-clip card's one
-  freeze drew good frames first and stopped wall-wide.
-- **REFUTED 2026-08-28 (mount order, issue #6): mount-after-frames is
-  not a factor.** The 2×2 factorial {shell, view-mount order}, three
-  rig runs per cell, stalled-stream cells discounted by their burned-in
-  clocks: `raw` (no shell, view from birth) healthy 3/3; `bare` (no
-  shell, view at playing) healthy 3/3 — the 2026-08-27 bare-vs-raw
-  split was a single-run artifact; `early` (shell, view from birth)
-  0/6×3; `full` (shell, view at playing) 0/6×3. Mount order changes
-  nothing in either direction. The dial-after-mount arm issue #6
-  proposed is moot twice over: the admission gate already dials every
-  queued tile after its mount (only the first tile dials synchronously
-  in `initState`), and mount order is measured irrelevant.
-- **REFUTED 2026-08-28** (the full sweep, issue #5): the 2026-08-27
-  "combination load threshold" was an artifact — the `fixcorners` arm sat
-  behind a `startsWith('raw')` gate it could never pass and silently
-  measured the FULL design (the fourth arm of this hunt to test nothing;
-  caught by the rig's own grab — the doorbell wore the full design's
-  still face). With the gate fixed and the arm pinned by a widget test:
-  every pair and every triple of {shadow, radius, notch, bar} plays, and
-  the four-piece no-clip card plays too (`rawmix` all-four 3/3 runs,
-  `fixcorners` 2/3). The one exception is the finding: one `fixcorners`
-  run stopped WHOLE — five textures at one instant, synchronized
-  burned-in camera clocks, pixel-identical 3 s later — so the sever is a
-  **wall-wide, probabilistic event** whose odds grow with paint load,
-  not a guilty widget. Corollaries: (a) single-run verdicts near the
-  boundary are insufficient — repeat, and read the burned-in clocks: a
-  cell whose clock LAGS its neighbours is a stalled stream (roving Wyze
-  daemon stalls polluted five sweep runs), one whose clock MATCHES while
-  pixels hold still is a severed texture; (b) the no-clip four-piece
-  card is the leading design candidate, carrying a wall-stop risk
-  observed once in three runs that the mechanism/patch tickets (#10,
-  #13) must retire.
-- **CONVICTED 2026-08-28 (the renderer, issues #10/#12): the freeze is
-  Impeller's.** The release bundle had been running Impeller all along
-  ("Using the Impeller rendering backend (OpenGLESSDF)" in every rig
-  log — the Flutter 3.47 Linux default), so every conviction above
-  reads "…under Impeller". A release-valid runner knob
-  (`PANEL_RENDERER=skia` → `fl_dart_project_set_enable_impeller(FALSE)`,
-  pinned by a `panel.renderer` stderr line) flips the same build to
-  Skia: the complete shipped design — clip, shadows, bars — renders
-  healthy 3/3, and the Impeller-only edge-confetti bands vanish. The
-  earlier "Impeller-vs-Skia exonerated" arm was an env-var switch on a
-  release bundle; release builds compile those switches out, so it
-  measured Impeller against Impeller. Caveat for the fix decision:
-  upstream warns the Skia opt-out will be removed in a future release.
-- **Mechanism** (observed 2026-08-28, replacing the earlier fvp#271
-  research story, which left no footprint here): mdk renders into the
-  void — per-player accounting (position, cache, fps, vo) healthy and
-  indistinguishable from a playing run while the glass is dead; no GL
-  errors under `GL_DEBUG=1`; zero `gdk gl context change` lines in 30+
-  logs; FBO creation identical frozen-vs-healthy. Two failure ages
-  under Impeller: textures born dead (blank faces / uninitialized-FBO
-  confetti under LIVE badges) whenever clip/saveLayer content is in the
-  scene from birth, and a rare wall-wide simultaneous stop after good
-  frames (synchronized burned-in clocks) without it. The single-texture
-  zoom playing fits: the trigger scales with composited load. The
-  Impeller-internal detail belongs to the upstream report (issue #14).
-- **The validation rig:** `panel/tool/freeze_probe.sh` — autonomous
-  launch/capture/verdict, calibrated both directions (known-playing reads
-  5/6 moving with the idle doorbell cell frozen; known-frozen reads 0/6).
-  Method and trust rules: `.claude/skills/flutter-linux-eyes/SKILL.md`.
-  Supporting knobs shipped for it: `CAMERAS_OPEN=auto`, `VIDEO_TILE`
-  arms incl. `rawmix`+`VIDEO_MIX`, `PANEL_RENDERER=skia` (runner-level
-  renderer pin, release-valid), `VIDEO_DEBUG` pulse+pixel lines (the
-  pixel sampler segfaults release GLES runs — rig leaves it off).
-
-The hunt is tracked on the wayfinder map (GitHub issue #4); decisions
-live on its closed tickets. Owed once it closes: delete every bisect
-arm (`CAMERAS_GRID`, `VIDEO_TILE`, `VIDEO_MIX`), revert the
-`VIDEO_DECODERS=FFmpeg` pin to auto (disproved both directions), decide
-the frame pulse's fate against measurements, settle the renderer
-default per the fix decision (issue #11), and carry the upstream report
-(issue #14) to flutter/fvp — the clean-room probe plus the renderer A/B
-is the repro.
+Two hunt-era knobs stayed behind because they earn their keep: the
+validation rig `panel/tool/freeze_probe.sh` (method:
+`.claude/skills/flutter-linux-eyes/SKILL.md`) with its `CAMERAS_OPEN=auto`
+and `PANEL_RENDERER` knobs, and `VIDEO_DEBUG=on`'s pulse lines (its pixel
+sampler segfaults release GLES runs — the rig leaves it off). Every bisect
+arm (`CAMERAS_GRID`, `VIDEO_TILE`, `VIDEO_MIX`) was deleted with the fix.
+**Two knobs the fix leaves worth flipping in production, both one restart,
+no rebuild:** `VIDEO_REPAINT_PULSE=off` — the per-vsync texture repaint was
+a workaround for the same "moves only while scrolling" symptom and now
+plays 3 runs out of 3 without it on the dev box, so it is likely dead
+weight on the appliance too (the code says what would settle it); and
+`VIDEO_DECODERS=auto`, never re-run after the real faults were fixed — the
+software pin is affordability, not a conviction (2026-08-26 addendum
+below).
 
 The original plan, for reference:
 - New file `panel/lib/ui/video/live_video_rtsp.dart`: a

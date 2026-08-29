@@ -14,13 +14,13 @@ collapsed it to ~40 s, unattended.
 ## The loop
 
 1. `flutter build linux --release` (from `panel/`).
-2. `VIDEO_TILE=<arm> tool/freeze_probe.sh` — the rig launches the bundle
-   under X11, auto-opens the Cameras view (`CAMERAS_OPEN=auto`), waits out
-   warmup, grabs the window twice, and prints a per-cell verdict:
-   `PLAYING` cells moved between grabs, `frozen` cells did not. Knobs ride
-   the environment like any hand run (`VIDEO_TILE`, `VIDEO_MIX`,
-   `CAMERAS_GRID`, `WARMUP`, `GAP`, `OUT`). Its header carries the scar
-   tissue — read it before editing it.
+2. `tool/freeze_probe.sh` — the rig launches the bundle under X11,
+   auto-opens the Cameras view (`CAMERAS_OPEN=auto`), waits out warmup,
+   grabs the window twice, and prints a per-cell verdict: `PLAYING` cells
+   moved between grabs, `frozen` cells did not. Knobs ride the environment
+   like any hand run (`PANEL_RENDERER`, `VIDEO_REPAINT_PULSE`, `WARMUP`,
+   `GAP`, `OUT`). Its header carries the scar tissue — read it before
+   editing it.
 3. **Look at the grabs with the Read tool.** The verdict table says
    whether pixels moved; only the image says what is actually on screen —
    a verdict over the wrong view is worthless (the rig once graded a
@@ -64,9 +64,14 @@ Trust rules, each bought with a voided experiment:
   failed silently more than once; `kill -9` and re-check.
 - **No capture without a live compositor.** A blanked or locked screen
   freezes every window's last buffer while the app runs healthy
-  underneath — check `org.gnome.ScreenSaver.GetActive` first, and inhibit
-  idle for the run (`gnome-session-inhibit`). Blanked-screen captures
-  read "frozen" and are lies.
+  underneath — check `org.gnome.ScreenSaver.GetActive` before AND after
+  the grabs (the `gnome-session-inhibit` the rig holds has lost the race:
+  a run blanked mid-warmup and graded a healthy wall 0/6, both grabs
+  identical to the pixel including the window chrome). Blanked-screen
+  captures read "frozen" and are lies. **Two bit-identical grabs are the
+  tell** — a real frozen texture still sits under a live clock, so diff
+  the whole window: `getbbox()` of `None` means the compositor handed you
+  the same buffer twice, not that the app stopped.
 - **X11 can change the symptom, not the bug.** GL context bugs that
   freeze pictures on Wayland can crash on X11/GLX (fvp#271's shape) — a
   crash where Wayland froze is the same suspect speaking louder.
@@ -80,8 +85,8 @@ Trust rules, each bought with a voided experiment:
 GLES runs on this stack — rig runs leave `VIDEO_DEBUG` off and trust the
 screenshots; use the sampler only in log-only sessions.
 
-The runner defaults the appliance to **Skia** (decision, map issue #11 —
-Impeller leaves the fvp wall born dead); `PANEL_RENDERER=impeller`
+The runner defaults the appliance to **Skia** (ADR-0012 — Impeller leaves
+the fvp wall born dead); `PANEL_RENDERER=impeller`
 re-enables Impeller for testing future SDKs, and the engine's own
 `Using the Impeller rendering backend` banner is the positive control.
 The pin lives in the runner because the engine's
@@ -100,18 +105,20 @@ the same reason.
 
 ## Bisect discipline
 
-- Arms are runtime env-var switches (`VIDEO_TILE`, `CAMERAS_GRID`,
-  `VIDEO_MIX` in `cameras_view.dart`/`camera_grid.dart`), so one build
-  serves a whole sweep.
+- Build arms as runtime env-var switches read once in `main()` (the
+  2026-08-27 hunt used `VIDEO_TILE`/`CAMERAS_GRID`/`VIDEO_MIX`, deleted
+  with the fix), so one build serves a whole sweep.
 - **Pin every arm with a widget test asserting it does what its name
   claims** — removes exactly the wrapper, keeps the element alive across
-  the boundary it says it holds. Three arms in one hunt silently tested
+  the boundary it says it holds. Four arms in one hunt silently tested
   nothing (a field that could never be set, a widget that built itself, a
-  remount at the exact moment under test) and each sent the hunt down a
-  wrong branch until its test caught it.
-- **Sweep combinations, not just singles.** The frozen wall's factors
-  were each innocent alone and guilty together — a one-switch-at-a-time
-  sweep proves less than it feels like it proves.
+  remount at the exact moment under test, a branch behind a gate its own
+  name could not pass) and each sent the hunt down a wrong branch until
+  its test caught it.
+- **Sweep combinations, not just singles** — and suspect the *environment*
+  the arms share before you convict a widget. That hunt bisected the
+  widget tree for two days and the answer was the renderer underneath it
+  all (ADR-0012): every arm had been measuring Impeller.
 
 ## What the engine promises (Flutter 3.47, GTK embedder)
 
@@ -126,13 +133,15 @@ against engine source and upstream issues during the hunt:
   renders video **only inside the engine's texture-populate callback**,
   into an FBO bound to the raster GdkGLContext ("fbo can not be shared").
   Populate runs once per `mark_texture_frame_available`, not per frame.
-- The documented severing mechanism: the ≥3.32 GTK compositor rework can
-  present populate with a **different current GL context** once
-  saveLayer-class effects enter the scene — the FBO name is then invalid
-  there, renderVideo draws into nothing, no error is raised
-  (wang-bin/fvp#271; multi-player freeze fvp#266; FBO-state precedent
-  flutter#120815; overlay-over-texture crashes flutter#150668).
+- So the severing happens between that FBO and the frame the renderer
+  samples. The popular story — the ≥3.32 GTK compositor rework presenting
+  populate with a **different current GL context** (wang-bin/fvp#271) —
+  was **refuted here by direct observation**: zero context-change lines in
+  30+ instrumented runs, FBO creation identical frozen vs healthy. Take it
+  as a hypothesis to test, never as the explanation. (Adjacent, unproven
+  here: multi-player freeze fvp#266, FBO-state precedent flutter#120815,
+  overlay-over-texture crashes flutter#150668.)
 
-Findings of the hunt itself live in
-`docs/plans/device-integrations/phase-8-handoff.md` (N5, 2026-08-27
-addendum) — this skill is the method, that document is the state.
+The hunt's own conclusion is
+[ADR-0012](../../../docs/adr/0012-panel-renders-with-skia-on-linux.md) —
+this skill is the method, that decision is the state.
