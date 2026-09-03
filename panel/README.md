@@ -339,13 +339,13 @@ reason: they are the lines above and below `stream:`, and just as easy to paste
 a URL into. The loader refuses a `stream:` on any kind that cannot play one,
 and that message withholds the stream name as well — on a light the stream is
 refused, so that message is the *only* place the name could ever be published,
-where on a real camera it reaches `popup.stream_open` and has to.
+where on a real camera it reaches `cameras.popup_open` and has to.
 [HOUSE-PLAN.md](HOUSE-PLAN.md) has the operator-facing version.
 
 One credential channel is accepted rather than closed, stated here so it is not
 rediscovered as a defect: a bare API token typed where a stream name goes
 **parses** — a token has the shape of a legal name — and is then logged as
-`popup.stream_open name=…`. Rejected: hashing or truncating the name in the
+`cameras.popup_open name=…`. Rejected: hashing or truncating the name in the
 log, which costs every honest line its meaning; and a length cap, which refuses
 the long descriptive names go2rtc allows while a short token sails through.
 
@@ -499,8 +499,9 @@ A session is not kept if it failed, if it is `unsupported` (nothing was dialled,
 so there is no producer to hold), or if it is already past the age cap. One kept
 session per endpoint, so a stream can never accumulate held Ring sessions. And
 the wrapper keeps `LiveVideoOpener`'s contract whole — **it may not throw**:
-`device_popup.dart` catches, but `cameras_view.dart` calls `video.open` bare, so
-an exception let out would take the whole Cameras view down for one tile.
+every surface dials through the Stream Director now, and its `dial()` catches
+for all three roles — but the Director defends exactly because the contract
+says it should never have to, one habit at every layer.
 
 It is composed in `main()` — one pool per process, `VideoConfig(open:)` — and
 not inside `VideoConfig`, which is `@immutable` and built by every hermetic
@@ -532,15 +533,24 @@ such a test would pass while exercising nothing
 ([Tests](#the-web-half-runs-nowhere-unless-you-ask-for-it)). The guard is the
 browser procedure, not a suite.
 
-### Five answers, because one grey rectangle would be a lie
+### Six answers, because one grey rectangle would be a lie
 
 | Phase | On the wall | In the log |
 |---|---|---|
-| `unconfigured` | "Live view placeholder — go2rtc stream" | `D popup.stream_skipped device=… reason=no_go2rtc_url` \| `no_stream_name` \| `bad_go2rtc_url` |
-| `connecting` | "Connecting to the camera…" | `I popup.stream_open name=…` |
+| `unconfigured` | "Live view placeholder — go2rtc stream" | `D cameras.popup_skipped device=… reason=no_go2rtc_url` \| `no_stream_name` \| `bad_go2rtc_url` |
+| `connecting` | "Connecting to the camera…", or "Reconnecting to the camera…" while a ladder re-dial is the one in flight | `I cameras.popup_open name=…` |
 | `playing` | the picture | — |
-| `failed` | "Live view unavailable" | `W popup.stream_failed name=… reason="…"` |
-| `unsupported` | "Live view unavailable" | `I popup.stream_unsupported name=…`, and **no** `stream_open`/`stream_closed` pair — no socket was ever opened |
+| `retrying` | "Reconnecting to the camera…" over a picture that was up, "Connecting to the camera…" when none ever was | `W cameras.popup_failed …` then `D cameras.popup_retry name=… attempt=N in_s=…` |
+| `failed` | "Live view unavailable" | `W cameras.popup_failed name=… reason="…"` |
+| `unsupported` | "Live view unavailable" | `I cameras.popup_unsupported name=…`, and **no** `popup_open`/`popup_closed` pair — no socket was ever opened |
+
+`retrying` is a **camera's** phase and `failed` is the **doorbell's**: since
+ADR-0013 a camera Popup climbs the same 5/15/60 ladder the zoom does, so it
+never rests — while a Ring stream is never re-dialled on a timer (#177014).
+Which sentence either of the two climbing phases shows turns on whether a
+picture was ever up, because *"re-" claims a restoration*: the ladder's own
+wording rides `retrying` **and** the `connecting` of each re-dial it sends,
+so the word does not flicker between rungs and attempts.
 
 `unsupported` is **no longer a whole-platform verdict**. It used to mean "this
 is not the web build"; both builds carry a player now, and what still reaches
@@ -548,13 +558,15 @@ it is a *browser* with no `MediaSource` in it. The web player checks before it
 dials, because `failed` would send an operator to look at a go2rtc that is
 perfectly healthy for a fault that is in the browser.
 
-Five and not two because "nobody told the Panel where go2rtc is", "go2rtc
-answered and refused" and "this build cannot play video at all" have three
-different fixes and three different people to do them. `failed` and
+Six and not two because "nobody told the Panel where go2rtc is", "go2rtc
+answered and refused", "it refused but we are still trying" and "this build
+cannot play video at all" have different fixes and different people to do
+them — and a camera the Panel is still reaching may not wear the words of one
+it has given up on. `failed` and
 `unsupported` do read identically on the glass, on purpose: what differs is
 *who* has to act, and that person is reading journald, not standing in the
-hall. They are told apart **in the log**, by `stream_unsupported` against
-`stream_failed` — on the appliance the journal is the only channel there is,
+hall. They are told apart **in the log**, by `popup_unsupported` against
+`popup_failed` — on the appliance the journal is the only channel there is,
 and it has to distinguish "this build cannot play video" from "go2rtc is
 healthy and said no". What the wall owes whoever walks past is that there is no
 picture, said plainly rather than shown as a black rectangle they would stand
@@ -563,13 +575,14 @@ there waiting on — which is also why no phase renders a spinner. A
 widget test that opens a camera.
 
 `unconfigured` is the odd one out: **no opener ever answers it.** That case is
-decided before anything is dialled — `_openVideo` returns *null*, logs which of
-the three reasons applied, and the video box renders this body for a null
-session. The enum value names the body so an opener that one day learns the
+decided before anything is dialled — the Stream Director's born verdict settles
+the Popup's managed feed at `FeedPhase.unconfigured`, logs which of the three
+reasons applied, and the video box renders this body for a feed that dialled
+nothing. The enum value names the body so an opener that one day learns the
 difference has somewhere to say it; today the phase on the wall arrives with no
 session behind it at all.
 
-`reason=` on `stream_failed` is go2rtc's own sentence: grep it, never branch on
+`reason=` on `popup_failed` is go2rtc's own sentence: grep it, never branch on
 it, never render it. Verbatim except for one pass of `redactCredentials`
 (`lib/diagnostics/url_redaction.dart`), which is **best-effort and says so** —
 the sentence is composed by another process out of a configuration the Panel
@@ -606,14 +619,17 @@ back neither it, nor a key that could be one, nor the parser's view of the line
 it sat on) are what keep a credentialed paste out of the one file that gets
 shipped to whoever is debugging.
 
-Closing the Popup closes the session, from `dispose()` rather than from the
+Closing the Popup releases its feed, from `dispose()` rather than from the
 route's future: `Route.popped` completes ~150 ms before the subtree unmounts,
 and `dispose()` is the only hook that also runs when the route leaves without
 a pop. All ways out — the Close button, the barrier, the doorbell deadline —
-converge on it, and it logs `I popup.stream_closed name=… reason=popup_closed`
-— but only for a stream that was actually opened. A build that answered
-`unsupported` logs neither half of that pair: a `stream_open`/`stream_closed`
-for a socket that never existed is the log inventing a connection.
+converge on it, and the Director logs `I cameras.popup_closed name=…
+reason=view_closed` — but only for a stream that was actually opened. A
+stream that fails mid-life is closed at the failure, `reason=failed`, and the
+dismissal then logs nothing: the session was already gone. A build that
+answered `unsupported` logs neither half of the pair: a
+`popup_open`/`popup_closed` for a socket that never existed is the log
+inventing a connection.
 
 ### The go2rtc config shape: one stream, two producers
 
@@ -1257,7 +1273,9 @@ a Ring session open on purpose.
 
 ### `cameras.*` — the log vocabulary
 
-Fifteen events. The view's own lifecycle, then each tile's, then the order.
+Twenty events. The view's own lifecycle, then each tile's, then the Popup's —
+its live view is a managed feed too (ADR-0013), so its stream lines carry this
+vocabulary — then the order.
 
 | Line | When |
 |---|---|
@@ -1265,11 +1283,16 @@ Fifteen events. The view's own lifecycle, then each tile's, then the order.
 | `I cameras.closed open_s=N live=N` | it went away, how long it was up, how many tiles were still live |
 | `D cameras.idle_blocked retry_s=30` | the idle deadline fired against a route it may not pop; retries after the warning window |
 | `I cameras.idle_return reason=unanswered` | "Still watching?" went unanswered and the view returned itself |
-| `D cameras.tile_skipped device=… reason=no_stream_name \| go2rtc_unconfigured` | a tile that cannot dial, and which of the two reasons it is |
+| `D cameras.tile_skipped device=… reason=no_stream_name \| no_go2rtc_url \| bad_go2rtc_url` | a tile that cannot dial, and which of the three reasons it is |
 | `I cameras.tile_unsupported name=…` | this build cannot play video — the browser has no `MediaSource`. Not a go2rtc fault, and deliberately not `tile_failed` |
 | `I cameras.tile_open name=…` | a stream was opened for that tile |
 | `W cameras.tile_failed name=… reason=…` | go2rtc's own sentence, already through the players' redaction |
 | `I cameras.tile_closed name=… reason=…` | the stream was let go |
+| `D cameras.popup_skipped device=… reason=…` | a Popup's live view that cannot dial — the same three reasons as a tile's |
+| `I cameras.popup_unsupported name=…` | the Popup on a build that cannot play video, and **no** `popup_open`/`popup_closed` pair — nothing was dialled |
+| `I cameras.popup_open name=…` | a stream was opened for a Popup |
+| `W cameras.popup_failed name=… reason=…` | go2rtc's own sentence, redacted like a tile's. A camera's is followed by `cameras.popup_retry`, the ladder climbing (ADR-0013); no `popup_offline` exists, because the popup role is health-blind |
+| `I cameras.popup_closed name=… reason=view_closed \| failed` | the stream was let go — at dismissal, or at the failure that already ended it |
 | `D cameras.snapshot_ok entity=…` | a still landed. Logged **on change only** — a broken Hub would otherwise write once a minute forever |
 | `W cameras.snapshot_failed entity=… status=…` | `status` is an HTTP code or an exception's bare **type name** — never exception text, which embeds the request URL, and that request carries the Hub token |
 | `I cameras.order_loaded saved=N` | boot: how many device ids the saved arrangement had. `saved=0` is a screen nobody has arranged, not a failure |

@@ -394,8 +394,8 @@ is the only place the name could ever be published.
 Tapping a camera with all of this set gives, on **either** build:
 
 ```
-[panel] I popup.stream_open name=selftest
-[panel] I popup.stream_closed name=selftest reason=popup_closed
+[panel] I cameras.popup_open name=selftest
+[panel] I cameras.popup_closed name=selftest reason=view_closed
 ```
 
 **Both builds play video, and the kiosk is the one that matters most.** The
@@ -428,20 +428,20 @@ cause — the Panel says `connecting` honestly rather than flashing
 nothing** — see §6.5b. This is the one configuration mistake in this feature
 that produces no error message anywhere.
 
-`popup.stream_unsupported` still exists and means something narrower than it
+`cameras.popup_unsupported` still exists and means something narrower than it
 used to:
 
 ```
-[panel] I popup.stream_unsupported name=selftest
+[panel] I cameras.popup_unsupported name=selftest
 ```
 
-…with **no** `stream_open`/`stream_closed` pair, because nothing was dialled.
+…with **no** `popup_open`/`popup_closed` pair, because nothing was dialled.
 It used to be the whole non-web platform saying "I have no player". Now it is
 a *browser* with no `MediaSource` in it — so on the appliance you should never
 see this line, and if you do, the build is not the one you think it is. The
 distinction is the point: on the appliance the journal is the only channel
 there is, and "this build cannot play video" has to be tellable from "go2rtc is
-healthy and said no", which a `stream_open` for a socket that never existed
+healthy and said no", which a `popup_open` for a socket that never existed
 made impossible. `panel.start platform=…` cannot stand in for it — it scrolled
 past hours ago.
 
@@ -475,10 +475,12 @@ code=200 bytes=0
 
 `200 OK` and nothing in it. Not a 404, not an error frame — a successful empty
 stream, which go2rtc then holds open. The Panel's watchdog gives up after
-fifteen seconds and says "Live view unavailable"; nothing in the journal, the
-go2rtc UI or the camera points at the missing line. **So run that `curl` when
-you add a camera.** Anything other than `bytes=0` means the appliance can play
-it.
+fifteen seconds, and since ADR-0013 a camera then climbs the retry ladder on
+every surface: the wall goes on saying "Connecting to the camera…" while
+`cameras.*_failed` and `cameras.*_retry` repeat rung after rung, and none of
+them — nor the go2rtc UI, nor the camera — names the missing line as the
+cause. **So run that `curl` when you add a camera.** Anything other than
+`bytes=0` means the appliance can play it.
 
 Declaring it on every camera costs nothing while nobody is watching: with no
 consumer, `/api/streams` shows both producers as bare `url` stubs with
@@ -522,7 +524,7 @@ Same lines everywhere: `flutter run`, the browser console (filter on
 | `hub.state_unusable` | the entity exists but reports `unavailable`/`unknown`, or a reading would not parse. One line per entry into that state, not per message |
 | `hub.toggle_refused` | a tap hit a non-togglable kind (§6.4) |
 | `hub.auth_invalid` | the token is wrong. Terminal — the Panel does not retry past this (ADR-0007) |
-| `popup.stream_*` | one Popup's live view: `_open`, `_closed`, `_failed` (go2rtc's own words, verbatim), `_skipped` at debug with the reason nothing was dialled, and `_unsupported` on any non-web build. `_open`/`_closed` come as a pair and only for a socket that really was opened — an `_unsupported` Popup logs neither, because a pair for a connection that never existed is the log inventing one. Always the stream **name**, never the URL |
+| `cameras.popup_*` | one Popup's live view, under the Stream Director's vocabulary (ADR-0013): `_open`, `_closed` (`reason=view_closed` at dismissal; `reason=failed` for a stream that died mid-life, closed at the failure and logging nothing more at dismissal), `_failed` (go2rtc's own words, verbatim), `_skipped` at debug with the reason nothing was dialled, and `_unsupported` on a browser with no `MediaSource`. `_open`/`_closed` come as a pair and only for a socket that really was opened — an `_unsupported` Popup logs neither, because a pair for a connection that never existed is the log inventing one. Always the stream **name**, never the URL |
 | `popup.doorbell*` | the unprompted Popup: `_extended` (a second ding restarted the 30 s deadline), `_held` (a person already had that doorbell up), `_deferred` (the previous one was still closing its stream; it is re-offered once it is gone), `_dismissed` (it went away, and this line deliberately does not guess why) |
 | `popup.deadline_ceiling` | a doorbell Popup hit `open_s=120` — something kept extending it for two solid minutes. The one dismissal that names its own reason |
 | `popup.dismiss_blocked` | a Popup's deadline fired while another route sat on top of it. It re-arms at `retry_s=` rather than losing the deadline and holding its stream open |
@@ -785,9 +787,9 @@ decides what a Panel built from the repo *today* does.
 [panel] D ui.ding_suppressed device=doorbell reason=unchanged
 [panel] I ui.ding device=doorbell entity_state=on
 [panel] I popup.doorbell device=doorbell reason=ding
-[panel] I popup.stream_open name=selftest
+[panel] I cameras.popup_open name=selftest
 ... 30 s later ...
-[panel] I popup.stream_closed name=selftest reason=popup_closed
+[panel] I cameras.popup_closed name=selftest reason=view_closed
 [panel] I popup.doorbell_dismissed device=doorbell
 ```
 

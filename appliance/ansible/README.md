@@ -133,7 +133,7 @@ that is all it is:
   no part of either value beyond scheme, host and port. That is the whole
   claim, and it is pinned by `panel/test/url_redaction_test.dart`,
   `boot_test.dart` and `ha_hub_test.dart`.
-- `hub.socket_error`, `hub.connect_failed` and `popup.stream_failed` reproduce
+- `hub.socket_error`, `hub.connect_failed` and `cameras.popup_failed` reproduce
   a sentence some **other** process composed — `dart:io` appends `uri = <the
   whole URL>` to an `HttpException`, go2rtc quotes the producer it could not
   dial, and ffmpeg prints the input file it could not open. Those go through

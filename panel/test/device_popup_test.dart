@@ -59,6 +59,14 @@ void main() {
   Iterable<LogRecord> popupLines(String event) =>
       records.where((r) => r.area == 'popup' && r.event == event);
 
+  /// The stream lines moved with the dance (2026-08-28): the Popup's live
+  /// view is the Director's third managed surface, so its dial, skip,
+  /// failure and close lines carry the Director's vocabulary —
+  /// `cameras.popup_*` — while everything that is about the Popup rather
+  /// than the stream (dings, deadlines, idle returns) stays `popup.*`.
+  Iterable<LogRecord> cameraLines(String event) =>
+      records.where((r) => r.area == 'cameras' && r.event == event);
+
   const camera = Device(
     id: 'cam-porch',
     name: 'Porch Camera',
@@ -115,7 +123,7 @@ void main() {
     expect(go2rtc.only.name, 'porch');
     // The name, never the URL: `log.dart` forbids a line that might carry
     // credentials, and a full MSE URL would render quoted besides.
-    expect(popupLines('stream_open').single.fields, {'name': 'porch'});
+    expect(cameraLines('popup_open').single.fields, {'name': 'porch'});
   });
 
   testWidgets('closing the Popup closes the stream — once, and by every '
@@ -142,9 +150,11 @@ void main() {
 
       expect(find.byType(Dialog), findsNothing, reason: route.key);
       expect(go2rtc.only.closes, 1, reason: route.key);
-      expect(popupLines('stream_closed').last.fields, {
+      expect(cameraLines('popup_closed').last.fields, {
         'name': 'porch',
-        'reason': 'popup_closed',
+        // The release's own word for the ordinary way out, shared with the
+        // Cameras view — one dance, one vocabulary.
+        'reason': 'view_closed',
       }, reason: route.key);
     }
   });
@@ -159,7 +169,7 @@ void main() {
 
     expect(go2rtc.opened, isEmpty);
     expect(find.text('Live view placeholder — go2rtc stream'), findsOneWidget);
-    expect(popupLines('stream_skipped').single.fields, {
+    expect(cameraLines('popup_skipped').single.fields, {
       'device': 'cam-porch',
       'reason': 'no_go2rtc_url',
     });
@@ -185,7 +195,7 @@ void main() {
     );
 
     expect(go2rtc.opened, isEmpty);
-    expect(popupLines('stream_skipped').single.fields, {
+    expect(cameraLines('popup_skipped').single.fields, {
       'device': 'cam-garage',
       'reason': 'no_stream_name',
     });
@@ -204,14 +214,14 @@ void main() {
     // whole reason urlFor returns null instead of throwing.
     expect(find.text('Porch Camera'), findsOneWidget);
     expect(find.byKey(const ValueKey('popup-close')), findsOneWidget);
-    expect(popupLines('stream_skipped').single.fields, {
+    expect(cameraLines('popup_skipped').single.fields, {
       'device': 'cam-porch',
       'reason': 'bad_go2rtc_url',
     });
   });
 
-  testWidgets('a stream go2rtc refuses reads as unavailable, never as a '
-      'black rectangle', (tester) async {
+  testWidgets('a stream go2rtc refuses reads as a camera still being '
+      'reached, never as a black rectangle', (tester) async {
     final go2rtc = FakeGo2rtc();
     await openPopup(
       tester,
@@ -221,15 +231,111 @@ void main() {
     go2rtc.only.fails('mse: stream not found');
     await tester.pump();
 
-    expect(find.text('Live view unavailable'), findsOneWidget);
+    // Since the ladder flip (2026-08-28) a camera Popup never rests at
+    // `failed`: the Director is on the 5 s rung, so the honest word is the
+    // one it was already saying. NOT "Reconnecting" — no picture was ever
+    // up here, and "re-" claims a restoration. "Live view unavailable" is
+    // now the doorbell's word (the kind wall) and the unplayable build's.
+    expect(find.text('Connecting to the camera…'), findsOneWidget);
+    expect(find.text('Live view unavailable'), findsNothing);
     // go2rtc's own words, verbatim and only in the log: it is a human
     // sentence go2rtc is free to reword, so nothing branches on it and the
     // wall never shows it.
-    expect(popupLines('stream_failed').single.fields, {
+    expect(cameraLines('popup_failed').single.fields, {
       'name': 'porch',
       'reason': 'mse: stream not found',
     });
     expect(find.textContaining('mse:'), findsNothing);
+
+    // The managed discipline, accepted with the re-seat (ADR-0013): a dead
+    // session is not held until dismissal — it closes at failure, freeing
+    // the go2rtc consumer the moment it stops earning its keep, and the
+    // closed line says so. Dismissal then has nothing left to close.
+    expect(go2rtc.only.closes, 1, reason: 'closed at failure, not at pop');
+    expect(cameraLines('popup_closed').single.fields, {
+      'name': 'porch',
+      'reason': 'failed',
+    });
+
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
+    await tester.pumpAndSettle();
+
+    expect(go2rtc.only.closes, 1, reason: 'nothing was left to close');
+    expect(cameraLines('popup_closed'), hasLength(1));
+  });
+
+  testWidgets('a picture that dies mid-watch says the ladder is climbing, and '
+      'keeps saying it through the re-dial', (tester) async {
+    final go2rtc = FakeGo2rtc();
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
+
+    go2rtc.only.plays();
+    await tester.pump();
+    expect(find.text('a moving picture'), findsOneWidget);
+
+    // A camera that died under somebody watching it. "re-" is earned here:
+    // there is a picture to restore, which is what the latch is for.
+    go2rtc.opened.first.fails('the camera stopped sending');
+    await tester.pump();
+    expect(find.text('Reconnecting to the camera…'), findsOneWidget);
+    expect(find.text('Live view unavailable'), findsNothing,
+        reason: 'a camera on the ladder is coming back, not gone');
+
+    // The first rung: the word must not flicker back to "Connecting" while
+    // the re-dial is in flight — that is what the count in the connecting
+    // arm is for.
+    await tester.pump(const Duration(seconds: 5, milliseconds: 100));
+    expect(go2rtc.opened, hasLength(2), reason: 'the ladder re-dialled');
+    expect(find.text('Reconnecting to the camera…'), findsOneWidget);
+
+    // And the restored picture takes the words away again.
+    go2rtc.opened.last.plays();
+    await tester.pump();
+    expect(find.text('a moving picture'), findsOneWidget);
+    expect(find.textContaining('onnecting'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the doorbell is the one kind that still rests — its Ring '
+      'stream is never re-dialled on a timer (#177014)', (tester) async {
+    const doorbell = Device(
+      id: 'doorbell',
+      name: 'Front Door',
+      kind: DeviceKind.doorbell,
+      connectivity: Connectivity.cloud,
+      position: Offset.zero,
+      streamName: 'ring_doorbell',
+    );
+    final go2rtc = FakeGo2rtc();
+    await openPopup(
+      tester,
+      device: doorbell,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
+
+    go2rtc.only.fails('ring: session refused');
+    await tester.pump();
+
+    expect(find.text('Live view unavailable'), findsOneWidget);
+    // Comfortably inside the idle bound, and deliberately not equal to it:
+    // pumping exactly [kDevicePopupIdleReturn] lands the assertion on a
+    // Popup already popping itself, so the ladder half would be measured
+    // against a torn-down route (and the closing tap below would land on an
+    // IgnorePointer). Four minutes is still eight rungs of a ladder that
+    // must not exist here.
+    await tester.pump(const Duration(minutes: 4));
+    expect(go2rtc.opened, hasLength(1),
+        reason: 'the kind wall outranks the role\'s ladder trait');
+    expect(find.byKey(const ValueKey('popup-close')), findsOneWidget,
+        reason: 'still up: the close path below has to be real');
+
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('an ffmpeg: producer\'s stderr reaches this line with its camera '
@@ -261,7 +367,7 @@ void main() {
     go2rtc.only.fails('go2rtc refused: ${redactCredentials(stderr)}');
     await tester.pump();
 
-    final line = popupLines('stream_failed').single.toString();
+    final line = cameraLines('popup_failed').single.toString();
     expect(line, isNot(contains(password)));
     expect(line, isNot(contains('admin')));
     // The stream name is this line's own field, which is why the redaction can
@@ -289,10 +395,10 @@ void main() {
     );
 
     expect(find.text('Live view unavailable'), findsOneWidget);
-    // No `stream_failed`: nothing failed, and no operator can fix a build
+    // No `popup_failed`: nothing failed, and no operator can fix a build
     // that has no MSE in it.
-    expect(popupLines('stream_failed'), isEmpty);
-    expect(popupLines('stream_unsupported').single.fields, {'name': 'porch'});
+    expect(cameraLines('popup_failed'), isEmpty);
+    expect(cameraLines('popup_unsupported').single.fields, {'name': 'porch'});
   });
 
   testWidgets('a build that cannot play video never claims it opened a stream, '
@@ -308,12 +414,12 @@ void main() {
       video: const VideoConfig(go2rtcUrl: 'http://hub:1984', open: noPlayer),
     );
 
-    expect(popupLines('stream_open'), isEmpty);
+    expect(cameraLines('popup_open'), isEmpty);
 
     await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
-    expect(popupLines('stream_closed'), isEmpty);
+    expect(cameraLines('popup_closed'), isEmpty);
   });
 
   testWidgets('the deadline is cancelled with the widget — a Timer outliving '
@@ -470,6 +576,95 @@ void main() {
     expect(go2rtc.only.closes, 1);
   });
 
+  testWidgets('an extension granted while the dismiss was blocked cancels '
+      'the pending retry — the ding keeps the Popup it was just promised', (
+    tester,
+  ) async {
+    final go2rtc = FakeGo2rtc();
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      dismissAfter: const Duration(seconds: 30),
+      dismissCeiling: const Duration(minutes: 2),
+    );
+
+    final navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('something else')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The deadline expires against the stacked route: blocked, retry armed.
+    await tester.pump(const Duration(seconds: 30));
+    expect(popupLines('dismiss_blocked'), hasLength(1));
+
+    // The route leaves, and a fresh ding lands inside the retry's one-second
+    // window. An extension resets the whole dismissal state — a stale retry
+    // firing now would pop the Popup a second after the ding was granted it.
+    navigator.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.extended);
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byKey(const ValueKey('popup-close')), findsOneWidget,
+        reason: 'the pre-extension retry must not fire');
+    expect(go2rtc.only.closes, 0);
+
+    // The restarted deadline still governs: it runs out and pops as normal.
+    await tester.pump(const Duration(seconds: 29));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsNothing);
+    expect(go2rtc.only.closes, 1);
+  });
+
+  testWidgets('answering "Still watching?" after a stacked route blocked the '
+      'idle return really keeps the Popup', (tester) async {
+    final go2rtc = FakeGo2rtc();
+    await openPopup(
+      tester,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+    );
+
+    final navigator = tester.state<NavigatorState>(
+      find.byType(Navigator).first,
+    );
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('something else')),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The idle bound runs out under the stacked route: the return is
+    // blocked, and the retry starts knocking.
+    await tester.pump(kDevicePopupIdleReturn - kDevicePopupIdleWarning);
+    await tester.pump(kDevicePopupIdleWarning);
+    expect(popupLines('idle_return'), hasLength(1));
+    expect(popupLines('dismiss_blocked'), hasLength(1));
+
+    // The route leaves; the prompt is showing; the person answers it. A
+    // touch resets the whole dismissal state — the retry from before the
+    // answer must not take the Popup a second later anyway.
+    navigator.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const ValueKey('popup-card')));
+    await tester.pump();
+
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.byKey(const ValueKey('popup-close')), findsOneWidget,
+        reason: 'they said they were still watching');
+    expect(go2rtc.only.closes, 0);
+
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('the ceiling still applies while a Popup is stuck under another '
       'route, so a blocked Popup is not an unbounded one', (tester) async {
     final go2rtc = FakeGo2rtc();
@@ -558,10 +753,12 @@ void main() {
     // whole reason `urlFor` returns null rather than throwing one layer up.
     expect(find.text('Porch Camera'), findsOneWidget);
     expect(find.byKey(const ValueKey('popup-close')), findsOneWidget);
-    expect(find.text('Live view unavailable'), findsOneWidget);
+    // A camera keeps being reached (the ladder), and the first connect that
+    // never landed may not call itself a reconnection.
+    expect(find.text('Connecting to the camera…'), findsOneWidget);
     // The type, never the message: a SyntaxError quotes the URL it refused,
     // and that URL is the one string here that can carry a password.
-    expect(popupLines('stream_failed').single.fields, {
+    expect(cameraLines('popup_failed').single.fields, {
       'name': 'porch',
       'reason': 'the opener threw StateError',
     });
@@ -570,12 +767,12 @@ void main() {
       isNot(contains('hunter2')),
     );
     // Nothing was ever opened, so nothing may claim to have been.
-    expect(popupLines('stream_open'), isEmpty);
+    expect(cameraLines('popup_open'), isEmpty);
 
     await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
-    expect(popupLines('stream_closed'), isEmpty);
+    expect(cameraLines('popup_closed'), isEmpty);
     // Answered, not thrown — and answered `none`, so the next ding pushes.
     expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
 
@@ -698,16 +895,16 @@ void main() {
       // The keep-alive is invisible to the three honest bodies: with a
       // go2rtc address and a stream name it dials, exactly as the bare
       // opener did. Asserted because "Live view placeholder — go2rtc stream"
-      // is the `unconfigured` body, decided in `_openVideo` *before* any
-      // opener is called — so if it ever shows up on a configured Panel, the
-      // cause is the address or the binding and never this pool.
+      // is the `unconfigured` body, the feed's born verdict decided *before*
+      // any opener is called — so if it ever shows up on a configured Panel,
+      // the cause is the address or the binding and never this pool.
       expect(find.textContaining('Live view placeholder'), findsNothing);
       expect(go2rtc.only.url.toString(), 'ws://hub:1984/api/ws?src=porch');
 
       await tester.tap(find.byKey(const ValueKey('popup-close')));
       await tester.pumpAndSettle();
-      // The Popup still closes its own session — its half of the contract is
-      // unchanged, and `popup.stream_closed` is still honest about it.
+      // The Popup still releases its feed — its half of the contract is
+      // unchanged, and `cameras.popup_closed` is still honest about it.
       expect(go2rtc.only.closes, 0, reason: 'kept, not killed');
 
       await tester.tap(find.text('tap the pin'));
@@ -725,6 +922,43 @@ void main() {
       // and this pool is still counting a two-minute age cap over the
       // session the Popup on screen is holding. `main()` never calls it,
       // because there the pool is meant to outlive everything.
+      keepAlive.dispose();
+    });
+
+    testWidgets('a Popup handed a picture that is already playing knows it — '
+        'the born-playing latch decides a real sentence', (tester) async {
+      final go2rtc = FakeGo2rtc();
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+      final video = VideoConfig(
+        go2rtcUrl: 'http://hub:1984',
+        open: keepAlive.open,
+      );
+
+      await openPopup(tester, video: video);
+      go2rtc.only.plays();
+      await tester.pump();
+      expect(find.text('a moving picture'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
+      await tester.pumpAndSettle();
+      // Reopened inside the pool's linger, so the feed is handed a session
+      // that is ALREADY playing. A listener never fires for the value a
+      // feed is born with, which is the whole reason the latch is read at
+      // birth as well as on change.
+      await tester.tap(find.text('tap the pin'));
+      await tester.pumpAndSettle();
+      expect(go2rtc.opened, hasLength(1), reason: 're-attached, not re-dialled');
+
+      go2rtc.only.fails('the camera stopped sending');
+      await tester.pump();
+
+      expect(find.text('Reconnecting to the camera…'), findsOneWidget,
+          reason: 'the picture was on the wall a moment ago — telling the '
+              'person it is connecting for the first time is exactly the '
+              'lie the latch exists to prevent');
+
+      await tester.tap(find.byKey(const ValueKey('popup-close')));
+      await tester.pumpAndSettle();
       keepAlive.dispose();
     });
 

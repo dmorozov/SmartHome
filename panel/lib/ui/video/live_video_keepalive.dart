@@ -174,10 +174,10 @@ class LiveVideoKeepAlive {
   /// The tear-off to hand to `VideoConfig(open: …)`, and it keeps
   /// [LiveVideoOpener]'s contract whole: **it may not throw**. Both real
   /// players already answer a settled `failed` session rather than raising,
-  /// and this wrapper has to do the same — `device_popup.dart` catches a
-  /// throw, but `cameras/cameras_view.dart` does not, so an exception let out
-  /// of here would take the whole Cameras view down for one tile that could
-  /// not dial.
+  /// and this wrapper has to do the same — every surface dials through the
+  /// Stream Director now, and its `dial()` defends against a throw for all
+  /// three roles, but it defends precisely because this contract says it
+  /// should never have to (one habit, every layer).
   LiveVideoSession open(Uri url, {required String name}) {
     final key = url.toString();
     final kept = _kept.remove(key);
@@ -263,7 +263,7 @@ class LiveVideoKeepAlive {
     // and re-attaching to it would hand the next Popup the dead one instead
     // of the fresh one it would otherwise have dialled. An `unsupported` one
     // never touched the network at all, so there is no producer to hold —
-    // and keeping it would turn `popup.stream_unsupported` into a line that
+    // and keeping it would turn `cameras.popup_unsupported` into a line that
     // appears for the first Popup and never again.
     //
     // `unconfigured` is here for completeness rather than because a player

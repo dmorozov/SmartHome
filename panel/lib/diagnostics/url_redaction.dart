@@ -131,8 +131,8 @@ Map<String, Object?> urlForLog(String url) {
 /// `rtsp://cam <redacted>`. They do survive on the producer names go2rtc
 /// writes without an authority, such as `ffmpeg:selftest#video=mjpeg`, which
 /// is the form the Panel's own streams take. The quoted `?src=<stream>` is
-/// likewise gone and is not lost: `device_popup.dart` logs the stream as its
-/// own field on the same line (`popup.stream_failed name=cam_porch reason=…`).
+/// likewise gone and is not lost: the Stream Director logs the stream as its
+/// own field on the same line (`cameras.popup_failed name=cam_porch reason=…`).
 /// Host and port survive, which is the half that says *which* daemon or
 /// camera, and the unquoted remainder — `mse: stream not found`, `connection
 /// refused`, `dial tcp …` — is untouched.

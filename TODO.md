@@ -83,4 +83,54 @@ Panel-side is the unmeasured cell: the fvp prototype cost ~55% of one core for s
 
 
 
-The frozen camera wall is FIXED (2026-08-28): the cause was the Impeller renderer, the Flutter 3.47 Linux default, and the runner now pins Skia — reasoning, what it rules out, and the re-check before any SDK upgrade are in docs/adr/0012-panel-renders-with-skia-on-linux.md. Left for you: file the two upstream drafts in docs/upstream/ under your own account (the flutter one wants your `flutter doctor -v`), and decide whether the ~9 MB evidence PNGs stay in git.
+Test Plan:
+
+Here's the plan. I verified the Panel-side facts myself; the Hub-side commands come from the readers and are yours to run — I have not executed anything against the live Hub.
+
+Start here: tap one floodlight camera pin, cold, with the journal open
+
+Every timing assertion in the 646 tests sits on FakeGo2rtc, which returns instantly. On your house a cold dial is 4–7 s for a plain Wyze v3 and 17–18 s for the two floodlight units, while the RTSP first-frame watchdog is 25 s and the stall watchdog 15 s. The most likely real breakage is a rung or a watchdog firing inside a dial that was still warming up — and because the popup role is health-blind, there's no offline park to fall into. It just climbs, forever, at two camera connections per failed dial on the 2.4 GHz band.
+
+cd ~/Work/SmartHome/panel
+HUB=ha HA_URL=http://127.0.0.1:8123 HA_TOKEN="$(tr -d '[:space:]' < ~/.sh_keys/token)" \
+  GO2RTC_URL=http://127.0.0.1:1984 LOG=debug \
+  flutter run -d linux --release 2>&1 | tee /tmp/panel-lead.log
+
+LOG=debug is required — cameras.popup_retry is a D line. Then tap a floodlight pin and read:
+
+- I cameras.popup_open → picture, no popup_failed, no popup_retry = pass.
+- W cameras.popup_failed then D cameras.popup_retry attempt=1 in_s=5 on a healthy camera = the bug, and the one this change can actually introduce.
+
+Five minutes, and it's the test I'd run every time.
+
+The tiers below it
+
+Tier 0 — hermetic, ~2 min, I can run it. flutter test (646 green) plus flutter build web as a dart2js gate. Proves the policy machine, the copy, the health arithmetic. Proves nothing about latency or anything past the video seam.
+
+Tier 1 — the wall with no faults, ~10 min, yours. Same run line; tap each camera, close, confirm exactly one popup_open / one popup_closed reason=view_closed per visit and that go2rtc's consumer count returns to zero. Watch the census with a script that prints only counts — never paste /api/streams raw, it embeds the Ring token and camera passwords.
+
+Tier 2a — force a ladder climb, ~10 min. The safest injector is Panel-side, not Hub-side: point one camera's stream: in panel/assets/house/bindings.yaml at a name go2rtc doesn't serve. Blast radius is one Device in one Panel process, no camera is dialled at all so it costs zero airtime, and git checkout -- assets/house/bindings.yaml reverts it. You should see attempt=1 in_s=5 → 2 in_s=15 → 3 in_s=60 and, on the glass, "Connecting… try N" — never "Reconnecting", because no picture was ever up. That's the _sawPlaying latch doing its job.
+
+Tier 2b — the actual phase-2a feature, ~10 min. This is the one I'd not skip, because Camera Health writes no journal line at all (zero Log. calls in camera_health.dart — I checked), so a tile that dials when it should have stayed parked is the only evidence the feature works. Force one probe off via the HA states API, then: confirm the tile parks → tap that camera's pin and let it play → reopen the Cameras view and look for cameras.tile_open with no probe transition in front of it. If the tile stays parked for ~60 s, either the evidence isn't landing or the Popup got a fallback Director. A free alternative with zero writes: your .63 and .57 cameras die and recover on their own, several times a day.
+
+Tier 3 — audio across a re-dial, ~10 min, ears required. Scope it first so you don't test the wrong build: only the RTSP player has a real setMuted; MJPEG, MSE and settled sessions are all no-ops, and the doorbell can never reach the ladder anyway. So this is a Wyze camera Popup on the Linux bundle only. Open, hear it, kill that producer mid-watch, and listen at the moment the picture returns. Silent = the feed-level mute intent didn't reach the real player.
+
+Tiers 4–5 — web/MSE and the freeze rig. Skip both on a normal day. One thing to know about the rig: it cannot open a Popup. CAMERAS_OPEN=auto is the only navigation knob in the codebase, there's no POPUP_OPEN, and no synthetic-input tool is installed — so it can only re-check that the Cameras wall still plays under Skia. Also a footgun I verified: kRtspRestreamPort is a compile-time 8554, so a -d linux run ignores the port in GO2RTC_URL and dials production go2rtc even when you point it at the dev sandbox.
+
+One hole the exercise exposed, which I closed
+
+Working through what proves what, the readers found that no test ever passed a real Director into a Popup — every green Popup case ran the fallback that builds its own. Drop director: from any of main.dart's forwarding sites and the Popup still plays, still logs the whole cameras.popup_* vocabulary, still ladders — while its Director has health: null, so Camera Health silently never hears from a Popup again and the census stops counting. Nothing went red.
+
+There's now a test in dollhouse_test.dart that pumps the real PanelApp with a Director that has a health source, taps a camera pin, and asserts the outcome reaches that Director. I verified it by mutation: deleting director: from main.dart:437 fails it. 646 tests green, analyzer clean.
+
+The two open questions
+
+Q1 (exit-window dial) is settleable in ~15 min and worth doing: set up the 2a bindings fault so it sits on the 5 s rung, then open-and-close the Popup ~5 s in, 10–20 times. The tell is a cameras.popup_open after the dismissal with its popup_closed under ~200 ms later — normal teardown is one open and one close seconds apart. Corroborate with the census: it goes 1 → 0 → 1 again with no Panel surface alive to explain it.
+
+Q2 (MSE rebuild wording) is only partly settleable, in a browser, and how to force an MSE element rebuild on demand is not established. Worth knowing: the empirical answer tells you how often it happens, not what the copy should say — and the tile carries the identical rule, so changing one and not the other is the likelier regression.
+
+Two things to know before you grep anything
+
+The journal vocabulary changed: popup.stream_* is gone, the family is cameras.popup_*, reason=popup_closed is now view_closed, and go2rtc_unconfigured split into no_go2rtc_url / bad_go2rtc_url on all three prefixes. Any saved grep keyed on the old strings is silently dead. And doorbell testing genuinely costs: every fake ding opens a real Ring session, and an open session suppresses the next real ding — everything kind-independent here (ladder, copy, latch, mute intent, dialOutcome) is camera behavior, so test it on a Wyze.
+
+The full plan, with the exact Hub-side commands, redaction one-liners, and blast radii, is at /tmp/claude-1000/-home-dmorozov-Work-SmartHome/f5552aa5-df42-4f78-881c-4faf650d8135/scratchpad/test-plan.md — say the word if you'd like it kept in docs/ instead of a temp dir.

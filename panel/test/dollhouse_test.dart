@@ -6,10 +6,12 @@ import 'package:panel/ui/cameras/cameras_view.dart';
 import 'package:panel/ui/dollhouse/dollhouse_view.dart';
 import 'package:panel/ui/edge_tab.dart';
 import 'package:panel/ui/video/live_video.dart';
+import 'package:panel/ui/video/stream_director.dart';
 
 import 'dollhouse_geometry.dart';
 import 'fixtures.dart';
 import 'support/fake_go2rtc.dart';
+import 'support/fake_health.dart';
 import 'test_house.dart';
 
 /// A Device glyph **on the Dollhouse**, which is not the same question as
@@ -238,6 +240,51 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('popup-close')));
       await tester.pumpAndSettle();
     });
+
+  });
+
+
+  /// The wiring `main()` does by hand between the Panel's one Director
+  /// and the surfaces that attach feeds to it.
+  group('the Panel\'s Director reaches its surfaces', () {
+  testWidgets('a pin\'s Popup attaches to the PANEL\'s Director, not one of '
+      'its own — the hand-wiring `main()` does, and the only thing that '
+      'carries Camera Health to a Popup', (tester) async {
+    // The failure this exists for is silent. A Popup handed no Director
+    // builds its own over the same [VideoConfig] (the CamerasView
+    // precedent), so it dials the same go2rtc, plays the same picture and
+    // writes the same `cameras.popup_*` lines — while its Director has
+    // `health: null` and a census of one. Drop the `director:` argument
+    // anywhere on the way down and nothing goes red; the wall just
+    // quietly stops feeding Camera Health and stops counting.
+    final go2rtc = FakeGo2rtc();
+    final health = FakeHealth();
+    final (controller, _) = fakeHubRig(
+      house: houseWithStream(loadTestHouse(), 'cam-garage', 'garage'),
+    );
+    final video = VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open);
+    final director = StreamDirector(video: video, health: health);
+    addTearDown(director.dispose);
+
+    await tester.pumpWidget(
+      panelApp(controller, video: video, director: director),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('pin-cam-garage')));
+    await tester.pumpAndSettle();
+    expect(find.byType(Dialog), findsOneWidget);
+    go2rtc.only.plays();
+    await tester.pump();
+
+    // The discriminator: only the Panel's Director was given a health
+    // source, so an outcome landing there is proof the Popup's feed is
+    // that Director's and not a private one.
+    expect(health.outcomes, [('cam-garage', true)]);
+
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
+    await tester.pumpAndSettle();
+  });
   });
 
   /// The handles on the Panel's right edge (owner-restacked 2026-08-15): the

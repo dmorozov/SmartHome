@@ -298,10 +298,10 @@ void main() {
     test('the stream name inside a quoted URL goes too, because the log line '
         'already carries it as its own field', () {
       // This case used to be pinned as *unchanged*, on the ground that
-      // `?src=` is the whole diagnostic. It is not lost: `device_popup.dart`
-      // logs `popup.stream_failed name=cam_porch reason=…`, so the quoted copy
-      // was a duplicate — and keeping the query string was the exception that
-      // made the rule a guess about parameter names again.
+      // `?src=` is the whole diagnostic. It is not lost: the Stream Director
+      // logs `cameras.popup_failed name=cam_porch reason=…`, so the quoted
+      // copy was a duplicate — and keeping the query string was the exception
+      // that made the rule a guess about parameter names again.
       expect(
           redactCredentials(
               'streams: Get "http://127.0.0.1:1984/api/stream.mjpeg'
@@ -409,7 +409,7 @@ void main() {
       // the redaction happens before `_render`, which then adds the quoting a
       // multi-line ffmpeg dump needs, and a rule that was safe before quoting
       // and not after would be a rule nobody had actually checked.
-      Log.warn('popup', 'stream_failed', {
+      Log.warn('cameras', 'popup_failed', {
         'name': 'cam_porch',
         'reason': redactCredentials(
             'go2rtc refused: mse: streams: exec/pipe: EOF\n'
@@ -418,7 +418,7 @@ void main() {
 
       final line = records.single.toString();
       expect(line, isNot(contains(password)));
-      expect(line, startsWith('[panel] W popup.stream_failed name=cam_porch '));
+      expect(line, startsWith('[panel] W cameras.popup_failed name=cam_porch '));
       expect(line, contains(r'Error opening input file http://127.0.0.1:9 '
           r'<redacted>.\n'));
     });

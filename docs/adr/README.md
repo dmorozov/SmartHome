@@ -16,6 +16,7 @@ The decisions this project is built on, and the reasoning that would otherwise h
 | [0010](0010-secrets-consolidated-outside-the-repo.md) | Secrets consolidated under ~/.sh_keys | Every credential our own stack owns the path for moved outside the repo tree; HA's internal `.storage` is the one deliberate exception |
 | [0011](0011-ring-two-way-audio-via-go2rtc-half-duplex.md) | Ring two-way audio via go2rtc, half-duplex | Talkback uses go2rtc's native `ring:` source as shipped — two HTTP POSTs, no bespoke service; echo handled by muting playback while the button is held, AEC underneath |
 | [0012](0012-panel-renders-with-skia-on-linux.md) | The Linux Panel renders with Skia | Impeller (the Flutter 3.47 Linux default) leaves the five-texture camera wall born dead; the runner pins Skia, the design is unchanged, re-test before any SDK upgrade |
+| [0013](0013-the-popup-is-a-managed-feed.md) | The Popup is a managed feed | The Popup's live view is the Stream Director's third role, declared by traits; its dials are health-blind by intent, its clocks are a decorator, and the ding arbitration stays its own |
 
 ## Related reference material
 

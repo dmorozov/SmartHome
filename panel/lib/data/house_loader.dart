@@ -289,7 +289,7 @@ void _checkPin(Room shape, Device device, String room, String label) {
 /// [ParsedBinding.label] like every message in `bindings_parser.dart`. The
 /// *name* is withheld here and only here, and the asymmetry is the point: a
 /// stream on a light is refused, so this name never reaches
-/// `popup.stream_open` and this message is the one and only place it could be
+/// `cameras.popup_open` and this message is the one and only place it could be
 /// published — while a name on a real camera is logged on every Popup and has
 /// to be (see `_streamName` in bindings_parser.dart, which states that
 /// residual and why it is accepted). Withholding it costs nothing: the reader

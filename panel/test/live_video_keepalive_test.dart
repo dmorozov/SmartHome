@@ -197,7 +197,7 @@ void main() {
         keep.open(doorbell, name: 'ring_doorbell').close();
 
         // Twice, not once: pooling a session that answers `unsupported`
-        // without touching the network would turn `popup.stream_unsupported`
+        // without touching the network would turn `cameras.popup_unsupported`
         // into a line that appears for the first Popup and never again.
         expect(dials, 2);
         keep.dispose();

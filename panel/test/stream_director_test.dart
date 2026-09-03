@@ -679,6 +679,253 @@ void main() {
       expect(session.failure, contains('StateError'));
     });
   });
+
+  group('the popup role', () {
+    // The third managed surface (2026-08-28): person-origin from birth even
+    // when a ding opened it, main stream, health-blind for gating, one dial
+    // per lifetime. The route clocks (deadline, ceiling) are deliberately
+    // NOT here — they time a route, and they live in `timed_feed.dart`.
+
+    test('a popup dials the full-size stream immediately, even while the '
+        'gate is armed', () {
+      fakeAsync((async) {
+        final d = director();
+        d.attach(cam('c1', stream: 'm1', sub: 'sub1'), role: FeedRole.tile);
+        final popup = d.attach(cam('c2', stream: 'main2', sub: 'small2'),
+            role: FeedRole.popup);
+        expect(go2rtc.opened.map((s) => s.name), ['sub1', 'main2']);
+        expect(popup.phase.value, FeedPhase.connecting);
+        d.dispose();
+      });
+    });
+
+    test('a popup dial arms no gate — a ding must not hold the next policy '
+        'dial to the spacing a tap never pays', () {
+      final d = director();
+      addTearDown(d.dispose);
+      d.attach(cam('c1', stream: 'main1'), role: FeedRole.popup);
+      d.attach(cam('c2', stream: 's2'), role: FeedRole.tile);
+      expect(go2rtc.opened, hasLength(2),
+          reason: 'the tile found no gate up and dialled now');
+    });
+
+    test('a popup dials an unreachable camera anyway — person intent '
+        'outranks the probe (owner decision, 2026-08-28) — and the outcome '
+        'still reports', () {
+      final health = FakeHealth();
+      health.of('c1').value = Reachability.unreachable;
+      final d = director(health: health);
+      addTearDown(d.dispose);
+      final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+      expect(feed.phase.value, FeedPhase.connecting,
+          reason: 'health never gates the popup role');
+      expect(health.of('c1').listened, isFalse,
+          reason: 'a health-blind role is not even subscribed');
+      go2rtc.only.plays();
+      expect(health.outcomes, [('c1', true)],
+          reason: 'blind for gating, never for reporting');
+      feed.release();
+    });
+
+    test('a popup failure never parks offline — health cannot park what it '
+        'does not gate, so the ladder is what carries it', () {
+      final health = FakeHealth();
+      health.of('c1').value = Reachability.unreachable;
+      final d = director(
+        health: health,
+        open: (url, {required name}) => SettledLiveVideoSession(
+            LiveVideoPhase.failed,
+            failure: 'nope'),
+      );
+      addTearDown(d.dispose);
+      final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+      expect(feed.phase.value, FeedPhase.retrying,
+          reason: 'the gated roles park here; this one keeps trying');
+      expect(health.outcomes, [('c1', false)]);
+    });
+
+    test('a popup CAMERA failure climbs the ladder like the zoom — the same '
+        'gesture at a different size (2026-08-28)', () {
+      fakeAsync((async) {
+        var dials = 0;
+        final d = director(open: (url, {required name}) {
+          dials++;
+          return SettledLiveVideoSession(LiveVideoPhase.failed,
+              failure: 'nope');
+        });
+        final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+        expect(feed.phase.value, FeedPhase.retrying);
+        expect(feed.retryAttempt.value, 1);
+        async.elapse(const Duration(seconds: 6));
+        expect(dials, 2);
+        async.elapse(const Duration(seconds: 15));
+        expect(dials, 3, reason: '5 → 15 → 60, the one schedule');
+        d.dispose();
+      });
+    });
+
+    test('a health-blind ladder is bounded by the ROUTE, not the probe: '
+        'releasing the Popup is what stops it', () {
+      fakeAsync((async) {
+        // The two decisions compound here — no `offline` park is coming, so
+        // the clocks the Popup wears (deadline, ceiling, idle return) are
+        // the only thing between a dead camera and a permanent 60 s knock.
+        var dials = 0;
+        final health = FakeHealth();
+        health.of('c1').value = Reachability.unreachable;
+        final d = director(health: health, open: (url, {required name}) {
+          dials++;
+          return SettledLiveVideoSession(LiveVideoPhase.failed,
+              failure: 'nope');
+        });
+        final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+        async.elapse(const Duration(minutes: 5));
+        expect(dials, greaterThan(3), reason: 'nothing parks it, so it climbs');
+        // The claim is UNBOUNDEDNESS, and a count alone cannot carry it: a
+        // ladder that gave up after five rungs would satisfy any
+        // `greaterThan`. `retrying` with a rung still armed is the state a
+        // ladder that stopped could not be in.
+        expect(feed.phase.value, FeedPhase.retrying);
+        final climbed = dials;
+        async.elapse(const Duration(minutes: 5));
+        expect(dials, greaterThan(climbed),
+            reason: 'the last rung repeats forever — nothing in the Director '
+                'ends this, which is what makes the route clocks the bound');
+        final stillClimbing = dials;
+        feed.release();
+        async.elapse(const Duration(minutes: 30));
+        expect(dials, stillClimbing,
+            reason: 'the route closed, so the ladder ends');
+        expect(async.pendingTimers, isEmpty);
+        d.dispose();
+      });
+    });
+
+    test('a popup DOORBELL failure rests at failed — the kind wall holds at '
+        'the third role (#177014)', () {
+      fakeAsync((async) {
+        final d = director(
+            open: (url, {required name}) => SettledLiveVideoSession(
+                LiveVideoPhase.failed,
+                failure: 'nope'));
+        final feed = d.attach(
+            cam('door', stream: 'ring', kind: DeviceKind.doorbell),
+            role: FeedRole.popup);
+        expect(feed.phase.value, FeedPhase.failed);
+        async.elapse(const Duration(minutes: 5));
+        expect(feed.phase.value, FeedPhase.failed);
+        d.dispose();
+      });
+    });
+
+    test('a popup feed is never viewport-stopped and never paused by the '
+        'overlay it constitutes', () {
+      fakeAsync((async) {
+        final d = director();
+        final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+        go2rtc.only.plays();
+        feed.visible = false;
+        d.overlaid = true;
+        async.elapse(const Duration(minutes: 5));
+        expect(go2rtc.only.closes, 0,
+            reason: 'person-origin from birth — theirs until they leave');
+        d.dispose();
+      });
+    });
+
+    test('a standing unmute outlives the ladder — the one audible surface '
+        'does not come back silent when the picture does', () {
+      fakeAsync((async) {
+        final d = director();
+        final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+        feed.setMuted(false);
+        go2rtc.only.plays();
+        go2rtc.only.fails('died mid-watch');
+        async.elapse(const Duration(seconds: 5, milliseconds: 100));
+        expect(go2rtc.opened, hasLength(2), reason: 'the ladder re-dialled');
+        expect(go2rtc.opened.last.muted, isFalse,
+            reason: 'the surface unmuted the FEED, not one socket — a caller '
+                'that had to re-assert would need to know re-dials happen');
+        d.dispose();
+      });
+    });
+
+    test('a feed nobody unmuted stays born-muted through its re-dials — no '
+        'tile ever touches the flag', () {
+      fakeAsync((async) {
+        final d = director();
+        final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.tile);
+        go2rtc.only.plays();
+        go2rtc.only.fails('died');
+        async.elapse(const Duration(seconds: 5, milliseconds: 100));
+        expect(go2rtc.opened, hasLength(2));
+        expect(go2rtc.opened.last.muted, isTrue);
+        expect(go2rtc.opened.last.mutedChanges, isEmpty,
+            reason: 'six camera audio tracks over each other is the measured '
+                'alternative; the dial may not go near the flag');
+        feed.release();
+        d.dispose();
+      });
+    });
+
+    test('setMuted passes through to the session — the LISTEN leg — and a '
+        'released feed\'s mute calls are inert', () {
+      final d = director();
+      addTearDown(d.dispose);
+      final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.popup);
+      expect(go2rtc.only.muted, isTrue, reason: 'every session is born muted');
+      feed.setMuted(false);
+      feed.setMuted(true);
+      expect(go2rtc.only.mutedChanges, [false, true]);
+      feed.release();
+      feed.setMuted(false);
+      expect(go2rtc.only.mutedChanges, [false, true],
+          reason: 'after release the surface is gone; sound may not follow');
+    });
+
+    test('a tile and a popup on one camera are two independent feeds, both '
+        'counted — stream0 and stream1 pull simultaneously (measured)', () {
+      fakeAsync((async) {
+        final d = director(policy: const DirectorPolicy(maxConcurrent: 2));
+        final tile = d.attach(cam('c1', stream: 'main', sub: 'small'),
+            role: FeedRole.tile);
+        final popup = d.attach(cam('c1', stream: 'main', sub: 'small'),
+            role: FeedRole.popup);
+        expect(go2rtc.opened.map((s) => s.name), ['small', 'main']);
+        // The cap reads both: a third, policy want holds at queued even
+        // once the spacing gate has opened.
+        final other = d.attach(cam('c2', stream: 's2'), role: FeedRole.tile);
+        expect(other.phase.value, FeedPhase.queued);
+        async.elapse(const Duration(milliseconds: 400));
+        expect(go2rtc.opened, hasLength(2),
+            reason: 'held by the cap, not the gate');
+        // Each owes its own release; letting the popup go frees the slot.
+        popup.release();
+        expect(go2rtc.opened.map((s) => s.name), ['small', 'main', 's2']);
+        tile.release();
+        d.dispose();
+      });
+    });
+
+    test('a popup that cannot dial says why, by name — the three skip '
+        'reasons are fixed by different people', () {
+      final noName = director();
+      addTearDown(noName.dispose);
+      noName.attach(cam('c1'), role: FeedRole.popup);
+      final noUrl = director(go2rtcUrl: '');
+      addTearDown(noUrl.dispose);
+      noUrl.attach(cam('c2', stream: 's2'), role: FeedRole.popup);
+      final badUrl = director(go2rtcUrl: 'localhost:1984');
+      addTearDown(badUrl.dispose);
+      badUrl.attach(cam('c3', stream: 's3'), role: FeedRole.popup);
+      expect(
+        records
+            .where((r) => r.area == 'cameras' && r.event == 'popup_skipped')
+            .map((r) => r.fields?['reason']),
+        ['no_stream_name', 'no_go2rtc_url', 'bad_go2rtc_url'],
+      );
+    });
+  });
 }
 
 // FakeHealth and ProbeNotifier moved to `support/fake_health.dart` — the

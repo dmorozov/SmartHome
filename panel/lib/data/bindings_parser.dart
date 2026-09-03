@@ -235,7 +235,7 @@ final _entityId = RegExp(r'^[a-z_]+\.[a-z0-9_]+$');
 /// 2026-08-04: `?src=rtsp://127.0.0.1:9/nope` did not 404 — go2rtc **created
 /// a stream by that name and dialled it**. So a fat-fingered RTSP paste in
 /// this file becomes a live outbound connection from the Hub, and puts the
-/// camera's credentials into `popup.stream_open name=…`, which is the one
+/// camera's credentials into `cameras.popup_open name=…`, which is the one
 /// thing log.dart forbids absolutely. Rejected: "accept any string, go2rtc
 /// will 404 the wrong ones" — it will not; it will obey them.
 ///
@@ -253,7 +253,7 @@ final _entityId = RegExp(r'^[a-z_]+\.[a-z0-9_]+$');
 ///
 /// **The one credential channel this file accepts, stated so it is not
 /// rediscovered a fifth time.** A name that passes here is logged as it
-/// stands — `popup.stream_open name=…` on every Popup, and `streams=` counts
+/// stands — `cameras.popup_open name=…` on every Popup, and `streams=` counts
 /// it at boot — so a bare API token typed where a stream name goes is
 /// published, because a token has the shape of a legal name and nothing here
 /// can tell them apart. Accepted, deliberately: the name is the whole content

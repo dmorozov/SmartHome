@@ -201,9 +201,11 @@ Future<void> main() async {
   // Timers for as long as the Panel runs. Composed ABOVE the pool — it
   // dials through `keepAlive.open`, so a feed the Director stops is a
   // stream the pool may linger — and BELOW every surface: the Cameras view
-  // attaches managed feeds, and the Popup path's `VideoConfig` below opens
-  // through `director.open`, counted but not managed (its arbitration is
-  // `doorbell_popup_host.dart`'s own).
+  // and every Popup attach managed feeds (FeedRole.popup since 2026-08-28;
+  // the ding arbitration stays `doorbell_popup_host.dart`'s own, and the
+  // Popup's route clocks are `timed_feed.dart`'s). The `VideoConfig` below
+  // keeps `director.open`, the counted pass-through, as the fallback seam
+  // for a Popup built without a Director — hermetic fixtures.
   final director = StreamDirector(
     video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
     // Camera Health off the Hub's own port-322 probes (phase-8 A2): the
@@ -381,6 +383,7 @@ class PanelApp extends StatelessWidget {
         body: DoorbellPopupHost(
           controller: controller,
           video: video,
+          director: director,
           snapshots: snapshots,
           talk: talk,
           child: SafeArea(
@@ -431,6 +434,7 @@ class PanelApp extends StatelessWidget {
                           builder: (context, _) => DollhouseView(
                             controller: controller,
                             video: video,
+                            director: director,
                             snapshots: snapshots,
                             talk: talk,
                           ),
@@ -457,6 +461,7 @@ class PanelApp extends StatelessWidget {
                               context,
                               presentation: controller.presentationOf(doorbell),
                               video: video,
+                              director: director,
                               talk: talk,
                               controller: controller,
                               snapshots: snapshots,

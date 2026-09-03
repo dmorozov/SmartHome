@@ -542,7 +542,7 @@ class MseLiveVideoSession implements LiveVideoSession {
       // multi-line stderr with the URL *unquoted*
       // (`Error opening input file http://…?loginpas=hunter2.`); both were
       // measured coming back from the live daemon and going straight to
-      // `popup.stream_failed`. [redactCredentials] states which shapes it
+      // `cameras.popup_failed`. [redactCredentials] states which shapes it
       // reaches and where it stops. It is logged anyway because `mse: stream
       // not found` is the one sentence that tells an operator the fault is in
       // bindings.yaml and not in the camera.

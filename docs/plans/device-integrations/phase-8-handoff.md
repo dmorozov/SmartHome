@@ -290,7 +290,11 @@ argument in the module docs:
     admission spacing. *The no-automatic-retry exemption was retired
     2026-08-26 (N11): person-origin cameras ride the ladder; only a
     person-origin NON-camera (the doorbell) rests at `failed` — that
-    narrowing is itself pinned (#177014).*
+    narrowing is itself pinned (#177014). Amended 2026-08-28 (ADR-0013):
+    the ladder now reads the camera kind AND the role's `laddered` trait.
+    Every shipped role sets that trait, the Popup included since the same
+    day, so the doorbell is still the only thing resting — but a role that
+    wants a picture without a pursuit can now say so in one word.*
 11. Tiles dial `DirectorPolicy.tileStream` (substream-first), zoom/Popup
     dial the main stream; zoom-replaces-grid stays a mode, not a route.
 12. go2rtc stays the ONLY RTSP client of any camera (Wyze serves ~3–4

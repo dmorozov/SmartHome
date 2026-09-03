@@ -15,6 +15,8 @@ import 'theme.dart';
 import 'thermostat_controls.dart';
 import 'video/live_video.dart';
 import 'video/snapshot.dart';
+import 'video/stream_director.dart';
+import 'video/timed_feed.dart';
 
 /// Popup — a transient overlay on the Panel (CONTEXT.md). Cameras and the
 /// doorbell show a live view from go2rtc; other Devices show their current
@@ -52,10 +54,18 @@ import 'video/snapshot.dart';
 /// `snapshot:` binding, and every hermetic test that stages a video body,
 /// simply has none, and the Popup then says what it said before — see
 /// [_LiveVideoBox].
+///
+/// [director] is the process-wide Stream Director, when `main()` composed
+/// one: since 2026-08-28 the Popup's live view is a MANAGED feed
+/// ([FeedRole.popup]) rather than a hand-rolled copy of the dial dance
+/// beside it. Null in hermetic fixtures — the Popup then builds its own
+/// over [video], the same policy over the same opener (the CamerasView
+/// precedent), minus the cross-surface census only the wall cares about.
 Future<void> showDevicePopup(
   BuildContext context, {
   required DevicePresentation presentation,
   required VideoConfig video,
+  StreamDirector? director,
   HubController? controller,
   SnapshotConfig? snapshots,
   TalkConfig talk = const TalkConfig(),
@@ -69,6 +79,7 @@ Future<void> showDevicePopup(
     builder: (context) => _DevicePopupBody(
       presentation: presentation,
       video: video,
+      director: director,
       talk: talk,
       controller: controller,
       snapshots: snapshots,
@@ -264,6 +275,7 @@ class _DevicePopupBody extends StatefulWidget {
   const _DevicePopupBody({
     required this.presentation,
     required this.video,
+    required this.director,
     required this.talk,
     required this.controller,
     required this.snapshots,
@@ -274,6 +286,7 @@ class _DevicePopupBody extends StatefulWidget {
 
   final DevicePresentation presentation;
   final VideoConfig video;
+  final StreamDirector? director;
   final TalkConfig talk;
   final HubController? controller;
   final SnapshotConfig? snapshots;
@@ -296,21 +309,24 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// of us goes away".
   static const _retryDismiss = Duration(seconds: 1);
 
-  /// Null whenever nothing was dialled — a Device that shows no video, one
-  /// with no stream name yet, or a Panel nobody told where go2rtc is. The
-  /// three are told apart in the log, not on the wall.
-  LiveVideoSession? _session;
-  String? _streamName;
+  /// This Popup's live view — a managed feed ([FeedRole.popup]) wearing the
+  /// Popup's own clocks ([TimedFeed]). Null only on a body that shows no
+  /// video; a video body whose stream cannot be dialled (no stream name, no
+  /// go2rtc, a bad address) holds a feed settled at
+  /// [FeedPhase.unconfigured], and the three are told apart in the log
+  /// (`cameras.popup_skipped`), not on the wall.
+  TimedFeed? _feed;
 
-  /// The extendable deadline, and — once it has expired against a route it
-  /// may not pop — the retry that replaces it.
-  Timer? _deadline;
+  /// The Director this Popup built for itself when it was not handed one —
+  /// hermetic fixtures — and therefore owes a dispose. The CamerasView
+  /// precedent, `_ownsDirector` there.
+  StreamDirector? _ownDirector;
 
-  /// The absolute one, armed once and never re-armed. That is the whole
-  /// point of it.
-  Timer? _ceiling;
-
-  var _ceilingReached = false;
+  /// The retry that replaces the deadline once it has expired against a
+  /// route it may not pop — see [_dismiss]. Widget-owned, not [TimedFeed]'s:
+  /// it times the ROUTE being obstructed, and an extension arriving while it
+  /// pends must cancel it ([stayUp]).
+  Timer? _dismissRetry;
 
   /// The idle bound's two halves — see [kDevicePopupIdleReturn]. Null on every
   /// Popup that does not need one, which is most of them: see [_boundsIdle].
@@ -320,8 +336,6 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// Whether "Still watching?" is on screen.
   var _promptingIdle = false;
   var _loggedBlockedDismiss = false;
-  var _announcedOpen = false;
-  var _reportedFailure = false;
 
   /// The last still this Popup managed to fetch, or null if it never did.
   ///
@@ -404,7 +418,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     // for as long as the button is held — intercoms want 30–40 dB of
     // separation before the far end stops hearing itself, and the wall's
     // speaker feeding the wall's microphone is exactly that loop.
-    _session?.setMuted(true);
+    _feed?.setMuted(true);
     setState(() => _talk = TalkPhase.opening);
     // Started here rather than on success: the sweeping segment *is* the
     // opening phase, and that phase begins the moment the thumb lands. It is
@@ -461,7 +475,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     if (_talk == TalkPhase.unconfigured || _talk == TalkPhase.idle) return;
     ++_talkPress;
     // The other half of the duck: the button is up, listening resumes.
-    _session?.setMuted(false);
+    _feed?.setMuted(false);
     _pulse.stop();
     // A failure stays on screen past the release that follows it. A press is
     // over in a moment, and a caption nobody has time to read reports the
@@ -514,24 +528,17 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     if (widget.talk.startUrl(widget.presentation.device.talkStream) == null) {
       _talk = TalkPhase.unconfigured;
     }
-    _session = _openVideo();
+    _attachVideo();
     // The Popup is the person-opened surface, so it is the audible one —
     // the doorbell's LISTEN leg (ADR-0011) and every camera's, through
     // whichever transport carries sound (the web and MJPEG branches answer
     // with a no-op). Nothing to undo on the way out: the keep-alive pool
     // re-mutes every session it lingers, so the sound cannot outlive this
     // Popup whichever of its routes closes it.
-    _session?.setMuted(false);
+    _feed?.setMuted(false);
     _fetchStill();
-    // Checked immediately as well as on change: an opener can answer
-    // `failed` before it returns — the not-yet-written web shim does — and a
-    // listener would never fire for it.
-    _session?.phase.addListener(_reportFailure);
-    _reportFailure();
-    _restartDeadline();
-    _armCeiling();
-    // After [_openVideo], because [_boundsIdle] asks whether a session was
-    // opened at all.
+    // After [_attachVideo], because [_boundsIdle] asks whether a dial was
+    // wanted at all.
     _rearmIdle();
     // Registered last, once nothing left in this method can throw. `_showing`
     // is module-level and `dispose` never runs for a State whose `initState`
@@ -570,8 +577,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     showing?.remove(this);
     final gone = showing == null || showing.isEmpty;
     if (gone) _showing.remove(id);
-    _deadline?.cancel();
-    _ceiling?.cancel();
+    _dismissRetry?.cancel();
     _idleWarn?.cancel();
     _idleFire?.cancel();
     // The one route out the gesture cannot cover. `onTapUp` and `onTapCancel`
@@ -592,24 +598,16 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       _queueStop(id);
     }
     _pulse.dispose();
-    final session = _session;
-    if (session != null) {
-      session.phase.removeListener(_reportFailure);
-      session.close();
-      // Only for a stream this Popup said it opened. A build that cannot play
-      // video never had a socket, and a `stream_closed` for it would be the
-      // log inventing a teardown — see [_openVideo].
-      //
-      // The name, never the URL: a full MSE URL carries `=` (and, if
-      // somebody ever pastes a source spec where a name belongs, credentials
-      // too). log.dart: **Never log a secret**.
-      if (_announcedOpen) {
-        Log.info('popup', 'stream_closed', {
-          'name': _streamName,
-          'reason': 'popup_closed',
-        });
-      }
-    }
+    // The one release, owed by every route out — [CameraFeed]'s contract.
+    // The clocks die inside the [TimedFeed], the Director closes the
+    // session and writes the one closed line (`cameras.popup_closed`, only
+    // for a stream it said it opened), and the keep-alive below may linger
+    // the socket.
+    _feed?.release();
+    // A Popup that built its own Director owns its lifecycle too — the
+    // CamerasView precedent. After the release: dispose would release the
+    // feed anyway, but with `panel_stopped` where the honest reason is ours.
+    _ownDirector?.dispose();
     // Last, so that whoever is waiting on it learns this Popup is gone only
     // once its go2rtc session really is closed.
     widget.onGone?.call();
@@ -627,66 +625,39 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     super.dispose();
   }
 
-  /// Opens the live view, or explains in the log why there is none.
+  /// Attaches this Popup's managed feed, when the body is a video one — the
+  /// kind gate is the caller's ([CameraFeed]'s `attach` is the seam, not a
+  /// policy engine for Devices that show no video).
   ///
-  /// Deliberately does not consult [liveVideoIsAvailable] *before* dialling.
-  /// Branching on it there would put "when is a stream opened" in two places,
-  /// and the non-web opener answers [LiveVideoPhase.unsupported] without
-  /// touching the network anyway — so the question stays the same one on
-  /// every platform. What is consulted is the phase the opener came back
-  /// with, so the log reports what happened rather than what was intended.
-  LiveVideoSession? _openVideo() {
-    if (!widget.presentation.isVideo) return null;
-    final device = widget.presentation.device;
-    final name = device.streamName;
-    if (name == null) return _skip(device, 'no_stream_name');
-    if (widget.video.go2rtcUrl.isEmpty) return _skip(device, 'no_go2rtc_url');
-    final url = widget.video.urlFor(name);
-    // urlFor returns null rather than throwing, so a fat-fingered
-    // GO2RTC_URL costs the picture and nothing else — the Device name and
-    // the Close button still render.
-    if (url == null) return _skip(device, 'bad_go2rtc_url');
-    _streamName = name;
-    final LiveVideoSession session;
-    try {
-      session = widget.video.open(url, name: name);
-    } catch (error) {
-      // Opening reaches the network, and reaching the network is allowed to
-      // throw: a browser's `WebSocket` constructor raises SecurityError for a
-      // `ws://` opened from an https page and SyntaxError for a URL it will
-      // not have — the same fat-fingered `GO2RTC_URL` that [VideoConfig.urlFor]
-      // answers null to rather than throwing, arriving one layer further in.
-      // Let out of `initState` it costs the whole Dialog, the Device name and
-      // the Close button with it, and leaves this State half-built: never
-      // disposed, so never deregistered, so deaf forever.
-      //
-      // The type, never the message: a SyntaxError quotes the URL it refused,
-      // and that URL is the one string here that can be carrying a password
-      // (log.dart: **Never log a secret**). Reported through the ordinary
-      // `failed` path rather than a line of its own, because the wall's answer
-      // is the ordinary one — there is no picture, said plainly.
-      return SettledLiveVideoSession(
-        LiveVideoPhase.failed,
-        failure: 'the opener threw ${error.runtimeType}',
-      );
-    }
-    if (session.phase.value == LiveVideoPhase.unsupported) {
-      // `stream_open` would be a lie here: on every build that is not web the
-      // opener answers this without a socket ever existing, so the
-      // `stream_open`/`stream_closed` pair would describe a connection that
-      // was never made — in journald, which on the appliance is the *only*
-      // account the Panel leaves behind.
-      //
-      // A line rather than silence, though, and one per Popup rather than one
-      // per boot: "this build cannot play video" and "go2rtc is healthy" have
-      // to be tellable apart by whoever is reading, and `panel.start
-      // platform=…` scrolled past hours ago.
-      Log.info('popup', 'stream_unsupported', {'name': name});
-      return session;
-    }
-    _announcedOpen = true;
-    Log.info('popup', 'stream_open', {'name': name});
-    return session;
+  /// Everything `_openVideo` used to hand-roll here — the dial, the born
+  /// verdict, the skip-with-reason line, the log-once failure, the
+  /// close-by-every-route-out — is the Director's one copy of the dance now
+  /// ([FeedRole.popup]), under the `cameras.popup_*` vocabulary. The
+  /// clocks ride the feed as a [TimedFeed]: the deadline times the ROUTE,
+  /// so it wraps the feed rather than widening the Director.
+  ///
+  /// `attach` never throws (its own contract, defending the same failure
+  /// this widget's opener try/catch used to: a throw out of `initState`
+  /// costs the whole Dialog and leaves this State registered-but-deaf), and
+  /// on return `phase.value` is already the born truth — a settled verdict
+  /// never fires a listener, so [_boundsIdle] may read it synchronously.
+  void _attachVideo() {
+    // A deadline on a body with no stream would have nothing to release and
+    // no [TimedFeed] to live in; nothing pushes one today (the host's
+    // Popups are all doorbells). Loud here so whoever first does knows
+    // where the clocks live.
+    assert(widget.dismissAfter == null || widget.presentation.isVideo,
+        'a dismissAfter deadline rides the video feed (TimedFeed)');
+    if (!widget.presentation.isVideo) return;
+    final director =
+        widget.director ?? (_ownDirector = StreamDirector(video: widget.video));
+    _feed = TimedFeed(
+      director.attach(widget.presentation.device, role: FeedRole.popup),
+      deadline: widget.dismissAfter,
+      ceiling: widget.dismissCeiling,
+      onDeadline: _dismiss,
+      onCeiling: _onCeiling,
+    );
   }
 
   /// Fetches the Device's still, if it has one and anybody said where the Hub
@@ -726,45 +697,23 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     setState(() => _still = result.bytes);
   }
 
-  /// Debug, not warn: a camera nobody has wired a feed to yet is a normal
-  /// stage of commissioning, and a Panel with no `GO2RTC_URL` is the
-  /// documented hermetic default. Neither is a fault worth a `W` line —
-  /// `popup.go2rtc` at boot already said which of the two the Panel is in.
-  LiveVideoSession? _skip(Device device, String reason) {
-    Log.debug('popup', 'stream_skipped', {
-      'device': device.id,
-      'reason': reason,
-    });
-    return null;
-  }
-
-  /// go2rtc's own words, verbatim, once per session. Never rendered: it is a
-  /// human sentence go2rtc is free to reword, so it is a thing to grep for,
-  /// not a thing to branch on or to put on a wall.
-  ///
-  /// [LiveVideoPhase.unsupported] never comes through here — nothing failed,
-  /// so there is nothing for go2rtc to have said. `popup.stream_unsupported`
-  /// in [_openVideo] is that build's line, and it is deliberately *not*
-  /// `stream_failed`: no operator can fix a build that has no MSE in it.
-  void _reportFailure() {
-    final session = _session;
-    if (session == null || _reportedFailure) return;
-    if (session.phase.value != LiveVideoPhase.failed) return;
-    _reportedFailure = true;
-    Log.warn('popup', 'stream_failed', {
-      'name': _streamName,
-      'reason': session.failure ?? 'unknown',
-    });
-  }
-
   /// Answers [extendDevicePopup] for this Popup.
   DevicePopupExtension stayUp() {
     if (_leaving) return DevicePopupExtension.leaving;
     if (widget.dismissAfter == null) return DevicePopupExtension.held;
+    final feed = _feed;
     // Past the ceiling this Popup is on its way out and no longer extendable,
-    // which is the same thing to a caller as one already popping.
-    if (_ceilingReached) return DevicePopupExtension.leaving;
-    _restartDeadline();
+    // which is the same thing to a caller as one already popping. No feed at
+    // all with a deadline set is the configuration [_attachVideo] asserts
+    // against; answered as leaving rather than lied about as extended.
+    if (feed == null || feed.ceilingReached) return DevicePopupExtension.leaving;
+    // An extension resets the whole dismissal state: a blocked-dismiss retry
+    // still pending must not fire against the deadline this just restarted —
+    // the old single-field arrangement cancelled it implicitly, and that was
+    // a behaviour, not an accident.
+    _dismissRetry?.cancel();
+    _dismissRetry = null;
+    feed.extend();
     return DevicePopupExtension.extended;
   }
 
@@ -792,21 +741,37 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// - **`dismissAfter == null`** — a Popup opened by a ding already has a
   ///   deadline and a ceiling. Adding a second clock would give it two
   ///   answers to one question.
-  /// - **`_session != null`** — the bound exists to release a go2rtc session,
-  ///   so a Popup that never opened one has nothing to release. A thermostat
+  /// - **a dial was wanted** — the bound exists to release a go2rtc session,
+  ///   so a Popup that never dialled has nothing to release. A thermostat
   ///   Popup left open costs nothing and is closed by the person who opened
   ///   it; timing it out would be tidiness dressed as safety.
   ///
-  /// Keyed on the session rather than on the Device's kind on purpose: "did
-  /// this Popup dial something" is the question that matters, and it stays
-  /// correct on its own if a future kind grows or loses a live view.
-  bool get _boundsIdle => widget.dismissAfter == null && _session != null;
+  /// Keyed on the feed's born verdict rather than on the Device's kind, for
+  /// the reason the old `_session != null` was: "did this Popup dial
+  /// something" is the question that matters, and it stays correct on its
+  /// own if a future kind grows or loses a live view.
+  /// [FeedPhase.unconfigured] is exactly the old null session — no stream
+  /// name, no go2rtc, a bad address — and it is a settled verdict: a feed
+  /// never crosses that boundary in either direction after birth, so this
+  /// getter cannot change its answer mid-life.
+  bool get _boundsIdle =>
+      widget.dismissAfter == null &&
+      _feed != null &&
+      _feed!.phase.value != FeedPhase.unconfigured;
 
   /// Restarts the idle bound. Called once at open and on every touch.
   void _rearmIdle() {
     if (!_boundsIdle) return;
     _idleWarn?.cancel();
     _idleFire?.cancel();
+    // A touch resets the WHOLE dismissal state, a pending blocked-dismiss
+    // retry included: an idle return that fired against an obstructed route
+    // must not outlive the answer to its own prompt — the person tapped
+    // "still watching" and then lost the Popup a second later to a timer
+    // from before they answered (found in review, 2026-08-28). [stayUp]
+    // keeps the same rule for extensions.
+    _dismissRetry?.cancel();
+    _dismissRetry = null;
     // The tap that answers the prompt needs no special case: it re-arms like
     // any other, and clearing the flag here is what takes the prompt away.
     if (_promptingIdle) setState(() => _promptingIdle = false);
@@ -826,36 +791,18 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     });
   }
 
-  void _restartDeadline() {
-    final after = widget.dismissAfter;
-    // Nothing to restart for a Popup a person opened (D14), and nothing to
-    // restart past the ceiling — that is what stops a doorbell dinging every
-    // 25 s from holding one go2rtc session open forever.
-    if (after == null || _ceilingReached) return;
-    _deadline?.cancel();
-    _deadline = Timer(after, _dismiss);
-  }
-
-  /// Arms the absolute ceiling once, for the whole life of the Popup.
-  void _armCeiling() {
-    final ceiling = widget.dismissCeiling;
-    // A Popup with no deadline has nothing to cap: capping one would hand a
-    // person who tapped a pin a countdown they never asked for (D14).
-    if (widget.dismissAfter == null || ceiling == null) return;
-    _ceiling = Timer(ceiling, () => _onCeiling(ceiling));
-  }
-
-  void _onCeiling(Duration ceiling) {
-    _ceilingReached = true;
-    _deadline?.cancel();
-    _deadline = null;
+  /// The ceiling fired inside the [TimedFeed] — it has already stopped the
+  /// deadline; what is left is the route's business.
+  void _onCeiling() {
     // Its own line, and at info: this is the only evidence that something
     // kept re-arming the deadline for the entire ceiling — a visitor leaning
     // on the button, or an entity chattering — and it is the one dismissal
     // the Panel *can* name a reason for, unlike `popup.doorbell_dismissed`.
     Log.info('popup', 'deadline_ceiling', {
       'device': widget.presentation.device.id,
-      'open_s': ceiling.inSeconds,
+      // Non-null by [TimedFeed]'s own arming rule: no ceiling timer without
+      // both durations.
+      'open_s': widget.dismissCeiling!.inSeconds,
     });
     _dismiss();
   }
@@ -884,7 +831,8 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
           'retry_s': _retryDismiss.inSeconds,
         });
       }
-      _deadline = Timer(_retryDismiss, _dismiss);
+      _dismissRetry?.cancel();
+      _dismissRetry = Timer(_retryDismiss, _dismiss);
       return;
     }
     // Through the route rather than `Navigator.of(context)`, for the reason
@@ -902,7 +850,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     final presentation = widget.presentation;
     if (presentation.isVideo) {
       return _LiveVideoBox(
-        session: _session,
+        // Non-null for every video body — [_attachVideo] attaches
+        // unconditionally behind the same [DevicePresentation.isVideo] gate
+        // this branch reads.
+        feed: _feed!,
         still: _still,
         // A doorbell is the only kind with a microphone to dock, so it is the
         // only kind whose box is carved for one — and the only one whose 4:3
@@ -1215,20 +1166,23 @@ class _IdlePrompt extends StatelessWidget {
 
 /// The Popup's video body: a picture, or the honest reason there isn't one.
 ///
-/// A null [session] means nothing was dialled, which renders exactly what
-/// this Popup rendered before go2rtc existed — same box, same icon, same
-/// sentence. That is not nostalgia: `test/golden/goldens/device_popup.png`
-/// pins those pixels, and changing this body means re-baking that golden
-/// on purpose — in the devcontainer only, the canonical golden host
-/// (ADR-0009) — not as a side effect of a video change.
-class _LiveVideoBox extends StatelessWidget {
+/// Reads the feed's [FeedPhase] — the managed vocabulary — never a
+/// [LiveVideoPhase]: the Director's own rule since the Popup became its
+/// third surface. [FeedPhase.unconfigured] means nothing was dialled, which
+/// renders exactly what this Popup rendered before go2rtc existed — same
+/// box, same icon, same sentence. That is not nostalgia:
+/// `test/golden/goldens/device_popup.png` pins those pixels, and changing
+/// this body means re-baking that golden on purpose — in the devcontainer
+/// only, the canonical golden host (ADR-0009) — not as a side effect of a
+/// video change.
+class _LiveVideoBox extends StatefulWidget {
   const _LiveVideoBox({
-    required this.session,
+    required this.feed,
     required this.docked,
     this.still,
   });
 
-  final LiveVideoSession? session;
+  final CameraFeed feed;
 
   /// Whether this box is a doorbell's: 4:3 with a notch in the bottom edge,
   /// rather than a plain camera's 16:9 rounded rectangle.
@@ -1239,43 +1193,102 @@ class _LiveVideoBox extends StatelessWidget {
   final Uint8List? still;
 
   @override
+  State<_LiveVideoBox> createState() => _LiveVideoBoxState();
+}
+
+class _LiveVideoBoxState extends State<_LiveVideoBox> {
+  /// Whether a picture has ever arrived in this box's life — the whole of
+  /// what separates "Connecting" from "Reconnecting", because **"re-"
+  /// claims a restoration**: a first connect that keeps failing has nothing
+  /// to restore and may not imply it had (ADR-0007's rule, applied to a
+  /// verb). Stateful for this one latch; the Cameras view's tile and zoom
+  /// each keep their own copy of it, which is the drift the shared
+  /// CameraFace module would end.
+  var _sawPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Read at birth as well as on change: a feed can be born playing — the
+    // keep-alive pool handing back a lingered picture — and a listener
+    // never fires for the value it was born with.
+    _sawPlaying = widget.feed.phase.value == FeedPhase.playing;
+    widget.feed.phase.addListener(_onPhase);
+  }
+
+  @override
+  void dispose() {
+    // The feed outlives this box by a frame — the Popup releases it in its
+    // own dispose — so the listener comes off here.
+    widget.feed.phase.removeListener(_onPhase);
+    super.dispose();
+  }
+
+  void _onPhase() {
+    if (!mounted) return;
+    setState(() {
+      if (widget.feed.phase.value == FeedPhase.playing) _sawPlaying = true;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final session = this.session;
-    if (session == null) {
-      return _VideoFrame(
-        docked: docked,
-        child: _body(LiveVideoPhase.unconfigured, null),
-      );
-    }
-    return ValueListenableBuilder<LiveVideoPhase>(
-      valueListenable: session.phase,
-      builder: (context, phase, _) =>
-          _VideoFrame(docked: docked, child: _body(phase, session)),
+    return _VideoFrame(
+      docked: widget.docked,
+      child: _body(widget.feed.phase.value),
     );
   }
 
-  Widget _body(LiveVideoPhase phase, LiveVideoSession? session) {
-    if (phase == LiveVideoPhase.playing && session != null) {
-      return session.view;
+  Widget _body(FeedPhase phase) {
+    if (phase == FeedPhase.playing) {
+      // Read fresh inside the build, the feed's own contract: the view
+      // changes identity across re-dials.
+      return widget.feed.view;
     }
+    // The ladder's own word, and it is only honest over a picture that was
+    // up (2026-08-28, the phase-2 flip; the Cameras view says the same
+    // thing about the same phases). A camera Popup climbs 5/15/60 like the
+    // zoom, so `retrying` is a wait between dials, not a verdict — the
+    // verdict words below belong to the phases nothing is coming back from.
+    final reconnecting = switch (phase) {
+      FeedPhase.retrying => _sawPlaying,
+      // A fresh dial after a picture died is the ladder mid-climb; a fresh
+      // dial with the count at zero is a fresh start, whatever came before.
+      FeedPhase.connecting => _sawPlaying && widget.feed.retryAttempt.value > 0,
+      _ => false,
+    };
     final text = switch (phase) {
-      LiveVideoPhase.unconfigured => 'Live view placeholder — go2rtc stream',
-      LiveVideoPhase.connecting => 'Connecting to the camera…',
-      LiveVideoPhase.playing => 'Connecting to the camera…',
+      FeedPhase.unconfigured => 'Live view placeholder — go2rtc stream',
+      // idle and queued are policy phases the popup role never wears: it is
+      // person-origin from birth and dials at attach. Armed with their
+      // nearest honest sentence rather than left to throw, so the face
+      // stays truthful on the day a trait flips before its copy lands.
+      FeedPhase.idle ||
+      FeedPhase.queued ||
+      FeedPhase.retrying ||
+      FeedPhase.connecting ||
+      FeedPhase.playing => reconnecting
+          ? 'Reconnecting to the camera…'
+          : 'Connecting to the camera…',
       // `failed` and `unsupported` read the same on the wall on purpose.
       // What differs is who has to fix it — an operator with a go2rtc
       // problem, or nobody at all on a build that cannot play video — and
       // that person is reading journald, not standing in the hall. What the
       // wall owes them is that there is no picture, said plainly instead of
       // shown as a black rectangle they would stand there waiting on.
-      LiveVideoPhase.failed ||
-      LiveVideoPhase.unsupported => 'Live view unavailable',
+      // `offline` — Camera Health's verdict, which the health-blind popup
+      // role never wears — joins them as the same plain fact.
+      FeedPhase.offline ||
+      FeedPhase.failed ||
+      FeedPhase.unsupported => 'Live view unavailable',
     };
     final icon = switch (phase) {
-      LiveVideoPhase.failed || LiveVideoPhase.unsupported => Icons.videocam_off,
+      FeedPhase.offline ||
+      FeedPhase.failed ||
+      FeedPhase.unsupported => Icons.videocam_off,
       _ => Icons.videocam,
     };
-    final still = this.still;
+    final still = widget.still;
     if (still == null) return _VideoNotice(icon: icon, text: text);
     // **The still is shown, and it is never shown silently.** This is issue
     // #1's honest fallback: when ring-mqtt's restream is relaunching, the

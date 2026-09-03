@@ -297,10 +297,18 @@ void main() {
       // With no native player in a VM test run, everything past the seam is
       // allowed to fail — as a settled session or a failing dial, never as
       // an exception out of the opener (the caller is a State.initState).
+      //
+      // Closed like every other session this file opens, and here it is
+      // the one that matters: this is the only case that builds a REAL
+      // one, so it arms the first-frame watchdog and dials a platform
+      // channel no VM run implements. Left open, both outlive the case —
+      // a Timer and an async rejection with nobody left to own them.
+      late final LiveVideoSession session;
       expect(
-          () => openRtspVideo(Uri.parse('ws://hub:1984/api/ws?src=x'),
+          () => session = openRtspVideo(Uri.parse('ws://hub:1984/api/ws?src=x'),
               name: 'x'),
           returnsNormally);
+      session.close();
     });
   });
 }

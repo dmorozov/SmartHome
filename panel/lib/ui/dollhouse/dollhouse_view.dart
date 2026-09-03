@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../audio/talk.dart';
 import '../video/live_video.dart';
 import '../video/snapshot.dart';
+import '../video/stream_director.dart';
 import 'floor_arrangement.dart';
 import 'floor_view.dart';
 
@@ -88,11 +89,18 @@ class DollhouseView extends StatefulWidget {
     super.key,
     required this.controller,
     required this.video,
+    this.director,
     this.snapshots,
     this.talk = const TalkConfig(),
   });
 
   final HubController controller;
+
+  /// The process-wide Stream Director, on its way to the Popup a camera pin
+  /// opens — the pin's Popup attaches a managed feed ([FeedRole.popup]).
+  /// Carried unread, exactly like [video]; null in hermetic fixtures, and
+  /// the Popup then builds its own.
+  final StreamDirector? director;
 
   /// Where go2rtc is, on its way to the Popup a camera pin opens. Carried
   /// rather than read here: this view neither plays nor decides anything
@@ -397,6 +405,7 @@ class _DollhouseViewState extends State<DollhouseView>
         context,
         presentation: presentation,
         video: widget.video,
+        director: widget.director,
         talk: widget.talk,
         controller: widget.controller,
         snapshots: widget.snapshots,

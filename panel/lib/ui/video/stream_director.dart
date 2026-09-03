@@ -20,11 +20,15 @@ import 'live_video.dart';
 /// sits — it dials through [VideoConfig.open] and hands back listenables, so
 /// neither player knows it exists and the pool below stays invisible.
 /// `main()` composes raw opener → keep-alive → Director; a hermetic test
-/// composes FakeGo2rtc → Director. The Popup deliberately does NOT route its
-/// policy through here — its arbitration (deadline, ceiling, #177014 defer
-/// machinery) is `doorbell_popup_host.dart`'s own — but its opens pass
-/// through [open], counted, so "how many streams is this wall playing" has
-/// one answer.
+/// composes FakeGo2rtc → Director. Since 2026-08-28 the Popup is the third
+/// managed surface ([FeedRole.popup]) — the hand-rolled copy of this dance
+/// it carried until then is gone. What stays the Popup's own is everything
+/// that is true of Popups rather than of streams: the ding arbitration and
+/// deferral (#177014, `doorbell_popup_host.dart`), the route mechanics, and
+/// the deadline/ceiling clocks (`timed_feed.dart` — they time a ROUTE, so
+/// the Director never learns the Navigator exists). [open], the counted
+/// pass-through, remains for any unmanaged caller, so "how many streams is
+/// this wall playing" keeps one answer either way.
 ///
 /// [LiveVideoPhase] is deliberately NOT extended. queued/retrying/offline
 /// are facts about *policy and the world* — an admission slot not reached, a
@@ -54,10 +58,10 @@ enum FeedPhase {
   playing,
 
   /// A CAMERA dial failed — policy- or person-started alike since
-  /// 2026-08-26 — and the backoff ladder ([DirectorPolicy.retrySchedule])
-  /// has the next rung armed. The next dial goes through the same
-  /// admission discipline as any other; [CameraFeed.retryAttempt] counts
-  /// the climb for the faces.
+  /// 2026-08-26, on a role whose [FeedRole.laddered] trait is on — and the
+  /// backoff ladder ([DirectorPolicy.retrySchedule]) has the next rung
+  /// armed. The next dial goes through the same admission discipline as any
+  /// other; [CameraFeed.retryAttempt] counts the climb for the faces.
   retrying,
 
   /// Camera Health says unreachable, so nothing is dialled at all — not
@@ -65,11 +69,14 @@ enum FeedPhase {
   /// at go2rtc. Leaves this state only when Health stops saying so.
   offline,
 
-  /// A dial failed and no automatic retry is coming. Since 2026-08-26 only
-  /// a NON-camera can rest here — in practice the doorbell, whose Ring
-  /// stream must never be re-dialled on a timer (#177014); the wall is
-  /// kind-structural, origin-blind. [CameraFeed.start] asks again. Every
-  /// camera failure goes to [retrying] instead.
+  /// A dial failed and no automatic retry is coming: a NON-camera, on any
+  /// role — in practice the doorbell, whose Ring stream must never be
+  /// re-dialled on a timer (#177014); the wall is kind-structural,
+  /// origin-blind (2026-08-26) — or any Device on a role whose
+  /// [FeedRole.laddered] trait is off, which no shipped role is today.
+  /// [CameraFeed.start] asks again. Every camera failure on every surface
+  /// goes to [retrying] instead, which is why "Live view failed" is the
+  /// doorbell's word in practice.
   failed,
 
   /// Nothing to dial and nothing to wait for: no stream name for this role,
@@ -104,19 +111,112 @@ extension FeedPhaseFacts on FeedPhase {
 
 /// Which surface is asking — which decides which stream it gets and how it
 /// starts.
+///
+/// A role is a ROW OF TRAITS the lifecycle reads, not a value the lifecycle
+/// switches on: adding a surface is adding a row, where a third arm on every
+/// role ternary is the shape that kept the Popup unmanaged for a month.
+/// Which *stream* a role plays stays policy data ([DirectorPolicy]), because
+/// streams are the owner's tuning; these traits are the lifecycle's shape.
 enum FeedRole {
   /// A grid tile: plays [DirectorPolicy.tileStream] (the substream where the
   /// camera offers one — five 1080p tiles knocked cameras off the air,
   /// measured 2026-08-15). Starts by policy, so it is visibility-debounced
   /// and overlay-pausable — unless a person [CameraFeed.start]ed it, which
   /// makes it theirs.
-  tile,
+  tile(
+    prefix: 'tile',
+    personFromBirth: false,
+    autoLiveGoverned: true,
+    viewportGoverned: true,
+    healthGated: true,
+    laddered: true,
+  ),
 
   /// The one camera filling the screen: plays [DirectorPolicy.zoomStream],
-  /// the full-size stream — the one place on the Panel that asks for it.
-  /// Person-origin by definition: it exists because somebody tapped, so it
-  /// is never visibility-stopped and never overlay-paused.
-  zoom,
+  /// the full-size stream. Person-origin by definition: it exists because
+  /// somebody tapped, so it is never visibility-stopped and never
+  /// overlay-paused.
+  zoom(
+    prefix: 'zoom',
+    personFromBirth: true,
+    autoLiveGoverned: false,
+    viewportGoverned: false,
+    healthGated: true,
+    laddered: true,
+  ),
+
+  /// The Popup's live view — a ding's or a person's, and the Panel's one
+  /// AUDIBLE surface (ADR-0011). Plays [DirectorPolicy.popupStream], the
+  /// full-size stream like the zoom. Person-origin from birth even when a
+  /// ding opened it: the want is singular, urgent and watched, which is
+  /// everything that trait means — no admission wait, no viewport stop,
+  /// and never paused by the very overlay it constitutes.
+  ///
+  /// Health-BLIND for gating, by owner decision (2026-08-28): the person is
+  /// standing there asking, so the dial goes out whatever the probe says,
+  /// and a playing Popup is never parked by a probe flip — anything else is
+  /// the gate sneaking back in. Outcomes still report ([CameraHealthSource
+  /// .dialOutcome]), so the probe hears what the dial learned.
+  ///
+  /// Laddered since 2026-08-28's second policy step: a camera that hiccups
+  /// mid-watch comes back without the person re-tapping, which is the zoom's
+  /// stance on the same gesture at a different size. The two health
+  /// decisions compound here and the bound is worth naming: a health-blind
+  /// feed never parks at [FeedPhase.offline], so on a camera that is simply
+  /// dead the ladder is stopped by the ROUTE rather than by the probe — the
+  /// ding Popup's deadline, the person Popup's idle return — which is why
+  /// those clocks are not decoration. The doorbell is untouched: the kind
+  /// wall in `_onDialFailed` outranks this trait (#177014).
+  popup(
+    prefix: 'popup',
+    personFromBirth: true,
+    autoLiveGoverned: false,
+    viewportGoverned: false,
+    healthGated: false,
+    laddered: true,
+  );
+
+  const FeedRole({
+    required this.prefix,
+    required this.personFromBirth,
+    required this.autoLiveGoverned,
+    required this.viewportGoverned,
+    required this.healthGated,
+    required this.laddered,
+  });
+
+  /// The journal vocabulary's word for this surface — `cameras.<prefix>_open`,
+  /// `_failed`, `_closed`, `_skipped`, `_retry`, `_offline`, `_unsupported`.
+  final String prefix;
+
+  /// Person-origin before anything is dialled, rather than only after
+  /// [CameraFeed.start].
+  final bool personFromBirth;
+
+  /// Whether [DirectorPolicy.autoLive] decides if this feed starts on its
+  /// own — the tile's trait alone; the other roles exist because somebody
+  /// (or a ding) asked, so they dial at attach.
+  final bool autoLiveGoverned;
+
+  /// Whether [CameraFeed.visible] means anything: only a grid tile has a
+  /// viewport to scroll out of.
+  final bool viewportGoverned;
+
+  /// Whether an explicit [Reachability.unreachable] gates this feed's dials
+  /// and parks it at [FeedPhase.offline]. Off for the popup role — see its
+  /// own doc; outcomes report either way.
+  final bool healthGated;
+
+  /// Whether a failed CAMERA dial climbs [DirectorPolicy.retrySchedule].
+  /// The kind wall is separate and absolute: a non-camera never rides a
+  /// timer whatever this says (#177014).
+  ///
+  /// Every shipped role sets this true since 2026-08-28 — it is deliberately
+  /// still a trait rather than folded away, because it is the axis ADR-0013
+  /// staged the Popup's ladder decision on and reverting that decision is
+  /// this one word. A role that wants a picture without a pursuit (a
+  /// preview, a wall of thumbnails) is what would make it vary again.
+  final bool laddered;
 }
 
 /// Camera Health's answer, three-valued on purpose: a probe entity that is
@@ -156,6 +256,7 @@ class DirectorPolicy {
     this.autoLive = kindAutoLive,
     this.tileStream = substreamFirst,
     this.zoomStream = mainStream,
+    this.popupStream = mainStream,
     this.dialSpacing = const Duration(milliseconds: 400),
     this.maxConcurrent,
     this.retrySchedule = const [
@@ -182,8 +283,9 @@ class DirectorPolicy {
   /// rule, now policy data.
   static String? substreamFirst(Device d) => d.substream ?? d.streamName;
 
-  /// Shipped default for [zoomStream]: the full-size stream, because the
-  /// zoom is the whole screen and the grid it replaced is not running.
+  /// Shipped default for [zoomStream] and [popupStream]: the full-size
+  /// stream, because each is the one camera somebody asked about, filling
+  /// its surface with no grid running beside it.
   static String? mainStream(Device d) => d.streamName;
 
   /// Whether a [FeedRole.tile] feed starts without being asked.
@@ -195,6 +297,9 @@ class DirectorPolicy {
 
   /// Which stream a zoom plays; null likewise.
   final String? Function(Device) zoomStream;
+
+  /// Which stream a Popup plays; null likewise.
+  final String? Function(Device) popupStream;
 
   /// Minimum gap between POLICY dials. go2rtc spins a producer per dial and
   /// every frame crosses the 2.4 GHz air twice, so auto-starts and retries
@@ -308,6 +413,21 @@ abstract interface class CameraFeed {
   /// recovery dial, when Health flips, is theirs. No-op while live, on the
   /// settled phases, and after [release]. Never throws.
   void start();
+
+  /// Whether this feed's sound — where the transport carries any — reaches
+  /// the speakers. Set on the FEED, not on a socket: the intent is
+  /// remembered and re-applied to whatever session the feed is holding, so
+  /// a ladder re-dial under a watching person does not come back silent
+  /// and no caller has to know a re-dial happened. Every session is born
+  /// muted (the seam-wide invariant, `live_video.dart`);
+  /// unmuting is a SURFACE decision, and the pass-through exists on every
+  /// role while exactly one uses it — the Popup, the Panel's one AUDIBLE
+  /// surface (the doorbell's LISTEN leg, ADR-0011, ducked back to muted
+  /// while push-to-talk is held). Never throws, callable in any phase,
+  /// inert with no session up and after [release]; the keep-alive pool
+  /// re-mutes every session it lingers, so sound cannot outlive the
+  /// surface that asked (the pool's guarantee, not the caller's diligence).
+  void setMuted(bool muted);
 
   /// The one way out, owed by every route out — the surface's `dispose()`
   /// calls it and nothing else does. Cancels this feed's timers, removes
@@ -497,7 +617,10 @@ class StreamDirector {
 
   void _watchHealth(_Feed feed) {
     final health = this.health;
-    if (health == null) return;
+    // A health-blind role is not subscribed at all: it would only ever
+    // no-op the callbacks, and its refcount churn is bookkeeping for
+    // nothing. Its `reachability` getter still reads the source directly.
+    if (health == null || !feed.role.healthGated) return;
     final id = feed.device.id;
     final existing = _healthWatch[id];
     if (existing != null) {
@@ -516,6 +639,10 @@ class StreamDirector {
   }
 
   void _unwatchHealth(_Feed feed) {
+    // Mirror of [_watchHealth]'s guard: never subscribed, nothing to drop —
+    // and without this, releasing a popup feed would eat a refcount a
+    // health-gated sibling on the same Device is still standing on.
+    if (!feed.role.healthGated) return;
     final id = feed.device.id;
     final existing = _healthWatch[id];
     if (existing == null) return;
@@ -576,11 +703,12 @@ class _Feed implements CameraFeed {
   @override
   ValueListenable<int> get retryAttempt => _retryAttempt;
 
-  /// Person-origin: a zoom from birth, a tile after [start]. Exempt from
-  /// viewport stops, overlay pauses and admission spacing, because somebody
-  /// is standing there. The retry ladder is NOT an exemption any more
-  /// (2026-08-26): a person-origin camera reconnects like any tile — only
-  /// a person-origin non-camera (the doorbell) rests at failed (#177014).
+  /// Person-origin: from birth where [FeedRole.personFromBirth] says so (the
+  /// zoom, the Popup), a tile after [start]. Exempt from viewport stops,
+  /// overlay pauses and admission spacing, because somebody is standing
+  /// there. The retry ladder is NOT an exemption any more (2026-08-26): a
+  /// person-origin camera on a laddered role reconnects like any tile —
+  /// only a non-camera, or an unladdered role, rests at failed (#177014).
   var personOrigin = false;
 
   var _visible = true;
@@ -591,6 +719,15 @@ class _Feed implements CameraFeed {
   /// now in one place).
   var _openLogged = false;
   var _failureLogged = false;
+
+  /// The surface's standing audio intent, remembered across the sessions
+  /// this feed churns. Muted is the seam's born state and every role's
+  /// default; only the Popup ever asks otherwise (ADR-0011's LISTEN leg).
+  /// Held here rather than re-applied by the caller because the caller is
+  /// not supposed to know a re-dial happened at all — before the ladder
+  /// reached the Popup nothing re-dialled under a listener, and a
+  /// reconnect that came back silent is the bug that shape invites.
+  var _muted = true;
   // A notifier, not an int: the ladder can climb WITHOUT a phase change —
   // a re-dial that fails synchronously goes retrying→retrying, which
   // `ValueNotifier`'s == short-circuit swallows — and a counted face that
@@ -602,11 +739,13 @@ class _Feed implements CameraFeed {
   Timer? _overlayTimer;
   Timer? _retryTimer;
 
-  String get _eventPrefix => role == FeedRole.tile ? 'tile' : 'zoom';
+  String get _eventPrefix => role.prefix;
 
-  String? get _streamName => role == FeedRole.tile
-      ? director.policy.tileStream(device)
-      : director.policy.zoomStream(device);
+  String? get _streamName => switch (role) {
+        FeedRole.tile => director.policy.tileStream(device),
+        FeedRole.zoom => director.policy.zoomStream(device),
+        FeedRole.popup => director.policy.popupStream(device),
+      };
 
   void setPhase(FeedPhase value) {
     if (released) return;
@@ -615,7 +754,7 @@ class _Feed implements CameraFeed {
 
   /// The born verdict, decided synchronously at attach.
   void born() {
-    if (role == FeedRole.zoom) personOrigin = true;
+    if (role.personFromBirth) personOrigin = true;
     final name = _streamName;
     final url = director.video.urlFor(name);
     if (name == null || url == null) {
@@ -624,15 +763,22 @@ class _Feed implements CameraFeed {
       // zoom that cannot dial is a fact the journal reader greps for.
       final wanted = personOrigin || director.policy.autoLive(device);
       if (wanted) {
+        // Three reasons, not two — the Popup's finer vocabulary, adopted
+        // seam-wide when its dance moved here (2026-08-28): "nobody named a
+        // go2rtc" and "the named one is not an address" are different fixes.
         Log.debug('cameras', '${_eventPrefix}_skipped', {
           'device': device.id,
-          'reason': name == null ? 'no_stream_name' : 'go2rtc_unconfigured',
+          'reason': name == null
+              ? 'no_stream_name'
+              : director.video.go2rtcUrl.isEmpty
+                  ? 'no_go2rtc_url'
+                  : 'bad_go2rtc_url',
         });
       }
       setPhase(FeedPhase.unconfigured);
       return;
     }
-    if (role == FeedRole.tile && !director.policy.autoLive(device)) {
+    if (role.autoLiveGoverned && !director.policy.autoLive(device)) {
       setPhase(FeedPhase.idle);
       return;
     }
@@ -641,7 +787,8 @@ class _Feed implements CameraFeed {
 
   void _requestDial({bool ladder = false}) {
     if (released) return;
-    if (director._reachability(device.id) == Reachability.unreachable) {
+    if (role.healthGated &&
+        director._reachability(device.id) == Reachability.unreachable) {
       Log.debug('cameras', '${_eventPrefix}_offline', {'device': device.id});
       setPhase(FeedPhase.offline);
       return;
@@ -698,13 +845,28 @@ class _Feed implements CameraFeed {
       case LiveVideoPhase.connecting ||
             LiveVideoPhase.playing ||
             LiveVideoPhase.unconfigured:
+        // Only where a surface actually asked: a born-muted session is
+        // left exactly as it was born, so no tile's dial ever touches the
+        // flag and the mute order a suite reads stays the surface's own.
+        if (!_muted) session.setMuted(false);
         _openLogged = true;
         Log.info('cameras', '${_eventPrefix}_open', {'name': name});
         session.phase.addListener(_onPlayerPhase);
         setPhase(session.phase.value == LiveVideoPhase.playing
             ? FeedPhase.playing
             : FeedPhase.connecting);
-        if (session.phase.value == LiveVideoPhase.playing) _onReachedPlaying();
+        if (session.phase.value == LiveVideoPhase.playing) {
+          // Born playing is the keep-alive pool handing back a lingered
+          // picture — no dial went out, so nothing NEW is known about the
+          // camera. The ladder still resets (a picture is on the wall),
+          // but no outcome is reported: the pool's linger outlives the
+          // MJPEG watchdog (20 s vs 15 s), so this picture can be a dead
+          // camera's last frames, and a minted `connected` would overturn
+          // a probe that is right (found in review, 2026-08-28). Evidence
+          // is what [_onPlayerPhase] reports: a transition to playing,
+          // which only fresh frames produce.
+          _retryAttempt.value = 0;
+        }
     }
   }
 
@@ -747,7 +909,8 @@ class _Feed implements CameraFeed {
     }
     director._reportOutcome(device.id, connected: false);
     if (released) return;
-    if (director._reachability(device.id) == Reachability.unreachable) {
+    if (role.healthGated &&
+        director._reachability(device.id) == Reachability.unreachable) {
       // Health names the cause: stop the ladder — the recovery dial rides
       // the health flip, not a timer hammering a dead daemon (and each
       // failed dial costs TWO camera connections, measured 2026-08-25).
@@ -763,8 +926,10 @@ class _Feed implements CameraFeed {
     // sessions (#177014), which only a person's own tap may do. No policy
     // path dials a non-camera today (`autoLive` is a camera fact), so the
     // else arm is the doorbell's in practice — but the wall is structural,
-    // same as the still loop's `_grabStream`.
-    if (device.kind == DeviceKind.camera) {
+    // same as the still loop's `_grabStream`. The role's own trait ANDs
+    // in: a role that wants a picture without a pursuit would rest here
+    // whatever the kind. Every shipped role climbs (2026-08-28).
+    if (device.kind == DeviceKind.camera && role.laddered) {
       final schedule = director.policy.retrySchedule;
       final rung = _retryAttempt.value < schedule.length
           ? schedule[_retryAttempt.value]
@@ -796,7 +961,7 @@ class _Feed implements CameraFeed {
 
   @override
   set visible(bool value) {
-    if (released || role == FeedRole.zoom) return;
+    if (released || !role.viewportGoverned) return;
     if (_visible == value) return;
     _visible = value;
     if (personOrigin) return;
@@ -843,7 +1008,7 @@ class _Feed implements CameraFeed {
   /// rather than re-dialling.
   void _resume() {
     if (_phase.value != FeedPhase.idle) return;
-    if (role == FeedRole.tile && !director.policy.autoLive(device)) return;
+    if (role.autoLiveGoverned && !director.policy.autoLive(device)) return;
     if (!_visible || director._overlaid) return;
     _requestDial();
   }
@@ -862,7 +1027,10 @@ class _Feed implements CameraFeed {
   }
 
   void onHealth(Reachability verdict) {
-    if (released) return;
+    // A health-blind role never parks and never rides the recovery flip —
+    // it is not even subscribed ([StreamDirector._watchHealth]); this guard
+    // covers the flip a sibling feed's subscription fans out.
+    if (released || !role.healthGated) return;
     if (verdict == Reachability.unreachable) {
       // Gate future dials; never yank a picture that is up — the players'
       // own watchdogs decide about a live socket, and a probe may be wrong
@@ -895,6 +1063,13 @@ class _Feed implements CameraFeed {
         _resume();
       }
     }
+  }
+
+  @override
+  void setMuted(bool muted) {
+    if (released) return;
+    _muted = muted;
+    _session?.setMuted(muted);
   }
 
   @override
