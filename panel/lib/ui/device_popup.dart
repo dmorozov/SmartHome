@@ -11,6 +11,8 @@ import 'audio/talk.dart';
 import 'close_button.dart';
 import 'device_presentation.dart';
 import 'hub_controller.dart';
+import 'idle_return.dart';
+import 'still_watching.dart';
 import 'theme.dart';
 import 'thermostat_controls.dart';
 import 'video/camera_face.dart';
@@ -323,13 +325,21 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// pends must cancel it ([stayUp]).
   Timer? _dismissRetry;
 
-  /// The idle bound's two halves — see [kDevicePopupIdleReturn]. Null on every
-  /// Popup that does not need one, which is most of them: see [_boundsIdle].
-  Timer? _idleWarn;
-  Timer? _idleFire;
+  /// The idle bound's clockwork — see [kDevicePopupIdleReturn]. Shared with
+  /// the Cameras view since 2026-09-03 (`ui/idle_return.dart`); what stays
+  /// here is this Popup's own: its constants, its gate ([_boundsIdle], which
+  /// most Popups fail), its pointer `Listener`, and its fire, which writes
+  /// the line and hands over to [_dismiss] — how a route may pop is route
+  /// mechanics and is deliberately not shared.
+  ///
+  /// Armed only where [_boundsIdle] says so, so on most Popups no timer of
+  /// this module's ever runs.
+  late final IdleReturn _idle;
 
-  /// Whether "Still watching?" is on screen.
-  var _promptingIdle = false;
+  /// Whether "Still watching?" is on screen — the module's flag, mirrored
+  /// into a rebuild by [_onPrompting].
+  bool get _promptingIdle => _idle.prompting.value;
+
   var _loggedBlockedDismiss = false;
 
   /// The last still this Popup managed to fetch, or null if it never did.
@@ -534,6 +544,11 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     _fetchStill();
     // After [_attachVideo], because [_boundsIdle] asks whether a dial was
     // wanted at all.
+    _idle = IdleReturn(
+      returnAfter: kDevicePopupIdleReturn,
+      warnFor: kDevicePopupIdleWarning,
+      onFire: _fireIdle,
+    )..prompting.addListener(_onPrompting);
     _rearmIdle();
     // Registered last, once nothing left in this method can throw. `_showing`
     // is module-level and `dispose` never runs for a State whose `initState`
@@ -573,8 +588,8 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     final gone = showing == null || showing.isEmpty;
     if (gone) _showing.remove(id);
     _dismissRetry?.cancel();
-    _idleWarn?.cancel();
-    _idleFire?.cancel();
+    _idle.prompting.removeListener(_onPrompting);
+    _idle.dispose();
     // The one route out the gesture cannot cover. `onTapUp` and `onTapCancel`
     // between them catch a thumb that lifts or slides off, but a Popup can
     // also be dismissed *while held* — the barrier, the deadline's own pop,
@@ -751,8 +766,6 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// Restarts the idle bound. Called once at open and on every touch.
   void _rearmIdle() {
     if (!_boundsIdle) return;
-    _idleWarn?.cancel();
-    _idleFire?.cancel();
     // A touch resets the WHOLE dismissal state, a pending blocked-dismiss
     // retry included: an idle return that fired against an obstructed route
     // must not outlive the answer to its own prompt — the person tapped
@@ -762,22 +775,27 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     _dismissRetry?.cancel();
     _dismissRetry = null;
     // The tap that answers the prompt needs no special case: it re-arms like
-    // any other, and clearing the flag here is what takes the prompt away.
-    if (_promptingIdle) setState(() => _promptingIdle = false);
-    _idleWarn = Timer(kDevicePopupIdleReturn - kDevicePopupIdleWarning, () {
-      if (!mounted) return;
-      setState(() => _promptingIdle = true);
-      _idleFire = Timer(kDevicePopupIdleWarning, () {
-        // Logged before the attempt, not after: `_dismiss` may find the route
-        // obstructed and retry, and a line written only on success would make
-        // a Popup that took three tries look like one that never fired.
-        Log.info('popup', 'idle_return', {
-          'device': widget.presentation.device.id,
-          'reason': 'unanswered',
-        });
-        _dismiss();
-      });
+    // any other, and the module clearing its own flag is what takes the
+    // prompt away.
+    _idle.rearm();
+  }
+
+  void _onPrompting() {
+    if (mounted) setState(() {});
+  }
+
+  /// The unanswered prompt's verdict.
+  ///
+  /// Logged before the attempt, not after: [_dismiss] may find the route
+  /// obstructed and retry, and a line written only on success would make a
+  /// Popup that took three tries look like one that never fired.
+  void _fireIdle() {
+    if (!mounted) return;
+    Log.info('popup', 'idle_return', {
+      'device': widget.presentation.device.id,
+      'reason': 'unanswered',
     });
+    _dismiss();
   }
 
   /// The ceiling fired inside the [TimedFeed] — it has already stopped the
@@ -884,7 +902,8 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   Widget _captionSlot() {
     final Widget child;
     if (_promptingIdle) {
-      child = const _IdlePrompt();
+      child = const StillWatching.caption(
+          key: ValueKey('popup-idle-prompt'));
     } else if (_isDoorbell && _TalkCaption.wordingFor(_talk) != null) {
       child = _TalkCaption(_talk);
     } else {
@@ -1127,30 +1146,6 @@ class _NotchClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(_NotchClipper oldClipper) => false;
-}
-
-/// "Still watching?" — the softening on [kDevicePopupIdleReturn].
-///
-/// The Popup asks before it acts, which is what keeps the idle bound from
-/// being the countdown D14 rejected: a deliberate long watch costs one tap,
-/// and a forgotten one costs nothing because nobody is there to pay it.
-///
-/// Says "tap anywhere", and means it — the whole Dialog is under a `Listener`,
-/// so there is no target to find and nothing to aim at. Deliberately not a
-/// button: a button implies the rest of the card is not an answer, which
-/// would make the easy action the wrong one.
-class _IdlePrompt extends StatelessWidget {
-  const _IdlePrompt();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Text(
-      'Still watching? Tap anywhere to stay',
-      key: ValueKey('popup-idle-prompt'),
-      textAlign: TextAlign.center,
-      style: TextStyle(fontSize: 12, color: PanelTheme.inkFaint),
-    );
-  }
 }
 
 /// The Popup's video body: a picture, or the honest reason there isn't one.

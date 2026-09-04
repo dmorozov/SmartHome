@@ -93,13 +93,30 @@ argument trap, closed in the fixture as well as in lib). Verified:
 the two deleted cases were the pass-through group); a four-lens adversarial
 review of the diff found no behavioural defect and twenty documentation or
 fixture findings, all applied. The repo does not follow `dart format`, so
-nothing was reformatted. **Pending the owner:** the recipe's one look at
-the real wall (`CAMERAS_OPEN=auto tool/freeze_probe.sh` on the release
-bundle against the Hub's go2rtc) — an agent cannot drive the wall's
-desktop. Its purpose is largely discharged by the type system now (a
-dropped `director:` no longer compiles); what it still checks is the
-probe's PLAYING verdict and a sane `cameras.opened auto_live=` /
-`cameras.closed live=` pair.
+nothing was reformatted.
+
+**The real-wall look is done — 2026-09-03, on the Legion against the live
+Hub's go2rtc, on a release bundle built from this working tree.** Both
+halves of the recipe:
+
+- `tool/freeze_probe.sh` (shipped Skia): **5/6 cells moving**, the healthy
+  signature its own header predicts — the sixth is the idle Ring Doorbell
+  tile, which never auto-lives (#177014). Both grabs were read, not just
+  the verdict table: five cameras live with badges, and every burned-in
+  camera clock advanced across the pair and converged, so these are
+  flowing streams rather than stalled ones. `panel.renderer impeller=false`
+  confirms ADR-0012's pin still holds.
+- The journal pair: `cameras.opened tiles=7 auto_live=5` with exactly five
+  `cameras.tile_open` lines, and `cameras.closed open_s=246 live=5`.
+
+The `auto_live=5` half is the Phase A change measured end to end: that
+count is computed through the Director's own `VideoConfig` now, and it
+agrees with the five tiles that actually dialled. Getting the closed line
+took three attempts, and the two that failed were instructive rather than
+faulty — the first was stopped 25 s before the idle return was due, and
+the second recorded six zoom events, i.e. the view was being tapped and
+every pointer event re-arms the five-minute clock exactly as designed. The
+third was closed with the close puck.
 
 **Goal.** Every video surface takes a `StreamDirector`, required, and nothing
 else for video. The hermetic fallback (a Director built over a fake opener)
@@ -544,7 +561,17 @@ new "the closing census" group of the Director suite, including that a
 Popup feed is not counted under the grid's roles); the two existing widget
 pins (`cameras.closed live=1`; a close from a zoom logs 0, not the ghost
 grid) pass unchanged through the new path, with their reason strings
-updated to name it. A three-lens review confirmed the count identical to
+updated to name it.
+
+**Confirmed on the wall 2026-09-03** (see Phase A's status for the run):
+closing the Cameras view logged `cameras.closed open_s=246 live=5`, and the
+five `cameras.tile_closed reason=view_closed` lines precede it in the
+journal. That ordering is the whole point of the two hooks — the children
+release first, so a count read at `dispose()` would have logged **0**. It
+logged 5, which is the number of feeds that were actually streaming (the
+idle doorbell and the NOT SET UP tile are not `isActive` and are correctly
+absent). The mechanism this phase changed is therefore verified against
+real feeds and a real Navigator pop, not only in the harness. A three-lens review confirmed the count identical to
 the hand-kept one in every scenario it could construct, and found thirteen
 documentation and test-strengthening findings, all applied.
 
@@ -760,6 +787,35 @@ recorded it as a dependency of this phase, not a candidate of its own.
 ---
 
 ## Phase F — IdleReturn (gated)
+
+**Status: landed 2026-09-03, unstaged, awaiting the owner's review.** The
+trigger was the owner's to call and they called it. All five steps are done:
+`lib/ui/idle_return.dart` owns the two chained timers, the prompting flag
+and rearm/cancel/dispose; `lib/ui/still_watching.dart` draws the sentence
+once; both surfaces hold one `IdleReturn` built from their own constants;
+`_idleWarn`, `_idleFire`, `_prompting`, `_StillWatching` and `_IdlePrompt`
+are gone from `lib/`.
+
+Two decisions the sketch left open. **The prompt's two chromes stay apart**,
+because they are not the same shape: the Cameras banner is a raised puck,
+and the Popup's line lives in a 22 px slot it shares with the Talk caption,
+whose height the card's layout depends on and whose pixels a golden pins.
+So `StillWatching` has two named constructors, `banner()` and `caption()`,
+over one shared sentence — the words are what drift, and they are now in one
+place. **The Cameras view keeps its own blocked-fire retry**, as a private
+timer rather than the module's: that is the obstructed-route half of
+`_fireIdle`, which the review ruled out of the shared seam. It is cancelled
+wherever the bound is rearmed, preserving the rule that a touch resets the
+whole dismissal state — previously implicit, because the old code reused one
+timer field for both jobs.
+
+Verified: `flutter analyze` clean; `flutter test` 692 passing, 8 skipped
+(+7 unit cases); the golden is byte-identical and all twelve existing idle
+widget cases pass unchanged, by the same finders. Mutation-checked: adding
+the warning to the bound instead of taking it out of it, a rearm that does
+not cancel the pending fire, and a dispose that leaves the timers running
+each turn the suite red — 13, 43 and 72 failures respectively, across the
+module's suite and both surfaces'.
 
 **Trigger.** `docs/plans/device-integrations/phase-8-handoff.md:747-751`
 defers this extraction until "the third copy would arrive with a

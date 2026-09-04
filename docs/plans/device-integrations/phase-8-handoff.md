@@ -766,11 +766,16 @@ outranking a fresh probe. Pure-Dart testable beside the existing suites.
   is per-Director — the web build can construct its own), or detaching
   grid platform views without closing streams. Measure first: it needs a
   browser and the real wall layout.
-- **Idle-return dedup:** the third copy of the warn/fire/prompt/
-  route-guard machinery would arrive with a web-specific surface — that is
-  the trigger the review set for extracting the `IdleReturn` module
-  (candidate 6 of the architecture report; CamerasView and DevicePopup
-  hold the two existing copies).
+- **Idle-return dedup — DONE 2026-09-03**, ahead of the trigger: the review
+  set "a third copy arrives with a web-specific surface" as the bar, and
+  the owner called it early. `lib/ui/idle_return.dart` holds the warn/fire/
+  prompt clockwork and `lib/ui/still_watching.dart` the sentence; the
+  CamerasView and DevicePopup copies are gone. The **route guard did not
+  move** and deliberately so — how a surface may pop is route mechanics,
+  the Cameras view is `RouteAware` and hears the obstruction leave while a
+  `Dialog` must poll, and the cadence and log-level differences between
+  them are documented as intended. Each surface keeps its constants, its
+  gate, its pointer `Listener` and its fire.
 - **MSE stays the web transport** (Frigate's own convergence); go2rtc's
   WHEP endpoint is the fallback if MSE latency ever matters (port 8555
   must then be reachable alongside 1984).

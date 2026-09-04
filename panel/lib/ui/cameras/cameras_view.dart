@@ -9,6 +9,8 @@ import '../../domain/house.dart';
 import '../close_button.dart';
 import '../edge_tab.dart';
 import '../hub_controller.dart';
+import '../idle_return.dart';
+import '../still_watching.dart';
 import '../theme.dart';
 import '../video/camera_face.dart';
 import '../video/snapshot.dart';
@@ -175,9 +177,18 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   /// route, leaving an empty Navigator on the wall.
   ModalRoute<void>? _route;
 
-  Timer? _idleWarn;
-  Timer? _idleFire;
-  var _prompting = false;
+  /// The idle bound's clockwork, shared with the Popup since 2026-09-03
+  /// (`ui/idle_return.dart`). What stays here is this view's own: the
+  /// constants, the pointer `Listener`, and [_fireIdle] — how a surface may
+  /// pop is route mechanics, and this one is `RouteAware`.
+  late final IdleReturn _idle;
+
+  /// The retry a blocked fire arms, which is NOT the module's: it is the
+  /// obstructed-route half of [_fireIdle]. Cancelled wherever the bound is
+  /// rearmed, because a touch resets the whole dismissal state — an idle
+  /// return that fired against an obstruction must not outlive the answer
+  /// to its own prompt (the Popup's rule, and the same reasoning).
+  Timer? _idleBlockedRetry;
 
   /// The one camera filling the screen, or null while the grid is up.
   ///
@@ -226,6 +237,11 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
         for (final device in floor.devices)
           if (specOf(device.kind).video) device,
     ];
+    _idle = IdleReturn(
+      returnAfter: kCamerasIdleReturn,
+      warnFor: kCamerasIdleWarning,
+      onFire: _fireIdle,
+    )..prompting.addListener(_onPrompting);
     widget.order.addListener(_onOrderChanged);
     Log.info('cameras', 'opened', {
       'tiles': _devices.length,
@@ -268,6 +284,10 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
     if (mounted) setState(() {});
   }
 
+  void _onPrompting() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void deactivate() {
     // Parent-first, so the tiles' and the zoom's feeds are all still
@@ -284,8 +304,9 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   void dispose() {
     widget.order.removeListener(_onOrderChanged);
     camerasRouteObserver.unsubscribe(this);
-    _idleWarn?.cancel();
-    _idleFire?.cancel();
+    _idle.prompting.removeListener(_onPrompting);
+    _idle.dispose();
+    _idleBlockedRetry?.cancel();
     // The tiles release their own feeds in their `dispose()`; this line is
     // the summary a log reader greps for, not the mechanism.
     Log.info('cameras', 'closed', {
@@ -321,14 +342,9 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   }
 
   void _rearmIdle() {
-    _idleWarn?.cancel();
-    _idleFire?.cancel();
-    if (_prompting) setState(() => _prompting = false);
-    _idleWarn = Timer(kCamerasIdleReturn - kCamerasIdleWarning, () {
-      if (!mounted) return;
-      setState(() => _prompting = true);
-      _idleFire = Timer(kCamerasIdleWarning, _fireIdle);
-    });
+    _idleBlockedRetry?.cancel();
+    _idleBlockedRetry = null;
+    _idle.rearm();
   }
 
   /// The unanswered prompt's verdict — and it may only ever pop **this**
@@ -347,7 +363,7 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
       Log.debug('cameras', 'idle_blocked', {
         'retry_s': kCamerasIdleWarning.inSeconds,
       });
-      _idleFire = Timer(kCamerasIdleWarning, _fireIdle);
+      _idleBlockedRetry = Timer(kCamerasIdleWarning, _fireIdle);
       return;
     }
     Log.info('cameras', 'idle_return', {'reason': 'unanswered'});
@@ -460,7 +476,7 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
                     ),
                   },
                 ),
-                if (_prompting) _StillWatching(),
+                if (_idle.prompting.value) const StillWatching.banner(),
               ],
             ),
           ),
@@ -507,37 +523,6 @@ class _ResetOrderButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// The pre-return prompt. Any touch dismisses it — the surrounding
-/// [Listener] rearms on pointer-down, so the banner itself needs no button.
-class _StillWatching extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: PanelTheme.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: PanelTheme.raised(8),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.timer_outlined, size: 18, color: PanelTheme.inkFaint),
-          SizedBox(width: 10),
-          Text(
-            'Still watching? Tap anywhere to stay',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: PanelTheme.ink,
-            ),
-          ),
-        ],
       ),
     );
   }
