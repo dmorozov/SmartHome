@@ -97,28 +97,87 @@ Future<void> showCamerasView(
   required Go2rtcStillsConfig stills,
   required CameraOrderStore order,
 }) {
-  return Navigator.of(context).push(
-    PageRouteBuilder<void>(
-      pageBuilder: (_, _, _) => CamerasView(
-        controller: controller,
-        director: director,
-        snapshots: snapshots,
-        stills: stills,
-        order: order,
-      ),
-      transitionsBuilder: (_, animation, _, child) => SlideTransition(
-        position: animation.drive(
-          Tween(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).chain(CurveTween(curve: Curves.easeInOutCubic)),
-        ),
-        child: child,
-      ),
-      transitionDuration: const Duration(milliseconds: 300),
-      reverseTransitionDuration: const Duration(milliseconds: 300),
+  if (_onWall != null) {
+    // The tap is dropped rather than queued. It is worth a line because a
+    // person who taps and gets nothing has no other evidence, and because
+    // the window this happens in is invisible from outside — see [_onWall].
+    Log.info('cameras', 'open_ignored', {'why': 'one already on the wall'});
+    return Future.value();
+  }
+  final route = _CamerasRoute(
+    builder: (_) => CamerasView(
+      controller: controller,
+      director: director,
+      snapshots: snapshots,
+      stills: stills,
+      order: order,
     ),
   );
+  // Claimed after the push, not before: `Navigator.of` throws when there is
+  // no Navigator above this context, and a claim staked before that throw
+  // would latch the wall shut for the rest of the process with no route
+  // left alive to release it. The claim is still synchronous, so the frame
+  // between here and the view's `initState` stays covered.
+  final opening = Navigator.of(context).push(route);
+  _onWall = route;
+  return opening;
+}
+
+/// The Cameras route currently on the wall, or null when the Dollhouse is
+/// alone. Written only by [showCamerasView] and [_CamerasRoute.dispose].
+///
+/// **One Cameras route at a time**, which until 2026-09-03 was an assumption
+/// the code stated and nothing enforced. `showCamerasView` had no guard, and
+/// the window is easy to hit without meaning to: for the 300 ms of the close
+/// slide the leaving route ignores pointers, so the edge tab underneath is
+/// live again and a second tap pushed a whole second view over the first.
+///
+/// Two of them on the stack is not a cosmetic problem. The lower view hears
+/// `didPushNext` and sets [StreamDirector.overlaid], and the Director is
+/// shared — so the *visible* grid is the one whose tiles get paused, showing
+/// a wall of stills nobody asked to freeze. And `deactivate()`'s census
+/// ([_closingLive]) folds over the Director by role, so each view counts the
+/// other's tiles and `cameras.closed live=` reports a number that was never
+/// true of either.
+///
+/// Held as the route rather than a mounted-view flag because the route is
+/// the thing whose lifetime actually matches the rule. It is set
+/// synchronously, before `push` returns — a mount-time flag would leave the
+/// first frame unguarded — and cleared in `dispose()`, which the Navigator
+/// runs once the route is off the stack for good, slide included. A test
+/// that pumps a bare [CamerasView] never touches it, and a Navigator torn
+/// down mid-route disposes its own entries, so nothing leaks between cases.
+_CamerasRoute? _onWall;
+
+/// The Cameras route: the owner-specified leftward slide, and the half of
+/// [_onWall] that knows when the wall is clear again.
+class _CamerasRoute extends PageRouteBuilder<void> {
+  _CamerasRoute({required WidgetBuilder builder})
+      : super(
+          pageBuilder: (context, _, _) => builder(context),
+          transitionsBuilder: (_, animation, _, child) => SlideTransition(
+            position: animation.drive(
+              Tween(
+                begin: const Offset(1, 0),
+                end: Offset.zero,
+              ).chain(CurveTween(curve: Curves.easeInOutCubic)),
+            ),
+            child: child,
+          ),
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 300),
+        );
+
+  @override
+  void dispose() {
+    // Identity, not a bare clear, so this route can only ever retract its
+    // own claim. Nothing today can put a second Cameras route on the stack
+    // while this one lives — that is what [_onWall] is for — so the check is
+    // not load-bearing yet. It is what keeps `dispose` correct on its own
+    // terms instead of by appeal to a guard in another function.
+    if (identical(_onWall, this)) _onWall = null;
+    super.dispose();
+  }
 }
 
 /// The full-screen grid of camera tiles. Which tiles stream is the Stream
@@ -221,7 +280,8 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   /// wrong (handoff D6, the ghost grid). The Director sets every phase; it
   /// answers the count ([StreamDirector.activeFeeds]) — by role, so this is
   /// "this view's feeds" only because the wall shows one Cameras route at a
-  /// time.
+  /// time. That was an assumption until 2026-09-03 and is now enforced by
+  /// [_onWall], whose doc carries what a second view did to this number.
   var _closingLive = 0;
 
   @override

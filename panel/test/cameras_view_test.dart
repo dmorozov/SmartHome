@@ -6,6 +6,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/house.dart';
 import 'package:panel/ui/close_button.dart';
+import 'package:panel/ui/still_watching.dart';
 import 'package:panel/main.dart' show camerasAutoOpen;
 import 'package:panel/ui/cameras/cameras_view.dart';
 import 'package:panel/ui/dollhouse/dollhouse_view.dart';
@@ -639,7 +640,7 @@ void main() {
     final session = go2rtc.only;
 
     await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
-    expect(find.textContaining('Still watching?'), findsOneWidget);
+    expect(find.text(StillWatching.sentence), findsOneWidget);
     expect(
       find.byType(CamerasView),
       findsOneWidget,
@@ -660,7 +661,7 @@ void main() {
       await pumpPanel(tester, autoLiveStream: 'cam_living');
       await openCameras(tester);
       await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
-      expect(find.textContaining('Still watching?'), findsOneWidget);
+      expect(find.text(StillWatching.sentence), findsOneWidget);
 
       // A ding is not a pointer event, so nothing re-arms: push an overlay
       // the way DoorbellPopupHost would.
@@ -695,6 +696,53 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(CamerasView), findsNothing);
       expect(go2rtc.only.closes, 1);
+      await unmount(tester);
+    },
+  );
+
+  testWidgets(
+    'answering the prompt after a stacked route blocked the return really '
+    'keeps the view — the retry armed before the answer must not take it a '
+    'second later',
+    (tester) async {
+      // The Popup pins the same rule for its own dismissal retry
+      // (`device_popup_test.dart`). It used to hold here for free, because
+      // one timer field served both the fire and its blocked retry, so
+      // re-arming cancelled both; since the clockwork moved into
+      // `IdleReturn` the view cancels the retry by hand, and this is what
+      // says so.
+      await pumpPanel(tester, autoLiveStream: 'cam_living');
+      await openCameras(tester);
+      await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
+      expect(find.text(StillWatching.sentence), findsOneWidget);
+
+      final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+      navigator.push(
+        PageRouteBuilder<void>(
+          opaque: false,
+          pageBuilder: (_, _, _) => const Text('a ding popup'),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // The fire lands under the obstruction and arms its retry.
+      await tester.pump(kCamerasIdleWarning);
+      expect(records.any((r) => r.event == 'idle_blocked'), isTrue);
+
+      // The obstruction leaves and the person answers the prompt. The retry
+      // from before their answer must not outlive it.
+      navigator.pop();
+      await tester.pumpAndSettle();
+      await tester.tapAt(const Offset(30, 30));
+      await tester.pump();
+      expect(find.text(StillWatching.sentence), findsNothing);
+
+      await tester.pump(kCamerasIdleWarning);
+      await tester.pumpAndSettle();
+      expect(find.byType(CamerasView), findsOneWidget,
+          reason: 'they said they were still watching');
+      expect(go2rtc.only.closes, 0);
       await unmount(tester);
     },
   );
@@ -947,16 +995,16 @@ void main() {
     await openCameras(tester);
 
     await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
-    expect(find.textContaining('Still watching?'), findsOneWidget);
+    expect(find.text(StillWatching.sentence), findsOneWidget);
 
     await tester.tapAt(const Offset(30, 30));
     await tester.pump();
-    expect(find.textContaining('Still watching?'), findsNothing);
+    expect(find.text(StillWatching.sentence), findsNothing);
 
     // A fresh full period has to elapse before it asks again.
     await tester.pump(kCamerasIdleReturn - kCamerasIdleWarning);
     expect(find.byType(CamerasView), findsOneWidget);
-    expect(find.textContaining('Still watching?'), findsOneWidget);
+    expect(find.text(StillWatching.sentence), findsOneWidget);
     await unmount(tester);
   });
 
@@ -1142,6 +1190,79 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();
       expect(find.byType(CamerasView), findsOneWidget);
+      await unmount(tester);
+    });
+  });
+
+  /// Phase K item 11. The Director is shared and the census folds over it by
+  /// role, so "this view's feeds" is only true while there is one view — and
+  /// nothing used to make that so.
+  group('one Cameras route at a time', () {
+    testWidgets('a tap on the tab during the close slide does not stack a '
+        'second wall on the first', (tester) async {
+      await pumpPanel(tester);
+      await openCameras(tester);
+      expect(find.byType(CamerasView), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('cameras-close')));
+      // Halfway through the 300 ms slide, which is the whole window: the
+      // leaving route has stopped taking pointers, so the edge tab under it
+      // is live again and a stray second tap reaches it.
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.tap(find.byType(CamerasTab));
+      await tester.pumpAndSettle();
+
+      // The log line is the anti-vacuity half. Without it this case passes
+      // just as well when the tap lands on the leaving route and no open is
+      // ever attempted — which is the same green for the opposite reason.
+      expect(records.any((r) => r.event == 'open_ignored'), isTrue,
+          reason: 'the tab was tapped and showCamerasView refused it');
+      expect(find.byType(CamerasView), findsNothing,
+          reason: 'the first finished leaving; the second was never pushed');
+      await unmount(tester);
+    });
+
+    testWidgets('and the tab opens the wall again once the slide is done — '
+        'a window, not a latch', (tester) async {
+      await pumpPanel(tester);
+      await openCameras(tester);
+      await tester.tap(find.byKey(const ValueKey('cameras-close')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CamerasView), findsNothing);
+
+      await openCameras(tester);
+
+      expect(find.byType(CamerasView), findsOneWidget);
+      expect(records.any((r) => r.event == 'open_ignored'), isFalse,
+          reason: 'the route is gone, so nothing is left to refuse against');
+      await unmount(tester);
+    });
+
+    testWidgets('a second open while the wall is fully up is refused, and the '
+        'one on screen is left alone', (tester) async {
+      await pumpPanel(tester);
+      await openCameras(tester);
+      final view = tester.widget<CamerasView>(find.byType(CamerasView));
+      final opened = records.where((r) => r.event == 'opened').length;
+
+      // Straight at the function, because while the wall is up the edge tab
+      // sits under a full-screen opaque route and cannot be tapped. This is
+      // the shape a second caller takes anyway — `_AutoOpenCameras` firing
+      // beside a tap, or a later surface with its own way in.
+      await showCamerasView(
+        tester.element(find.byType(CamerasView)),
+        controller: view.controller,
+        director: view.director,
+        snapshots: view.snapshots,
+        stills: view.stills,
+        order: view.order,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CamerasView), findsOneWidget);
+      expect(records.where((r) => r.event == 'opened').length, opened,
+          reason: 'no second view was built, so no second cameras.opened');
+      expect(records.any((r) => r.event == 'open_ignored'), isTrue);
       await unmount(tester);
     });
   });

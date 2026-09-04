@@ -23,6 +23,14 @@ dependencies:
   shared_preferences: ^2.5.5
 
 dev_dependencies:
+  # Declared for one assertion in `test/live_video_rtsp_test.dart`: that
+  # `openRtspVideo` leaves `VideoPlayerPlatform.instance` alone. fvp's
+  # registration swaps that field, and it is the only witness to the swap
+  # that survives fvp's own once-per-process guard, so the pin has to name
+  # the type. `package:video_player` re-exports the interface's value types
+  # but not `VideoPlayerPlatform` itself. Resolved transitively already;
+  # declared for the reason `web:` above is.
+  video_player_platform_interface: ^6.9.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

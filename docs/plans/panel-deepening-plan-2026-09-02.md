@@ -61,14 +61,14 @@ re-proposed. Every anchor was re-opened; measured counts replaced estimates.
 | C | The still-grab gate behind the Director seam | Strong | Retracts two seam getters. Wants A first (tests then drive the Director the fixture built). |
 | D | The Director answers the live census | Worth exploring | Same file family as C; small; do it in the same sitting. |
 | E | A contract suite for the video seam | Worth exploring | No production change; shrinks once A removes `_CountedSession`. |
-| F | IdleReturn | Worth exploring | Gated on the owner's own trigger (phase-8-handoff.md:747). |
-| G | PopupClaim | Worth exploring | Gated on a second unprompted Popup existing. |
+| F | IdleReturn | Worth exploring | Landed 2026-09-03, early at the owner's call (phase-8-handoff.md:769). |
+| G | PopupClaim | Worth exploring | **Landed 2026-09-04** at the owner's call, ahead of its trigger. |
 | H | Transport tuning through the seam | Worth exploring | Gated on the frame-pulse deletion decision (live_video_rtsp_io.dart:130). |
 | I | go2rtc's address, parsed once | Speculative | Only if Phase H is done and the owner wants the string peek typed. |
 | J | Composition-root prop drilling | Speculative | Re-measure after A; probably dissolves. |
 | K | Small tidies | — | Survivors of the refuted candidates; each is an afternoon. |
 
-A, B, C, D and E are recommended in that order. F–J wait for their triggers.
+A, B, C, D and E are recommended in that order; F and G landed early at the owner's call. H–J wait for their triggers.
 
 ---
 
@@ -571,9 +571,10 @@ release first, so a count read at `dispose()` would have logged **0**. It
 logged 5, which is the number of feeds that were actually streaming (the
 idle doorbell and the NOT SET UP tile are not `isActive` and are correctly
 absent). The mechanism this phase changed is therefore verified against
-real feeds and a real Navigator pop, not only in the harness. A three-lens review confirmed the count identical to
-the hand-kept one in every scenario it could construct, and found thirteen
-documentation and test-strengthening findings, all applied.
+real feeds and a real Navigator pop, not only in the harness. A three-lens
+review confirmed the count identical to the hand-kept one in every scenario
+it could construct, and found thirteen documentation and test-strengthening
+findings, all applied.
 
 **One divergence declared rather than fixed.** `activeFeeds` filters by
 role, not by asking surface, so it is "this view's feeds" only because the
@@ -720,6 +721,11 @@ is running. That is the flake seen once during Phase B. The contract
 therefore exempts the RTSP opener and says why; the existing case in
 `live_video_rtsp_test.dart` keeps that pin, and the hazard with it.
 
+*Fixed 2026-09-03 — see Phase K item 12. The exemption survives the fix but
+its reason changed: the opener is safe to call from a test now, and what
+still bars it from invariant 5 is that its dial fails asynchronously, so
+the session it hands back is live rather than already failed.*
+
 **Goal.** One `runSessionContract(world)` in the shape of
 `test/hub_contract_test.dart` (`:20`, 11 tests × 2 adapters over a
 `HubWorld` record) runs the seam's six invariants over every
@@ -786,7 +792,7 @@ recorded it as a dependency of this phase, not a candidate of its own.
 
 ---
 
-## Phase F — IdleReturn (gated)
+## Phase F — IdleReturn
 
 **Status: landed 2026-09-03, unstaged, awaiting the owner's review.** The
 trigger was the owner's to call and they called it. All five steps are done:
@@ -809,19 +815,37 @@ wherever the bound is rearmed, preserving the rule that a touch resets the
 whole dismissal state — previously implicit, because the old code reused one
 timer field for both jobs.
 
-Verified: `flutter analyze` clean; `flutter test` 692 passing, 8 skipped
-(+7 unit cases); the golden is byte-identical and all twelve existing idle
-widget cases pass unchanged, by the same finders. Mutation-checked: adding
+Verified: `flutter analyze` clean; `flutter test` 694 passing, 8 skipped
+(+8 unit cases in the module's own suite, +1 widget case); the golden is byte-identical and all twelve existing idle
+widget cases pass unchanged, by the same finders — and the Cameras five now
+find the prompt through `StillWatching.sentence`, so the words live in one
+place for the tests too. Step 5's second half, trimming the
+pure-choreography cases, was considered and declined: none of the twelve is
+pure choreography. Each also pins something `IdleReturn` does not own — the
+go2rtc session close, the route-pop guard and its `idle_blocked` line, the
+`{device, reason}` log fields, the `_boundsIdle` gate, and each surface's
+real hit-test behaviour — so all twelve stay. Mutation-checked: adding
 the warning to the bound instead of taking it out of it, a rearm that does
 not cancel the pending fire, and a dispose that leaves the timers running
 each turn the suite red — 13, 43 and 72 failures respectively, across the
 module's suite and both surfaces'.
 
-**Trigger.** `docs/plans/device-integrations/phase-8-handoff.md:747-751`
-defers this extraction until "the third copy would arrive with a
+**The review found one real bug and two unpinned guarantees, all fixed.**
+The warn callback flipped `prompting` before arming the fire timer, and the
+flag notifies synchronously — so a surface that disposed inside that
+notification left a timer nobody could cancel, and `onFire` would have
+landed on a dead State. The two statements are now the other way round,
+with a case that disposes from the listener. `cancel()`'s post-dispose
+guard and the Cameras view's hand-written cancel of its blocked-fire retry
+were both correct and pinned by nothing; deleting either left the suite
+green. Each now has a case, verified red without it. Three further
+mutations confirm all three.
+
+**Trigger.** `docs/plans/device-integrations/phase-8-handoff.md:769`
+deferred this extraction until "the third copy would arrive with a
 web-specific surface". The memory `web-panel-is-a-second-screen-target`
-says that surface is coming; whether the trigger has fired is the owner's
-call. Everything below is ready for when it does.
+says that surface is coming; the call was the owner's and they made it
+ahead of the bar. The handoff bullet is now marked done.
 
 **Goal.** One pure-Dart `IdleReturn` owns the two chained Timers, the
 prompting flag and re-arm/cancel; one `StillWatching` widget draws the
@@ -878,14 +902,18 @@ trim the pure-choreography ones once the unit suite covers them.
 
 ---
 
-## Phase G — PopupClaim (gated)
+## Phase G — PopupClaim — **DONE 2026-09-04**
 
 **Trigger.** A second *unprompted* Popup — any alert the Hub raises that
 should open a route on its own. Today there is exactly one asker
 (`DoorbellPopupHost`) and one writer (`_DevicePopupBodyState`), which makes
 the seam hypothetical; the module still concentrates an interface (two
 caller-side invariants and a four-value enum crossing a file seam) and is
-worth doing early if the owner prefers the smaller host.
+worth doing early if the owner prefers the smaller host. **The owner called
+it early**, on the terms the paragraph above offers: the smaller host, ahead
+of the second asker. The seam is not hypothetical after all — the unit suite
+is its second adapter, and it turned out to be the only place two of the
+module's rules could be stated at all (see **What landed**).
 
 **Why, measured.** Fifteen branches across two files: the host's four-arm
 switch (`doorbell_popup_host.dart:206-227`), the deferral's three outcomes
@@ -931,6 +959,74 @@ the last popup deregisters; drop after the window with the warn line; a
 newer deferred ding replaces the older; dispose leaves no Timer.
 `doorbell_popup_test.dart`'s four arbitration cases (`:151, :190, :234, :283`)
 stay as the end-to-end pins.
+
+### What landed
+
+`lib/ui/popup_claim.dart`, and both callers rewired to it. 715 passing /
+8 skipped (695 before, +16 unit cases and +1 end-to-end), analyzer clean,
+`flutter build linux --release` green.
+
+**Shape, where it differs from the sketch above.**
+
+- `Busy { how }` became two sealed cases, `Extended` and `Held`. The sketch's
+  single case carried a `DevicePopupExtension` payload, which is the four-value
+  enum crossing a file seam that this phase exists to retire — the caller would
+  have switched on the enum *inside* the case and been back where it started.
+- A fifth case, `Dropped(waited)`, joined `Claim`/`Extended`/`Held`/`Wait`. The
+  sketch left the drop as a log line the claim writes ("writes
+  `popup.doorbell_dropped` on expiry"). It is not the claim's line to write: the
+  claim does not know whose request it was or that "ding" is the word for it,
+  and one asker's vocabulary baked into a module built for several is exactly
+  the coupling the phase is undoing. So the drop is an *answer*, and the host
+  keeps its own warn. `waited` rides on it rather than being read off
+  `kPopupClaimWindow` at the call site, because the window is
+  constructor-injectable and a caller reporting the default would be reporting a
+  number that was not the one the claim used.
+- `DevicePopupExtension` was renamed `StayVerdict` and lost a value. `none`
+  turned out to have no producer once the claim owned "nothing is showing this
+  Device" — `stayUp()` can only ever answer `extended`, `held` or `leaving`
+  about *itself*. The old name was wrong twice over: it was not per-Device, and
+  two of its four values were not extensions.
+- `acquire` grew an `owner`, and `abandon(owner)` with it. The claim outlives
+  every route, so a request the host leaves waiting in it is not collected with
+  the tree the way `_DeferredDing`'s Timer was.
+- `deregister` returns `void`, not the sketch's implied "gone" edge. Nothing in
+  the Popup's `dispose` needs it: `onGone` and `_feed.release()` are both about
+  the Popup this caller pushed, and what happens at the Device's edge is the
+  claim's own.
+- `PopupClaim.dispose()` was written and then deleted: `abandon` covers the one
+  lifecycle a caller has, and a method only tests call is the shallow surface
+  this exercise is against.
+
+**The rule the sketch did not have.** A request offered again to a wall that is
+*still* leaving keeps its **original** clock. The sketch's redemption re-entered
+`acquire`, which re-armed the window from zero — so a chain of closing Popups
+could hold a ding well past the 30 s that exists to say when it went stale.
+`_redeem` now returns without touching the clock when it finds another `Wait`;
+that Popup's own deregistration brings it back.
+
+**Proof.** A 12-mutation sweep, all killed: `deregister` clearing the whole
+stack, `_judge` iterating oldest-first, `Wait`→`Claim`, the redemption
+answering a still-leaving wall, the redemption answering `Claim` blind, the
+redemption running inline instead of next-frame, `acquire` not cancelling the
+older clock, `abandon` ignoring the owner, the Popup never registering, the
+Popup never deregistering, the host never abandoning, the host pushing on a
+`Wait`.
+
+The last of those needed a case built for it. Every ordinary teardown redeems
+the waiting request on the way out and takes its clock off, so the host's
+`abandon` looked unreachable until a case held a Device permanently
+`leaving` — `doorbell_popup_test.dart`'s `_NeverLeaves` — and let the Panel go
+down under it. It rests on the harness checking for pending Timers *before* it
+runs `addTearDown` callbacks, which is why the stand-in is deregistered from a
+tear-down and not from the case body; deregistering inside the body redeems the
+ding and cancels the very leak the case is there to catch.
+
+**Where the nine `extendDevicePopup` test calls went.** `device_popup_test.dart`
+grew a `ring(deviceId)` helper — one `acquire` against the shared claim, the way
+the host asks — and a `tearDown` that abandons its `ringer`. Not a shim in
+`lib/`: a pass-through kept alive by tests is the thing the deletion test is
+for.
 
 ---
 
@@ -1098,25 +1194,76 @@ Each is an afternoon, none needs a seam, all are behaviour-preserving.
     three subclasses (`_DeafFakeHub`, `_SlowEchoFakeHub`,
     `_QuantisingFakeHub`) to script late/never/quantised echoes; a knob on
     `FakeHub`'s command seam, the way it has `driftEvery`, retires them.
-11. **One Cameras route at a time.** `showCamerasView` has no guard, and
-    during the 300 ms close slide the exiting route ignores pointers, so a
-    tap on the edge tab pushes a second view over the first. Two live views
-    confuse the Director's `overlaid` flag (the first view's dispose clears
-    it while the second is on top) and each counts the other's tiles in the
-    closing census (Phase D). A module-level "a Cameras view is mounted"
-    flag consulted by `showCamerasView` closes all of it; it changes what
-    that second tap does, which is why it is here and not in Phase D.
-12. **The RTSP opener's unhandled async error.** `openRtspVideo` calls
-    `fvp.registerWith`, which schedules its `DynamicLibrary.open` inside an
-    unawaited `Future` (`video_player_mdk.dart`). On a VM run the library is
-    absent, so the failure lands as an unhandled async error attributed to
-    whichever test is running — seen once as a flake in
-    `live_video_rtsp_test.dart`'s "the opener never throws", which is the
-    only case that calls it. Options: guard the call behind a
-    `Platform.environment` opt-out, register fvp from `main()` rather than
-    from the opener's first call, or mark that one case `skip:` on the VM
-    and keep it for the appliance. Until then the contract suite exempts
-    that opener and says why.
+11. ~~**One Cameras route at a time.**~~ **Done 2026-09-03, unstaged.**
+    `showCamerasView` had no guard, and during the 300 ms close slide the
+    exiting route ignores pointers, so a tap on the edge tab pushed a second
+    view over the first. Two live views confuse the Director's `overlaid`
+    flag and each counts the other's tiles in the closing census (Phase D).
+
+    The owner called the trigger. Implemented as the filed sketch, with one
+    change: the claim is held as **the route**, not as a mounted-view flag.
+    The route's lifetime is the one that actually matches the rule — it is
+    claimed synchronously inside `showCamerasView` (a mount-time flag would
+    leave the first frame unguarded, so two taps in one frame would both get
+    through) and released in `_CamerasRoute.dispose()`, which the Navigator
+    runs once the route is off the stack for good, slide included. A test
+    that pumps a bare `CamerasView` never touches it, and a Navigator torn
+    down mid-route disposes its own entries, so no claim leaks between cases
+    — neither of which a view-held flag gives you.
+
+    **What the second tap now does:** nothing, and it says so —
+    `cameras.open_ignored` at info. The tap is dropped rather than queued.
+    That is the behaviour change this item was gated on.
+
+    One hazard found while writing it and closed: claiming the wall *before*
+    `Navigator.of(context).push(route)` would latch it shut for the rest of
+    the process if `Navigator.of` threw, with no route left alive to release
+    it. The claim is staked after the push returns and is still synchronous.
+
+    Three cases in `cameras_view_test.dart` ("one Cameras route at a time"):
+    the close-slide tap, the release once the slide finishes, and a direct
+    second call while the wall is fully up. The close-slide case asserts the
+    `open_ignored` line **before** asserting no second view, because without
+    it the case passes just as well when the tap lands on the leaving route
+    and no open is ever attempted — the same green for the opposite reason.
+    Mutation (delete the guard): cases 1 and 3 fail, case 2 passes, which is
+    correct — case 2 pins the release, which holds when there is no guard at
+    all. 698 passing / 8 skipped.
+12. ~~**The RTSP opener's unhandled async error.**~~ **Done 2026-09-03,
+    unstaged.** `openRtspVideo` called `fvp.registerWith`, which schedules
+    its `DynamicLibrary.open` inside an unawaited `Future`
+    (`video_player_mdk.dart:216`). On a VM run the library is absent, so the
+    failure landed as an unhandled async error attributed to whichever test
+    was running — seen twice, once during Phase B and once during Phase F,
+    both times in a full parallel run and never in isolation.
+
+    Fixed by the second of the three options filed here: registration moved
+    out of the opener into `registerRtspPlayer()`, which `main()` calls when
+    the transport is `rtsp`, and a test binary never calls `main()`. This
+    was the option that cost nothing, because **the explicit call was never
+    what registered fvp on the appliance**: fvp declares
+    `dartPluginClass: VideoPlayerRegistrant` for Linux, so Flutter's
+    generated `dart_plugin_registrant.dart` already registers it before
+    `main` — the freeze-probe logs show fvp's banner ahead of
+    `panel.start`. Our call exists to pass `rtspVideoDecoders` and
+    `rtspLowLatency` — which `main()`'s own comment beside the
+    `VIDEO_DECODERS` read (`main.dart:135`) already calls "a composition-root
+    decision by construction". It now sits at that root.
+
+    Two consequences worth knowing. The `panel.video_player` line moves from
+    the first dial to boot, printing beside `panel.video_transport` instead
+    of seconds later. And the decoder options now apply on a wall that opens
+    no RTSP stream at all, which is the correct ordering and was previously
+    luck.
+
+    Pinned by `live_video_rtsp_test.dart`'s "the opener does not register
+    the native player", which asserts on `VideoPlayerPlatform.instance`
+    rather than on our own log line — fvp registers once per process, so a
+    log-watching pin is only true if it happens to run first, and the
+    mutation proved exactly that: putting `registerRtspPlayer()` back in the
+    opener left a log-based pin green while failing the case next door.
+    `video_player_platform_interface` is a new dev dependency for that one
+    assertion. Six consecutive full runs green (695 passing, 8 skipped).
 13. **One listened notifier in `test/support`.** `ListenedNotifier<T>`
     (`test/support/fake_feed.dart`, Phase B) is `ProbeNotifier`
     (`test/support/fake_health.dart`) drawn a second time — the same
@@ -1150,13 +1297,14 @@ and `parseBindings`; `classifyDing`; `CameraOrderStore` / `arrangeCameras`;
 
 ## Open questions for the owner
 
-1. Phase F's trigger: has "a third surface with a web-specific need"
-   arrived with the second-screen web Panel, or not yet?
-2. Phase H's precondition: run the week of `VIDEO_REPAINT_PULSE=off` first?
-3. Phase B's second step: should `CameraFeed` expose `restoring` (a
+1. Phase H's precondition: run the week of `VIDEO_REPAINT_PULSE=off` first?
+2. Phase B's second step: should `CameraFeed` expose `restoring` (a
    Director fact) so the latch leaves the Panel entirely, or is the widget-
    side `CameraFace` enough?
-4. Phase C: getter or listenable for `stillGrabAllowed` — should a health
+3. Phase C: getter or listenable for `stillGrabAllowed` — should a health
    flip wake the still loop, or is the 60 s cadence fine?
-5. Phase E: repair the chrome runner (DEBUGGING.md:431) before or after the
+4. Phase E: repair the chrome runner (DEBUGGING.md:431) before or after the
    VM-side suite lands?
+
+*(Phase F's trigger question is answered: the owner called it on
+2026-09-03 and the phase landed.)*

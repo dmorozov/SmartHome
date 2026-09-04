@@ -41,12 +41,13 @@ void main() {
       noOpener: 'FakeGo2rtc.open cannot fail; there is no broken world');
   runSessionContract('MjpegLiveVideoSession', _mjpegWorld);
   runSessionContract('RtspLiveVideoSession', _rtspWorld,
-      noOpener: 'openRtspVideo registers fvp process-wide on its first call, '
-          'and no VM binary can load libfvp — worse, the attempt is made '
-          'inside an unawaited Future, so the failure lands as an unhandled '
-          'async error in whichever test happens to be running (observed '
-          'once as a flake in `live_video_rtsp_test.dart`, which is where '
-          'that opener stays pinned, alone)');
+      noOpener: 'openRtspVideo is safe to call here since 2026-09-03 (fvp '
+          'registration moved to `main()`), but it still cannot satisfy this '
+          'invariant: it hands back a live session whose dial fails '
+          'asynchronously against an unimplemented platform, and what is '
+          'asserted here is a session ALREADY failed when the opener '
+          'returns. The no-throw half stays pinned in '
+          '`live_video_rtsp_test.dart`');
   runSessionContract('LiveVideoKeepAlive lease', _leaseWorld,
       noFailureText: 'the lease passes the inner session\'s failure through '
           'verbatim; the words are the player\'s, checked in its own world');

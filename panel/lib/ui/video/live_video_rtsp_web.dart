@@ -37,3 +37,8 @@ LiveVideoSession openRtspVideo(Uri url, {required String name}) {
 /// paints its own `<video>`, so there is nothing here to measure.
 bool rtspVideoDebug = false;
 
+/// The web branch's half of `registerRtspPlayer`. A browser has no fvp and
+/// no libmdk; it plays through MSE. Here so `main()` compiles from one file,
+/// like the four inert knobs above — calling it does nothing.
+void registerRtspPlayer() {}
+

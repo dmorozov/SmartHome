@@ -50,12 +50,63 @@ Uri rtspEndpointFor(Uri seamUrl) => Uri(
 
 var _fvpRegistered = false;
 
+/// Hands fvp the decoder settings, once per process, from `main()`.
+///
+/// **Called at the composition root and nowhere else**, which is where the
+/// decision has always been described as living — `main()`'s own comment
+/// beside the `VIDEO_DECODERS` read calls it "a composition-root decision
+/// by construction" — but the call itself was made lazily, at the first
+/// dial, until 2026-09-03. Doing it there was a live hazard in every test
+/// binary: `registerWith` schedules its own setup on an unawaited
+/// `Future.delayed` — fvp's own comment says the delay exists so the log
+/// handler is installed inside `main()` — and that setup opens `libfvp.so`,
+/// which no VM test run has. The `DynamicLibrary.open` failure therefore
+/// surfaced as an **unhandled async error charged to whichever test happened
+/// to be running** when the microtask drained, which no `try` around the
+/// opener can catch and which failed a different innocent case each time
+/// (seen twice: 2026-09-02 and 2026-09-03).
+///
+/// Registering from `main()` fixes it by construction rather than by a
+/// test-only guard: a test binary never calls `main()`, so it never asks fvp
+/// to load a library that is not there.
+///
+/// Not the first registration on the appliance, and deliberately so: fvp
+/// declares `dartPluginClass: VideoPlayerRegistrant`, so Flutter's generated
+/// plugin registrant has already swapped `video_player`'s platform and
+/// loaded libmdk **before** `main()` runs — the fvp banner precedes
+/// `panel.start` in the journal. That first registration passes no options;
+/// this one is how [rtspVideoDecoders] and [rtspLowLatency] reach the
+/// player at all. Idempotent, so a second call is a no-op.
+void registerRtspPlayer() {
+  if (_fvpRegistered) return;
+  _fvpRegistered = true;
+  // Swaps video_player's platform implementation for fvp (libmdk),
+  // process-wide, once. RTSP-over-TCP is fvp's own default (it sets
+  // `avformat.rtsp_transport: tcp` per player), which is also this house's
+  // rule: RTSPS/TCP everywhere upstream.
+  final decoders = rtspVideoDecoders;
+  fvp.registerWith(
+    options: {
+      'lowLatency': rtspLowLatency,
+      // Omitted entirely when null, so "let fvp choose" stays reachable and
+      // is not spelled as an empty list fvp would read as "nothing".
+      'video.decoders': ?decoders,
+    },
+  );
+  Log.info('panel', 'video_player', {
+    'decoders': decoders == null ? 'fvp_default' : decoders.join(','),
+    'low_latency': rtspLowLatency,
+    'repaint_pulse': rtspFramePulse ? 'on' : 'off',
+  });
+}
+
 /// The decoder priority list handed to fvp, or null to keep fvp's own.
 ///
-/// **Set this before the first [openRtspVideo], from `main()` and nowhere
-/// else** — fvp is registered once per process, so a later change is
-/// ignored. It is a variable rather than a constant for the reason
-/// `VIDEO_TRANSPORT` is: which decoder a given wall can actually use is an
+/// **Set this before [registerRtspPlayer], from `main()` and nowhere
+/// else** — that call is what hands the list to fvp, and fvp is registered
+/// once per process, so a later change is ignored. It is a variable rather
+/// than a constant for the reason `VIDEO_TRANSPORT` is: which decoder a
+/// given wall can actually use is an
 /// operational fact about that machine, not a property of the binary, and
 /// finding out costs a person standing in front of the screen.
 ///
@@ -84,7 +135,8 @@ List<String>? rtspVideoDecoders = const ['FFmpeg'];
 /// fvp's `lowLatency`, and **the shipped value is 0 — off — because 1
 /// visibly corrupts this wall.**
 ///
-/// Set alongside [rtspVideoDecoders], from `main()`, before the first open.
+/// Set alongside [rtspVideoDecoders], from `main()`, before
+/// [registerRtspPlayer] reads it.
 ///
 /// This was 1 from the day the transport landed, on the reasonable-sounding
 /// argument that a live wall wants no buffering. What that actually buys is
@@ -184,27 +236,6 @@ void _hookFrameTimings() {
 /// stated reason (the caller is a `State.initState`).
 LiveVideoSession openRtspVideo(Uri url, {required String name}) {
   try {
-    if (!_fvpRegistered) {
-      // Swaps video_player's platform implementation for fvp (libmdk),
-      // process-wide, once. RTSP-over-TCP is fvp's own default (it sets
-      // `avformat.rtsp_transport: tcp` per player), which is also this
-      // house's rule: RTSPS/TCP everywhere upstream.
-      _fvpRegistered = true;
-      final decoders = rtspVideoDecoders;
-      fvp.registerWith(
-        options: {
-          'lowLatency': rtspLowLatency,
-          // Omitted entirely when null, so "let fvp choose" stays reachable
-          // and is not spelled as an empty list fvp would read as "nothing".
-          'video.decoders': ?decoders,
-        },
-      );
-      Log.info('panel', 'video_player', {
-        'decoders': decoders == null ? 'fvp_default' : decoders.join(','),
-        'low_latency': rtspLowLatency,
-        'repaint_pulse': rtspFramePulse ? 'on' : 'off',
-      });
-    }
     return RtspLiveVideoSession(rtspEndpointFor(url));
   } catch (error) {
     // The type, never the message — `mjpegEndpointFor`'s twin, same rule

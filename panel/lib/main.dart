@@ -173,6 +173,15 @@ Future<void> main() async {
           .trim()
           .toLowerCase() ==
       'on';
+  // Hand the settled knobs to the player, here and not at the first dial.
+  // Registering fvp lazily meant every test binary that opened an RTSP
+  // session asked it to load `libfvp.so`, on an unawaited Future fvp
+  // schedules itself — and the failure landed as an unhandled async error
+  // charged to an unrelated test, twice. A test binary never runs `main()`,
+  // so doing it here removes the hazard by construction rather than with a
+  // test-only guard. After the knobs above and before the first surface, the
+  // ordering `rtspVideoDecoders` has always asked for.
+  if (videoTransport == 'rtsp') registerRtspPlayer();
   // The House Plan (ADR-0005): everything drawn — geometry and Device
   // Placements — generated into house.yaml, joined with the hand-maintained
   // Hub bindings.

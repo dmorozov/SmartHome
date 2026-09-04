@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'theme.dart';
 
 /// "Still watching? Tap anywhere to stay" — the softening on an idle bound
-/// ([IdleReturn]).
+/// (`IdleReturn`; named in code font rather than linked, because the
+/// sentence has no business importing the clockwork).
 ///
 /// Says "tap anywhere", and means it: both surfaces put the whole of
 /// themselves under a `Listener`, so there is no target to find and nothing
@@ -29,7 +30,10 @@ class StillWatching extends StatelessWidget {
 
   final bool _compact;
 
-  /// The sentence itself, in one place. Both suites find the prompt by it.
+  /// The sentence itself, in one place — both constructors draw it, and the
+  /// Cameras suite finds the prompt by it. The Popup suite finds its caption
+  /// by key instead, because that slot is shared with the Talk caption and
+  /// the key is what says which occupant holds it.
   static const sentence = 'Still watching? Tap anywhere to stay';
 
   @override

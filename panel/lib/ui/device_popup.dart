@@ -12,6 +12,7 @@ import 'close_button.dart';
 import 'device_presentation.dart';
 import 'hub_controller.dart';
 import 'idle_return.dart';
+import 'popup_claim.dart';
 import 'still_watching.dart';
 import 'theme.dart';
 import 'thermostat_controls.dart';
@@ -27,10 +28,9 @@ import 'video/timed_feed.dart';
 ///
 /// [dismissAfter] is null for a Popup a person opened: a countdown would
 /// yank the camera away from whoever deliberately went and tapped it. Only
-/// the Popup that opened *unprompted* gets a deadline, and
-/// [extendDevicePopup] is how a second reason to open it restarts that
-/// deadline instead of tearing the stream down and paying the 2-5 s Ring
-/// spin-up again. [dismissCeiling] is how long that extending may go on for,
+/// the Popup that opened *unprompted* gets a deadline, and [PopupClaim] is
+/// how a second reason to open it restarts that deadline instead of tearing
+/// the stream down and paying the 2-5 s Ring spin-up again. [dismissCeiling] is how long that extending may go on for,
 /// counted from when this Popup opened rather than from the last extension —
 /// without it a reason arriving more often than [dismissAfter] keeps one
 /// session alive forever.
@@ -39,7 +39,7 @@ import 'video/timed_feed.dart';
 /// session really is closed. Rejected: the returned Future, which completes
 /// when the pop is *requested*, ~150 ms earlier — long enough for a caller to
 /// open a second consumer on a stream the first Popup still holds. It says
-/// only "the Popup *I* pushed has gone"; [whenDevicePopupGone] is the one to
+/// only "the Popup *I* pushed has gone"; [PopupClaim.acquire] is the one to
 /// ask about a Device, whoever pushed what is showing it.
 ///
 /// [controller] is the Popup's hands and its live feed, and it is optional
@@ -164,105 +164,6 @@ const _kCaptionSlot = 22.0;
 /// [kTalkButtonDrop].
 const _kPopupGap = 6.0;
 
-/// What asking an already-showing Popup to stay up actually did.
-enum DevicePopupExtension {
-  /// No Popup for that Device is on the wall. The caller has to push one.
-  none,
-
-  /// Its deadline was restarted from zero.
-  extended,
-
-  /// A Popup a person opened. It stays up — and deliberately does **not**
-  /// gain a deadline it never had (D14): a countdown smuggled in by somebody
-  /// else's event would yank the camera away from whoever went and tapped it.
-  held,
-
-  /// There is one, but it is already on its way out: popped and playing its
-  /// exit animation, or past its ceiling. Nothing can extend it, and pushing
-  /// a replacement *now* would put a second consumer on the same go2rtc
-  /// stream while the first is still open — wait for [showDevicePopup]'s
-  /// `onGone` and push then.
-  leaving,
-}
-
-/// Every Popup currently on the wall for a Device, oldest first.
-///
-/// Module-level, because "is this Device's Popup already up?" has to be
-/// answerable about a Popup *somebody else* pushed: `dollhouse_view` opens one
-/// when a person taps a pin, and the doorbell host must not open a second
-/// go2rtc consumer on the same stream on top of it. Rejected: a registry the
-/// doorbell host owns and hands down — it would only ever see the host's own
-/// Popups, which is precisely the blind spot it replaces.
-///
-/// A *list* per Device, because one slot cannot say "the newer one left, the
-/// older one is still on the wall": the newer registration overwrote the
-/// older, and the newer teardown then cleared the slot, so
-/// [extendDevicePopup] answered `none` about a Device whose Dialog was up
-/// with a live session behind it — and a caller believing that answer opens a
-/// second consumer on the one stream. Nothing pushes two Popups for one
-/// Device today; this is what keeps that a fact about the wall rather than a
-/// requirement on every future call site.
-///
-/// Only [_DevicePopupBodyState] writes to it, and only from `initState` and
-/// `dispose`.
-final _showing = <String, List<_DevicePopupBodyState>>{};
-
-/// Who to tell when a Device stops having any Popup at all — see
-/// [whenDevicePopupGone].
-final _goneWaiters = <String, List<VoidCallback>>{};
-
-/// Restarts the deadline of the Popup already showing [deviceId], if there is
-/// one, and says what that meant — see [DevicePopupExtension].
-///
-/// Keyed by Device rather than by "a Popup is up": two doorbells are two
-/// streams, and a Popup showing A's camera is not a reason to swallow B's
-/// ding.
-///
-/// Answers rather than throws, whatever state it finds: this runs inside a
-/// Hub stream callback, where an exception has nowhere to go and takes the
-/// doorbell with it.
-DevicePopupExtension extendDevicePopup(String deviceId) {
-  final showing = _showing[deviceId];
-  if (showing == null || showing.isEmpty) return DevicePopupExtension.none;
-  // Newest first: the one on top is the one somebody would be looking at, and
-  // the one whose deadline a fresh reason should restart. One underneath
-  // still counts, though — it holds a go2rtc session just the same — so
-  // `leaving` from the top is not an answer about the *Device* until
-  // everything below it has said the same.
-  for (final popup in showing.reversed) {
-    final answer = popup.stayUp();
-    if (answer != DevicePopupExtension.leaving) return answer;
-  }
-  return DevicePopupExtension.leaving;
-}
-
-/// Runs [onGone] once, when the last Popup showing [deviceId] has gone and
-/// its go2rtc session with it.
-///
-/// This is how a caller told [DevicePopupExtension.leaving] learns it may
-/// push at last. Rejected: [showDevicePopup]'s own `onGone`, which only the
-/// call site that pushed *that* Popup can pass — an event deferred behind the
-/// Popup a person opened by tapping a pin was then never redeemed by the
-/// Popup that deferred it, because `dollhouse_view` pushes without an
-/// `onGone` and has no reason to know the doorbell exists. The registry knows
-/// every Popup whoever pushed it, which is the same argument that made
-/// [_showing] module-level.
-///
-/// Runs from the Popup's `dispose`, so a caller that means to push a route
-/// has to get off that stack first: pushing one mid-teardown is a framework
-/// error.
-///
-/// Arms nothing when no Popup for [deviceId] is showing. "Gone" is an edge,
-/// and a waiter left armed against a Device that has none would be redeemed
-/// by the *next* Popup for it, minutes later and with nothing behind it —
-/// exactly the resurrection this mechanism exists to prevent. Callers arm
-/// only after being told `leaving`, which is the one state whose edge is
-/// guaranteed to come.
-void whenDevicePopupGone(String deviceId, VoidCallback onGone) {
-  if (_showing[deviceId]?.isNotEmpty != true) return;
-  (_goneWaiters[deviceId] ??= <VoidCallback>[]).add(onGone);
-}
-
 /// The Dialog itself, stateful so that the live stream and the deadline have
 /// somewhere to die.
 ///
@@ -301,7 +202,8 @@ class _DevicePopupBody extends StatefulWidget {
 }
 
 class _DevicePopupBodyState extends State<_DevicePopupBody>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin
+    implements PopupStayer {
   /// How often a Popup that could not pop itself tries again.
   ///
   /// A short fixed interval rather than a fresh [_DevicePopupBody.dismissAfter]:
@@ -335,10 +237,6 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// Armed only where [_boundsIdle] says so, so on most Popups no timer of
   /// this module's ever runs.
   late final IdleReturn _idle;
-
-  /// Whether "Still watching?" is on screen — the module's flag, mirrored
-  /// into a rebuild by [_onPrompting].
-  bool get _promptingIdle => _idle.prompting.value;
 
   var _loggedBlockedDismiss = false;
 
@@ -550,13 +448,13 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
       onFire: _fireIdle,
     )..prompting.addListener(_onPrompting);
     _rearmIdle();
-    // Registered last, once nothing left in this method can throw. `_showing`
-    // is module-level and `dispose` never runs for a State whose `initState`
-    // threw, so an entry claimed before the risky part outlives the widget
-    // tree — the whole route stack with it — and nothing can ever remove it.
-    // That Device's doorbell is then permanently deaf: every later ding finds
-    // a defunct State where its Popup should be.
-    _showing.putIfAbsent(widget.presentation.device.id, () => []).add(this);
+    // Registered last, once nothing left in this method can throw. The claim
+    // outlives every route and `dispose` never runs for a State whose
+    // `initState` threw, so an entry claimed before the risky part outlives
+    // the widget tree — the whole route stack with it — and nothing can ever
+    // remove it. That Device's doorbell is then permanently deaf: every later
+    // ding finds a defunct State where its Popup should be.
+    popupClaim.register(widget.presentation.device.id, this);
   }
 
   /// The route this Popup rides on, taken while the element is healthy.
@@ -565,7 +463,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// `ModalRoute.of` is an inherited-widget lookup, and an element that has
   /// been deactivated answers it by throwing "Looking up a deactivated
   /// widget's ancestor is unsafe" rather than by returning null. That throw
-  /// came out of `extendDevicePopup`, i.e. out of a Hub stream callback,
+  /// came out of `PopupClaim.acquire`, i.e. out of a Hub stream callback,
   /// where nothing catches it. Null means this Popup never got as far as
   /// riding a route, which is [_leaving] as far as anyone asking is
   /// concerned.
@@ -580,13 +478,12 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   @override
   void dispose() {
     final id = widget.presentation.device.id;
-    final showing = _showing[id];
-    // By identity, and only this one entry: two Popups for one Device are a
-    // stack, and the newer one leaving must not deregister the older, which
-    // is still on the wall holding the stream.
-    showing?.remove(this);
-    final gone = showing == null || showing.isEmpty;
-    if (gone) _showing.remove(id);
+    // First, where an entry left behind by a throw further down would leave
+    // this Device permanently deaf. Anything the claim releases by this is
+    // answered on the *next frame*, so the ordering that matters — nobody is
+    // told the stream is free until it really is — is kept by the frame
+    // boundary rather than by this statement's position.
+    popupClaim.deregister(id, this);
     _dismissRetry?.cancel();
     _idle.prompting.removeListener(_onPrompting);
     _idle.dispose();
@@ -615,19 +512,11 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     // the socket.
     _feed?.release();
     // Last, so that whoever is waiting on it learns this Popup is gone only
-    // once its go2rtc session really is closed.
+    // once its go2rtc session really is closed. About the Popup *this* caller
+    // pushed; a request waiting on the Device is the claim's to redeem, and
+    // it knows a Popup still underneath this one means the stream is not free
+    // yet.
     widget.onGone?.call();
-    // And the Device's waiters after that, only once nothing is left on the
-    // wall for it: they are waiting for the *stream* to be free, which a
-    // Popup still underneath this one would mean it is not.
-    if (gone) {
-      final waiters = _goneWaiters.remove(id);
-      if (waiters != null) {
-        for (final waiter in waiters) {
-          waiter();
-        }
-      }
-    }
     super.dispose();
   }
 
@@ -701,16 +590,17 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     setState(() => _still = result.bytes);
   }
 
-  /// Answers [extendDevicePopup] for this Popup.
-  DevicePopupExtension stayUp() {
-    if (_leaving) return DevicePopupExtension.leaving;
-    if (widget.dismissAfter == null) return DevicePopupExtension.held;
+  /// Answers [PopupClaim] for this Popup.
+  @override
+  StayVerdict stayUp() {
+    if (_leaving) return StayVerdict.leaving;
+    if (widget.dismissAfter == null) return StayVerdict.held;
     final feed = _feed;
     // Past the ceiling this Popup is on its way out and no longer extendable,
     // which is the same thing to a caller as one already popping. No feed at
     // all with a deadline set is the configuration [_attachVideo] asserts
     // against; answered as leaving rather than lied about as extended.
-    if (feed == null || feed.ceilingReached) return DevicePopupExtension.leaving;
+    if (feed == null || feed.ceilingReached) return StayVerdict.leaving;
     // An extension resets the whole dismissal state: a blocked-dismiss retry
     // still pending must not fire against the deadline this just restarted —
     // the old single-field arrangement cancelled it implicitly, and that was
@@ -718,7 +608,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     _dismissRetry?.cancel();
     _dismissRetry = null;
     feed.extend();
-    return DevicePopupExtension.extended;
+    return StayVerdict.extended;
   }
 
   /// Whether this Popup's route has left the Navigator's history — a pop
@@ -901,7 +791,7 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// its card must not jump either.
   Widget _captionSlot() {
     final Widget child;
-    if (_promptingIdle) {
+    if (_idle.prompting.value) {
       child = const StillWatching.caption(
           key: ValueKey('popup-idle-prompt'));
     } else if (_isDoorbell && _TalkCaption.wordingFor(_talk) != null) {

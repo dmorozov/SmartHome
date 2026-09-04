@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/live_video_rtsp.dart';
 import 'package:video_player/video_player.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 /// The RTSP adapter against the seam's obligations — the same split the
 /// MJPEG player uses: the URL rule and the session contracts hermetically
@@ -298,17 +299,53 @@ void main() {
       // allowed to fail — as a settled session or a failing dial, never as
       // an exception out of the opener (the caller is a State.initState).
       //
+      // This case used to be a landmine rather than a test. Until
+      // 2026-09-03 the opener also registered fvp on its first call, and
+      // `registerWith` schedules its own setup on an unawaited Future that
+      // opens `libfvp.so` — absent on any VM run. The failure surfaced as
+      // an unhandled async error charged to whichever test was running when
+      // the microtask drained, so this case could fail a stranger twice
+      // over. Registration moved to `main()`, which a test binary never
+      // calls, and what is left here is the assertion the name promises.
+      //
       // Closed like every other session this file opens, and here it is
-      // the one that matters: this is the only case that builds a REAL
-      // one, so it arms the first-frame watchdog and dials a platform
-      // channel no VM run implements. Left open, both outlive the case —
-      // a Timer and an async rejection with nobody left to own them.
+      // the one that matters: this and the case below it build the file's
+      // only REAL ones, so each arms the first-frame watchdog and dials a
+      // platform no VM run implements. Left open, both outlive the case.
       late final LiveVideoSession session;
       expect(
           () => session = openRtspVideo(Uri.parse('ws://hub:1984/api/ws?src=x'),
               name: 'x'),
           returnsNormally);
       session.close();
+    });
+
+    test('the opener does not register the native player', () {
+      // Registration is `main()`'s to do — `registerRtspPlayer()` — and this
+      // pins the split, because a test binary never calls `main()`. Put it
+      // back inside the opener and fvp's `registerWith` reaches for
+      // `libfvp.so` from an unawaited Future, absent on any VM run: the
+      // failure lands as an unhandled async error charged to whichever case
+      // is running when the microtask drains, so the suite fails somewhere
+      // else, intermittently.
+      //
+      // The assertion is the platform field rather than our own
+      // `panel.video_player` log line, and the difference is load-bearing.
+      // fvp registers once per process, so a log-watching pin only sees the
+      // swap if it happens to be the first case in the run to build a real
+      // session — the mutation that proved this one proved that one vacuous.
+      // `VideoPlayerPlatform.instance` holds the swap for the whole process,
+      // and fvp assigns it synchronously, before the async part that fails,
+      // so this reads true from anywhere in the file and fails here rather
+      // than next door. It is named by string because fvp's platform class
+      // lives behind its `src/`.
+      openRtspVideo(Uri.parse('ws://hub:1984/api/ws?src=x'), name: 'x').close();
+
+      expect(
+        VideoPlayerPlatform.instance.runtimeType.toString(),
+        isNot(contains('Mdk')),
+        reason: 'openRtspVideo registered fvp — that belongs in main()',
+      );
     });
   });
 }

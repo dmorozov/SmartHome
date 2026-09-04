@@ -771,11 +771,14 @@ outranking a fresh probe. Pure-Dart testable beside the existing suites.
   the owner called it early. `lib/ui/idle_return.dart` holds the warn/fire/
   prompt clockwork and `lib/ui/still_watching.dart` the sentence; the
   CamerasView and DevicePopup copies are gone. The **route guard did not
-  move** and deliberately so — how a surface may pop is route mechanics,
-  the Cameras view is `RouteAware` and hears the obstruction leave while a
-  `Dialog` must poll, and the cadence and log-level differences between
-  them are documented as intended. Each surface keeps its constants, its
-  gate, its pointer `Listener` and its fire.
+  move** and deliberately so: both surfaces retry a pop blocked by
+  something stacked on top, at their own cadence and log level
+  (`cameras.idle_blocked` at debug, retrying every 30 s;
+  `popup.dismiss_blocked` at warn once, retrying every 1 s —
+  `README.md:1092-1095`, `:1284`), documented as intended, and a shared
+  retry would have to pick one of each for two surfaces that measured
+  different ones. Each surface keeps its constants, its gate, its pointer
+  `Listener` and its fire.
 - **MSE stays the web transport** (Frigate's own convergence); go2rtc's
   WHEP endpoint is the fallback if MSE latency ever matters (port 8555
   must then be reachable alongside 1984).

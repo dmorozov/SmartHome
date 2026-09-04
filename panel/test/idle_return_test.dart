@@ -11,8 +11,7 @@ import 'package:panel/ui/idle_return.dart';
 /// route it pops, what it logs, what its gate says), which is why this file
 /// has no widget in it at all.
 void main() {
-  ({IdleReturn idle, List<String> events}) rig(
-    FakeAsync async, {
+  ({IdleReturn idle, List<String> events}) rig({
     Duration returnAfter = const Duration(minutes: 5),
     Duration warnFor = const Duration(seconds: 30),
   }) {
@@ -29,7 +28,7 @@ void main() {
   test('the warning is the last slice of the bound, not an extension of it',
       () {
     fakeAsync((async) {
-      final (:idle, :events) = rig(async);
+      final (:idle, :events) = rig();
       addTearDown(idle.dispose);
       idle.rearm();
 
@@ -53,7 +52,7 @@ void main() {
   test('a touch during the prompt takes it down and starts the whole bound '
       'again — the tap that answers needs no special case', () {
     fakeAsync((async) {
-      final (:idle, :events) = rig(async);
+      final (:idle, :events) = rig();
       addTearDown(idle.dispose);
       idle.rearm();
       async.elapse(const Duration(minutes: 4, seconds: 40));
@@ -81,7 +80,7 @@ void main() {
 
   test('a touch before the warning simply moves the bound', () {
     fakeAsync((async) {
-      final (:idle, :events) = rig(async);
+      final (:idle, :events) = rig();
       addTearDown(idle.dispose);
       idle.rearm();
       async.elapse(const Duration(minutes: 4));
@@ -96,7 +95,7 @@ void main() {
   test('cancel stops the bound and takes the prompt down, without firing',
       () {
     fakeAsync((async) {
-      final (:idle, :events) = rig(async);
+      final (:idle, :events) = rig();
       addTearDown(idle.dispose);
       idle.rearm();
       async.elapse(const Duration(minutes: 4, seconds: 40));
@@ -114,11 +113,14 @@ void main() {
   test('dispose leaves no timer and never fires — a pending Timer outliving '
       'the tree fails a widget test by itself', () {
     fakeAsync((async) {
-      final (:idle, :events) = rig(async);
+      final (:idle, :events) = rig();
       idle.rearm();
       async.elapse(const Duration(minutes: 4, seconds: 40));
 
       idle.dispose();
+      expect(idle.cancel, returnsNormally,
+          reason: 'cancel after dispose is inert even with the prompt up — '
+              'without the guard it writes to a disposed notifier');
       expect(async.pendingTimers, isEmpty);
       async.elapse(const Duration(hours: 1));
       expect(events, ['prompting=true'],
@@ -129,7 +131,7 @@ void main() {
 
   test('dispose is idempotent, and a rearm after it is inert', () {
     fakeAsync((async) {
-      final (:idle, :events) = rig(async);
+      final (:idle, :events) = rig();
       idle.rearm();
       idle.dispose();
       expect(idle.dispose, returnsNormally);
@@ -141,13 +143,43 @@ void main() {
     });
   });
 
+  test('a surface that disposes the moment it is asked is not fired at — '
+      'the prompt notifies synchronously, so the fire must already be '
+      'cancellable when it does', () {
+    fakeAsync((async) {
+      final events = <String>[];
+      late final IdleReturn idle;
+      idle = IdleReturn(
+        returnAfter: const Duration(minutes: 5),
+        warnFor: const Duration(seconds: 30),
+        onFire: () => events.add('fire'),
+      );
+      // The surface's own teardown, reached from inside the notification —
+      // a route popped by something else while the prompt was going up.
+      idle.prompting.addListener(() {
+        events.add('prompting');
+        idle.dispose();
+      });
+      idle.rearm();
+
+      async.elapse(const Duration(minutes: 4, seconds: 30));
+      expect(events, ['prompting']);
+      expect(async.pendingTimers, isEmpty,
+          reason: 'the fire timer was armed before the flag flipped, so the '
+              'dispose inside the notification could see it');
+
+      async.elapse(const Duration(hours: 1));
+      expect(events, ['prompting'], reason: 'and it never fired');
+    });
+  });
+
   test('the durations are the surface\'s own — the module holds no constant '
       'of its own', () {
     fakeAsync((async) {
       // A surface with a different bound entirely: the module is
       // parameterised because the two shipped surfaces have different
       // lifetimes and a stated reason to diverge.
-      final (:idle, :events) = rig(async,
+      final (:idle, :events) = rig(
           returnAfter: const Duration(seconds: 10),
           warnFor: const Duration(seconds: 2));
       addTearDown(idle.dispose);

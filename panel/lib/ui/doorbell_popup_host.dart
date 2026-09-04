@@ -6,6 +6,7 @@ import '../diagnostics/log.dart';
 import '../domain/house.dart';
 import 'device_popup.dart';
 import 'hub_controller.dart';
+import 'popup_claim.dart';
 import 'audio/talk.dart';
 import 'video/snapshot.dart';
 import 'video/stream_director.dart';
@@ -41,24 +42,6 @@ const kDoorbellPopupDeadline = Duration(seconds: 30);
 /// how long the session has been open, which is the only quantity #177014 is
 /// about.
 const kDoorbellPopupCeiling = Duration(minutes: 2);
-
-/// How long a ding deferred behind a closing Popup may wait for its turn
-/// before it is dropped instead.
-///
-/// A ding is a real-time event: the Popup it opens is a claim that somebody
-/// is at the door *now*. Redeemed minutes later it opens a live Ring session
-/// and a picture of an empty porch, on top of whatever is on the wall by
-/// then, with nothing behind it that anyone can act on — and #177014 says
-/// that session can suppress the *next* real ding, so a stale redemption does
-/// not merely mislead, it can deafen the doorbell for the press that matters.
-/// Dropping is the better half of that trade, and it leaves a warn line;
-/// resurrection left none.
-///
-/// [kDoorbellPopupDeadline], deliberately the same 30 s: a Popup pushed now
-/// would close 30 s from now, so a ding older than that would already have
-/// come and gone had it been shown the moment it arrived. The ordinary wait
-/// is the ~150 ms of a Dialog exit animation.
-const kDoorbellDeferredDingWindow = kDoorbellPopupDeadline;
 
 /// Opens the Popup nobody asked for: the one widget in the Panel allowed to
 /// push a route on the Hub's say-so.
@@ -132,28 +115,6 @@ class DoorbellPopupHost extends StatefulWidget {
 class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
   late StreamSubscription<Device> _sub;
 
-  /// Doorbells whose ding landed while that same doorbell's Popup was still
-  /// tearing its stream down, by Device id.
-  ///
-  /// A ding in that window must not push: `showDialog`'s future completes when
-  /// the pop is *requested*, and for the ~150 ms of the exit animation after
-  /// it the old Popup is still mounted with its go2rtc session open, so a
-  /// second Popup would be a second live consumer on the same stream. Nor may
-  /// it be dropped on the spot — somebody is at the door. So it waits for
-  /// [whenDevicePopupGone] and is offered again then, and it waits with a
-  /// clock running: see [kDoorbellDeferredDingWindow].
-  ///
-  /// Rejected: a single `_open` flag for the whole House. It could not tell
-  /// two doorbells apart, and it could not see a Popup a *person* opened on
-  /// this same doorbell — the case where a second session on one stream is
-  /// most likely and least visible. Rejected too: draining this from the
-  /// `onGone` this host passes to its own Popups, which is what it used to
-  /// do — that hears nothing about the Popup a person opens by tapping the
-  /// pin, so a ding deferred behind *that* was swallowed outright and then
-  /// redeemed by the next host-pushed Popup's teardown, minutes later, on top
-  /// of something unrelated.
-  final _waiting = <String, _DeferredDing>{};
-
   @override
   void initState() {
     super.initState();
@@ -176,13 +137,12 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
   @override
   void dispose() {
     _sub.cancel();
-    // A pending Timer outliving the tree fails a widget test by itself, and
-    // on the wall it would be a kiosk shutdown holding a Device the Panel no
-    // longer has anything to do with.
-    for (final deferred in _waiting.values) {
-      deferred.expiry.cancel();
-    }
-    _waiting.clear();
+    // The claim outlives this host — it outlives every route — so a ding of
+    // ours still waiting for its turn would keep a clock running for a
+    // listener that is gone, which fails a widget test by itself and on the
+    // wall is a kiosk shutdown holding a Device the Panel no longer has
+    // anything to do with.
+    popupClaim.abandon(this);
     super.dispose();
   }
 
@@ -195,18 +155,49 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
     // on a dead State during a kiosk shutdown, and the cost of the check is
     // a field read.
     if (!mounted) return;
-    // Asked about *this doorbell*, not about "is a Popup up". A Popup showing
-    // some other Device is no reason to swallow this ding; a Popup showing
-    // this one is, however it got there.
-    switch (extendDevicePopup(doorbell.id)) {
-      case DevicePopupExtension.extended:
+    // One acquire per ding, and it asks about *this doorbell* rather than
+    // "is a Popup up": a Popup showing some other Device is no reason to
+    // swallow this ding; a Popup showing this one is, however it got there —
+    // including one a person opened by tapping the pin, which this host did
+    // not push and has no other way to hear about.
+    //
+    // Everything the host used to own to make that answer true — a deferral
+    // map keyed by doorbell, its expiry Timers, the gone-waiter armed only
+    // after a `leaving`, the post-frame redemption — is behind [acquire] now.
+    // What is left here is what a ding *means*, which is this file's own.
+    _answer(
+      doorbell,
+      popupClaim.acquire(
+        doorbell.id,
+        owner: this,
+        onVerdict: (verdict) => _answer(doorbell, verdict),
+      ),
+    );
+  }
+
+  /// What the claim's answer means for a doorbell — the journal vocabulary
+  /// and the push, neither of which the claim knows about.
+  ///
+  /// Called with the immediate answer, and again later on [Wait] alone.
+  void _answer(Device doorbell, ClaimAnswer verdict) {
+    // A verdict is the one thing here that can arrive after the ding that
+    // asked for it has been dealt with — a frame later, or thirty seconds.
+    // `dispose` abandons the wait, so today nothing can reach this with the
+    // host gone; the check stays because what is behind it reaches for
+    // `context`, and `Navigator.of` on an unmounted State is a framework
+    // error rather than a no-op.
+    if (!mounted) return;
+    switch (verdict) {
+      case Claim():
+        _push(doorbell);
+      case Extended():
         // Extend, never re-push. Phase-3 §3 measures Ring stream spin-up at
         // 2-5 s, so tearing the Popup down and opening a new one would black
         // the wall out for seconds at the exact moment somebody is at the
         // door — and a second stacked modal would leave two things to dismiss
         // on a screen with no keyboard.
         Log.debug('popup', 'doorbell_extended', {'device': doorbell.id});
-      case DevicePopupExtension.held:
+      case Held():
         // A person already has this doorbell's camera up. They are looking at
         // the picture this ding would have opened, so opening a second
         // session on the same stream would buy nothing and cost the one thing
@@ -215,64 +206,34 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
         // whoever went and tapped it.
         Log.debug('popup', 'doorbell_held',
             {'device': doorbell.id, 'reason': 'person_opened'});
-      case DevicePopupExtension.leaving:
-        _defer(doorbell);
-      case DevicePopupExtension.none:
-        _push(doorbell);
+      case Wait():
+        // The Popup on the wall for this doorbell is already leaving, so its
+        // go2rtc session is open for the ~150 ms of the exit animation and a
+        // second Popup now would be a second consumer on the one stream. The
+        // ding is not lost — the claim offers it again when the Device comes
+        // free.
+        Log.debug('popup', 'doorbell_deferred',
+            {'device': doorbell.id, 'reason': 'stream_closing'});
+      case Dropped(:final waited):
+        // A ding is a real-time event: the Popup it opens is a claim that
+        // somebody is at the door *now*. Redeemed minutes later it opens a
+        // live Ring session and a picture of an empty porch, on top of
+        // whatever is on the wall by then, with nothing behind it that anyone
+        // can act on — and #177014 says that session can suppress the *next*
+        // real ding, so a stale redemption does not merely mislead, it can
+        // deafen the doorbell for the press that matters.
+        //
+        // Warn, not debug: this is the one path where somebody pressed the
+        // bell and the wall never says so, which is the failure with no
+        // symptom of its own. Reachable while a Popup past its ceiling cannot
+        // pop itself because another route is stacked on top of it — see
+        // `device_popup.dart`'s `dismiss_blocked`.
+        Log.warn('popup', 'doorbell_dropped', {
+          'device': doorbell.id,
+          'reason': 'popup_never_closed',
+          'waited_s': waited.inSeconds,
+        });
     }
-  }
-
-  /// Holds a ding until the Device's Popup — whoever pushed it — is gone,
-  /// or until it is too old to be worth showing.
-  void _defer(Device doorbell) {
-    // One per doorbell: two dings inside one ~150 ms exit animation are one
-    // visitor leaning on the button, and they would have opened one Popup
-    // between them. The newer one replaces the older, clock and all, because
-    // the wait that matters is the wait since the last press.
-    _waiting.remove(doorbell.id)?.expiry.cancel();
-    _waiting[doorbell.id] = _DeferredDing(
-      doorbell,
-      expiry: Timer(kDoorbellDeferredDingWindow, () => _dropStale(doorbell.id)),
-    );
-    // Asked of the registry, not of the Popup this host happens to have
-    // pushed: the Popup being waited on is as often one a person opened by
-    // tapping the pin, and that one was pushed by `dollhouse_view`, which
-    // knows nothing about dings.
-    whenDevicePopupGone(doorbell.id, () => _redeem(doorbell.id));
-    Log.debug('popup', 'doorbell_deferred',
-        {'device': doorbell.id, 'reason': 'stream_closing'});
-  }
-
-  /// The Device has no Popup at all any more, so the stream is free.
-  void _redeem(String deviceId) {
-    final waiting = _waiting.remove(deviceId);
-    if (waiting == null) return;
-    waiting.expiry.cancel();
-    if (!mounted) return;
-    // Next frame, not now: this is running inside a Popup's `dispose`, and
-    // pushing a route mid-teardown is a framework error rather than a race.
-    // Back through `_onRing` rather than straight to `_push`, so the deferred
-    // ding is judged against whatever is on the wall by then.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _onRing(waiting.doorbell);
-    });
-  }
-
-  /// The Popup it was waiting behind outlasted the ding.
-  ///
-  /// Warn, not debug: this is the one path where somebody pressed the bell
-  /// and the wall never says so, which is the failure with no symptom of its
-  /// own. Reachable while a Popup past its ceiling cannot pop itself because
-  /// another route is stacked on top of it — see `device_popup.dart`'s
-  /// `dismiss_blocked`.
-  void _dropStale(String deviceId) {
-    if (_waiting.remove(deviceId) == null) return;
-    Log.warn('popup', 'doorbell_dropped', {
-      'device': deviceId,
-      'reason': 'popup_never_closed',
-      'waited_s': kDoorbellDeferredDingWindow.inSeconds,
-    });
   }
 
   void _push(Device doorbell) {
@@ -297,10 +258,10 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
   /// Runs from the Popup's own `dispose`, so the go2rtc session behind it is
   /// already closed by the time anything here decides what to do next.
   ///
-  /// Logging only. What a deferred ding waits on is [whenDevicePopupGone],
-  /// which answers about the *Device* — this one answers about the Popup this
-  /// host pushed, which is the right scope for a line that says the Popup
-  /// this host pushed has gone and no scope at all for the other job.
+  /// Logging only. What a deferred ding waits on is the claim, which answers
+  /// about the *Device* — this one answers about the Popup this host pushed,
+  /// which is the right scope for a line that says the Popup this host pushed
+  /// has gone and no scope at all for the other job.
   void _onPopupGone(Device doorbell) {
     // No `reason=`, though the plan's line list asked for `reason=timeout`.
     // This host cannot tell the deadline firing from a hand on the glass: all
@@ -311,11 +272,3 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
   }
 }
 
-/// A ding with nowhere to go yet, and the clock that stops it waiting
-/// forever — see [kDoorbellDeferredDingWindow].
-class _DeferredDing {
-  _DeferredDing(this.doorbell, {required this.expiry});
-
-  final Device doorbell;
-  final Timer expiry;
-}

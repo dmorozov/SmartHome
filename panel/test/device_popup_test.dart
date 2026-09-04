@@ -8,6 +8,7 @@ import 'package:panel/domain/house.dart';
 import 'package:panel/ui/device_popup.dart';
 import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/device_presentation.dart';
+import 'package:panel/ui/popup_claim.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/live_video_keepalive.dart';
 import 'package:panel/ui/video/snapshot.dart';
@@ -47,6 +48,10 @@ LiveVideoSession noPlayer(Uri url, {required String name}) =>
 void main() {
   late List<LogRecord> records;
 
+  /// Whoever is pressing the bell in these cases — the claim wants an owner
+  /// so one caller's teardown cannot drop another's request.
+  final ringer = Object();
+
   setUp(() {
     records = <LogRecord>[];
     Log.sink = records.add;
@@ -56,7 +61,24 @@ void main() {
   tearDown(() {
     Log.sink = Log.printRecord;
     Log.level = LogLevel.warn;
+    // A `Wait` answer below leaves a 30 s clock on the wall's shared claim,
+    // exactly as a real deferred ding does. `DoorbellPopupHost` drops its own
+    // from `dispose`; this stands in for that, and a case that never waited
+    // pays nothing for it.
+    popupClaim.abandon(ringer);
   });
+
+  /// A second reason to open [deviceId]'s Popup, asked the way
+  /// `DoorbellPopupHost` asks it: one `acquire` against the claim the whole
+  /// wall shares. The verdict callback is a no-op because nothing here pushes
+  /// a Popup on redemption — what these cases pin is what the Popup on the
+  /// wall *says*, and the choreography behind a deferred one is
+  /// `popup_claim_test.dart`'s.
+  ClaimAnswer ring(String deviceId) => popupClaim.acquire(
+        deviceId,
+        owner: ringer,
+        onVerdict: (_) {},
+      );
 
   Iterable<LogRecord> popupLines(String event) =>
       records.where((r) => r.area == 'popup' && r.event == event);
@@ -561,7 +583,7 @@ void main() {
     );
 
     await tester.pump(const Duration(seconds: 20));
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.extended);
+    expect(ring('cam-porch'), isA<Extended>());
     await tester.pump(const Duration(seconds: 20));
 
     // Past the first deadline, and still the same session: a repush would
@@ -596,7 +618,7 @@ void main() {
       elapsed += const Duration(seconds: 25)
     ) {
       await tester.pump(const Duration(seconds: 25));
-      if (extendDevicePopup('cam-porch') == DevicePopupExtension.extended) {
+      if (ring('cam-porch') is Extended) {
         extensions++;
       }
     }
@@ -613,7 +635,7 @@ void main() {
     });
     // And once it is closed it is closed: the Popup is gone, so a later
     // reason finds nothing to extend and its caller has to push a fresh one.
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
+    expect(ring('cam-porch'), isA<Claim>());
   });
 
   testWidgets('a route stacked on top does not leave the Popup with no '
@@ -688,7 +710,7 @@ void main() {
     navigator.pop();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.extended);
+    expect(ring('cam-porch'), isA<Extended>());
 
     await tester.pump(const Duration(seconds: 2));
     expect(find.byKey(const ValueKey('popup-close')), findsOneWidget,
@@ -770,10 +792,10 @@ void main() {
     // Popup waiting to leave rather than one that has been given a new lease.
     for (var i = 0; i < 8; i++) {
       await tester.pump(const Duration(seconds: 25));
-      extendDevicePopup('cam-porch');
+      ring('cam-porch');
     }
 
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.leaving);
+    expect(ring('cam-porch'), isA<Wait>());
     expect(popupLines('deadline_ceiling'), hasLength(1));
 
     navigator.pop();
@@ -795,7 +817,7 @@ void main() {
       video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
     );
 
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.held);
+    expect(ring('cam-porch'), isA<Held>());
 
     await tester.pump(const Duration(minutes: 10));
 
@@ -854,7 +876,7 @@ void main() {
 
     expect(cameraLines('popup_closed'), isEmpty);
     // Answered, not thrown — and answered `none`, so the next ding pushes.
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
+    expect(ring('cam-porch'), isA<Claim>());
 
     final healthy = FakeGo2rtc();
     await openPopup(
@@ -872,7 +894,7 @@ void main() {
     // doorbell host consults the registry first — so this is what keeps that
     // a fact about the wall rather than a requirement on every future caller.
     // With one slot per Device the newer registration overwrote the older and
-    // the newer teardown cleared the slot, so `extendDevicePopup` answered
+    // the newer teardown cleared the slot, so the claim answered
     // `none` about a Device with a Dialog up and a live session behind it,
     // and a caller acting on that answer opened a second consumer on the one
     // stream.
@@ -925,13 +947,13 @@ void main() {
     expect(find.byType(Dialog), findsOneWidget);
     // The answer a caller acts on: there is a Popup, a person opened it, do
     // not open a second session on the stream it is already playing.
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.held);
+    expect(ring('cam-porch'), isA<Held>());
 
     await tester.tap(find.byKey(const ValueKey('popup-close')));
     await tester.pumpAndSettle();
 
     expect(go2rtc.opened.first.closes, 1);
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
+    expect(ring('cam-porch'), isA<Claim>());
   });
 
   testWidgets('a Popup already popping cannot be extended, so nobody opens a '
@@ -950,12 +972,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 20));
 
     expect(go2rtc.only.closes, 0);
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.leaving);
+    expect(ring('cam-porch'), isA<Wait>());
 
     await tester.pumpAndSettle();
 
     expect(go2rtc.only.closes, 1);
-    expect(extendDevicePopup('cam-porch'), DevicePopupExtension.none);
+    expect(ring('cam-porch'), isA<Claim>());
   });
 
   group('through the keep-alive', () {
@@ -1084,7 +1106,7 @@ void main() {
       // ceiling — the `kDoorbellPopupCeiling` scenario.
       for (var i = 0; i < 8; i++) {
         await tester.pump(const Duration(seconds: 15));
-        extendDevicePopup('cam-porch');
+        ring('cam-porch');
       }
       await tester.pumpAndSettle();
 

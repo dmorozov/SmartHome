@@ -3,11 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/diagnostics/log.dart';
 import 'package:panel/domain/device_state.dart';
 import 'package:panel/ui/doorbell_popup_host.dart';
+import 'package:panel/ui/popup_claim.dart';
 import 'package:panel/ui/video/live_video.dart';
 
 import 'fixtures.dart';
 import 'support/fake_go2rtc.dart';
 import 'test_house.dart';
+
+/// A Popup on the wall that is always on its way out, so nothing can ever
+/// free the Device it shows. Stands in for the one state a deferred ding can
+/// wait in indefinitely, without needing a route stuck under another route to
+/// produce it.
+class _NeverLeaves implements PopupStayer {
+  @override
+  StayVerdict stayUp() => StayVerdict.leaving;
+}
 
 /// The Popup nobody asked for: the whole path from a Hub message to a live
 /// view on the wall, staged through FakeHub's driving surface — the same
@@ -314,7 +324,7 @@ void main() {
     await tester.pump();
     expect(popupLines('doorbell_deferred'), hasLength(1));
 
-    await tester.pump(kDoorbellDeferredDingWindow + const Duration(seconds: 1));
+    await tester.pump(kPopupClaimWindow + const Duration(seconds: 1));
 
     // Warn, because this is the one path where somebody pressed the bell and
     // the wall never says so — the failure with no symptom of its own.
@@ -323,7 +333,7 @@ void main() {
     expect(dropped.fields, {
       'device': 'doorbell',
       'reason': 'popup_never_closed',
-      'waited_s': kDoorbellDeferredDingWindow.inSeconds,
+      'waited_s': kPopupClaimWindow.inSeconds,
     });
 
     navigator.pop();
@@ -337,5 +347,44 @@ void main() {
     expect(go2rtc.opened, hasLength(1));
     expect(go2rtc.only.closes, 1);
     expect(popupLines('doorbell'), hasLength(1));
+  });
+
+  testWidgets('a ding still waiting for its turn when the Panel goes down '
+      'takes its clock with it', (tester) async {
+    // The claim is one object for the whole wall and outlives every route, so
+    // a request this host leaves waiting in it is not collected with the
+    // tree — the host has to hand it back.
+    final (controller, hub) = fakeHubRig(
+        house: houseWithStream(loadTestHouse(), 'doorbell', 'ring_doorbell'));
+    await tester.pumpWidget(panelApp(controller,
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: FakeGo2rtc().open)));
+
+    // A Popup for this doorbell that is on its way out and stays that way, so
+    // the Device never comes free and the claim's own redemption — the thing
+    // that takes the clock off on every ordinary path — never gets its turn.
+    // That is the shape of a kiosk shutdown: the frame that would have
+    // redeemed the ding is the frame that never comes.
+    final stuck = _NeverLeaves();
+    popupClaim.register('doorbell', stuck);
+
+    hub.pushState(const StatusState('doorbell', 'off'));
+    await tester.pump();
+    hub.pushState(const StatusState('doorbell', 'on'));
+    await tester.pump();
+    expect(popupLines('doorbell_deferred'), hasLength(1));
+
+    // Down goes the Panel, with the ding still waiting.
+    //
+    // The stand-in has to be taken off the shared claim from a `tearDown` and
+    // not from here: the harness checks for pending Timers before it runs
+    // those, and deregistering inside the case would redeem the ding on the
+    // next frame and take the clock off — cancelling the very leak this is
+    // here to catch.
+    addTearDown(() => popupClaim.deregister('doorbell', stuck));
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    // Nothing more to assert than the harness's own verdict: a Timer still
+    // pending once the tree is gone fails this case by itself, and that is
+    // precisely what a request nobody handed back would leave behind.
   });
 }
