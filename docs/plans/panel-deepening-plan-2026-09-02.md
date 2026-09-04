@@ -1005,15 +1005,48 @@ could hold a ding well past the 30 s that exists to say when it went stale.
 `_redeem` now returns without touching the clock when it finds another `Wait`;
 that Popup's own deregistration brings it back.
 
-**Proof.** A 12-mutation sweep, all killed: `deregister` clearing the whole
+**What the review changed.** 27 findings, 21 refuted, 6 confirmed (two of them
+the same over-long doc line seen by two lenses). Two were real defects:
+
+- **A Popup *arriving* did not re-offer a waiting request.** The request was
+  re-judged only when the Device's list went empty, so a ding deferred behind a
+  closing Popup while somebody tapped that same camera's pin sat out the whole
+  30 s window behind a wall showing the very camera it wanted — and was then
+  dropped as `popup_never_closed`, which was true of nothing. `register` calls
+  `_reoffer` now, and `deregister` calls it unconditionally rather than only at
+  the empty edge. The frame's delay was already there and is load-bearing twice
+  over: a Popup asked during its own `initState` answers `leaving` about
+  itself, because `_route` is looked up in `didChangeDependencies`. This is not
+  a regression the phase introduced — `_goneWaiters` drained on the same empty
+  edge and the old `_dropStale` wrote the same false warn.
+- **`_redeem`'s `identical` guard was unpinned.** Two Popups closing and two
+  dings landing in one frame queue two offers against one Device, the first
+  holding a request already thrown away. Without the guard both are answered:
+  two `Claim`s for one free Device, and `_push` has no de-dup of its own. The
+  case is in the suite now, and it kills both the deletion and the weaker
+  `_waiting[deviceId] == null` form — the latter only via the pending-Timer
+  assertion, since it answers the stale request and abandons the live one's
+  clock.
+
+Three were prose or hygiene: the redemption is the end of the *current* frame,
+not the next one (three comments); a re-worded doc paragraph left a 119-column
+line; and a `claim.abandon('host')` in one unit case was a no-op that made the
+`pendingTimers` assertion after it unable to fail. `device_popup_test`'s
+`tearDown(abandon(ringer))` was measured with the same question and removed for
+the same reason — every case that draws a `Wait` settles the tree, which takes
+the clock off, and one that did not should fail on the harness's pending-Timer
+check rather than be tidied up.
+
+**Proof.** A 15-mutation sweep, all killed: `deregister` clearing the whole
 stack, `_judge` iterating oldest-first, `Wait`→`Claim`, the redemption
 answering a still-leaving wall, the redemption answering `Claim` blind, the
 redemption running inline instead of next-frame, `acquire` not cancelling the
 older clock, `abandon` ignoring the owner, the Popup never registering, the
 Popup never deregistering, the host never abandoning, the host pushing on a
-`Wait`.
+`Wait`, the stale-request guard deleted, that guard weakened to a null check,
+and `register` not re-offering.
 
-The last of those needed a case built for it. Every ordinary teardown redeems
+The host's `abandon` needed a case built for it. Every ordinary teardown redeems
 the waiting request on the way out and takes its clock off, so the host's
 `abandon` looked unreachable until a case held a Device permanently
 `leaving` — `doorbell_popup_test.dart`'s `_NeverLeaves` — and let the Panel go

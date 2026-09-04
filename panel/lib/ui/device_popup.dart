@@ -30,10 +30,10 @@ import 'video/timed_feed.dart';
 /// yank the camera away from whoever deliberately went and tapped it. Only
 /// the Popup that opened *unprompted* gets a deadline, and [PopupClaim] is
 /// how a second reason to open it restarts that deadline instead of tearing
-/// the stream down and paying the 2-5 s Ring spin-up again. [dismissCeiling] is how long that extending may go on for,
-/// counted from when this Popup opened rather than from the last extension —
-/// without it a reason arriving more often than [dismissAfter] keeps one
-/// session alive forever.
+/// the stream down and paying the 2-5 s Ring spin-up again. [dismissCeiling]
+/// is how long that extending may go on for, counted from when this Popup
+/// opened rather than from the last extension — without it a reason arriving
+/// more often than [dismissAfter] keeps one session alive forever.
 ///
 /// [onGone] fires from the Popup's `dispose`, so by the time it runs the live
 /// session really is closed. Rejected: the returned Future, which completes
@@ -480,9 +480,10 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     final id = widget.presentation.device.id;
     // First, where an entry left behind by a throw further down would leave
     // this Device permanently deaf. Anything the claim releases by this is
-    // answered on the *next frame*, so the ordering that matters — nobody is
-    // told the stream is free until it really is — is kept by the frame
-    // boundary rather than by this statement's position.
+    // answered at the END OF THIS FRAME — after every statement below, and
+    // after every other `dispose` the same teardown runs — so the ordering
+    // that matters, nobody being told the stream is free until it really is,
+    // is kept by the frame boundary rather than by this statement's position.
     popupClaim.deregister(id, this);
     _dismissRetry?.cancel();
     _idle.prompting.removeListener(_onPrompting);

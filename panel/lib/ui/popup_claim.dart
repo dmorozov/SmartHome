@@ -116,7 +116,7 @@ const kPopupClaimWindow = Duration(seconds: 30);
 /// **What the caller no longer has to know.** Two invariants used to live in
 /// prose at the call site and nowhere in the types: "arm the gone-waiter
 /// only after being told `leaving`, or it is redeemed by the *next* Popup
-/// minutes later", and "redeem on the next frame, not now, because you are
+/// minutes later", and "redeem a frame late, not now, because you are
 /// inside a Popup's `dispose` and pushing a route mid-teardown is a
 /// framework error". Both are inside [acquire] now. The caller switches on
 /// a sealed answer.
@@ -161,8 +161,16 @@ class PopupClaim {
   /// last, once nothing left in it can throw: an entry claimed before the
   /// risky part outlives the widget tree and nothing can ever remove it, and
   /// that Device is then permanently deaf.
-  void register(String deviceId, PopupStayer popup) =>
-      _showing.putIfAbsent(deviceId, () => []).add(popup);
+  void register(String deviceId, PopupStayer popup) {
+    _showing.putIfAbsent(deviceId, () => []).add(popup);
+    // A Popup ARRIVING is news for a request waiting on this Device just as
+    // much as the last one leaving is: it was waiting for somebody's Popup to
+    // stop closing, and this is a Popup that is not. Without this it waits out
+    // the whole window behind a Device whose camera is on the wall in front of
+    // a person, and is then dropped as `popup_never_closed` — a warn that is
+    // not true.
+    _reoffer(deviceId);
+  }
 
   /// Deregister it, by identity and only this one entry: two Popups for one
   /// Device are a stack, and the newer one leaving must not deregister the
@@ -171,24 +179,22 @@ class PopupClaim {
   /// From the State's `dispose`, first, where an entry left behind by a throw
   /// further down would leave that Device permanently deaf. Ordering against
   /// the rest of the teardown is not this call's problem: any request this
-  /// releases is answered on the next frame, which is after every statement
-  /// of every `dispose` in the frame that removed the route — so a waiting
+  /// releases is answered at the end of the frame that removed the route,
+  /// which is after every statement of every `dispose` in it — so a waiting
   /// request still meets a stream that really is closed.
   void deregister(String deviceId, PopupStayer popup) {
     final showing = _showing[deviceId];
     showing?.remove(popup);
-    if (showing != null && showing.isNotEmpty) return;
-    // Nothing is left on the wall for this Device, so its stream is free.
-    _showing.remove(deviceId);
-    _redeem(deviceId);
+    if (showing == null || showing.isEmpty) _showing.remove(deviceId);
+    _reoffer(deviceId);
   }
 
   /// May [owner] open a Popup for [deviceId] right now?
   ///
   /// Answers immediately. On [Wait] — and only then — [onVerdict] is called
-  /// later with a fresh answer: the Device coming free is re-judged against
-  /// whatever is on the wall by then, on the next frame, or the request is
-  /// [Dropped] once it has waited [window].
+  /// later with a fresh answer: every change to what is showing this Device
+  /// is re-judged against the wall as it stands a frame later, or the request
+  /// is [Dropped] once it has waited [window].
   ///
   /// One waiting request per Device: two dings inside one ~150 ms exit
   /// animation are one visitor leaning on the button, and they would have
@@ -253,12 +259,21 @@ class PopupClaim {
     return const Wait();
   }
 
-  /// The Device has no Popup at all any more, so the stream is free.
-  void _redeem(String deviceId) {
+  /// What is showing this Device has changed — offer any request waiting on
+  /// it the wall as it now stands.
+  ///
+  /// A frame late, not now: this runs inside a Popup's `initState` or its
+  /// `dispose`, and pushing a route from either is a framework error rather
+  /// than a race. That is the *end of the current frame* when the change
+  /// happened inside one, which is every ordinary path, and the next frame
+  /// otherwise; either way it is after every `dispose` in that frame, which
+  /// is the ordering that matters. A Popup that has only just registered
+  /// needs the wait for a second reason: its route is looked up in
+  /// `didChangeDependencies`, so asked during its own `initState` it would
+  /// answer [StayVerdict.leaving] about itself.
+  void _reoffer(String deviceId) {
     final waiting = _waiting[deviceId];
     if (waiting == null) return;
-    // Next frame, not now: this runs inside a Popup's `dispose`, and pushing
-    // a route mid-teardown is a framework error rather than a race.
     nextFrame(() {
       // Still the same request? Its clock running out, its owner abandoning
       // it, and a newer request replacing it are all `_waiting` no longer
@@ -269,11 +284,11 @@ class PopupClaim {
       // whatever is on the wall by the time it is offered — including a Popup
       // that opened while it waited.
       final answer = _judge(deviceId);
-      // Including one that is on its way out too. The request keeps its place
-      // and its ORIGINAL clock: it has been waiting since the press, and
+      // And if what it meets is on its way out too, it keeps its place and
+      // its ORIGINAL clock: it has been waiting since the press, and
       // re-arming here would let a chain of closing Popups hold a request
-      // well past the window that exists to say when it went stale. That
-      // Popup's own deregistration brings us back here.
+      // well past the window that exists to say when it went stale. The next
+      // change to this Device brings us back.
       if (answer is Wait) return;
       _waiting.remove(deviceId);
       waiting.expiry.cancel();

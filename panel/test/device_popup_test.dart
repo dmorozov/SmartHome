@@ -50,6 +50,13 @@ void main() {
 
   /// Whoever is pressing the bell in these cases — the claim wants an owner
   /// so one caller's teardown cannot drop another's request.
+  ///
+  /// Nothing here abandons it. A `Wait` answer arms a 30 s clock on the wall's
+  /// shared claim exactly as a real deferred ding does, and every case that
+  /// draws one goes on to settle the tree, which redeems the request and takes
+  /// the clock off. A case that did NOT should fail loudly — the harness
+  /// checks for pending Timers — rather than be quietly tidied up by a
+  /// `tearDown`, which was measured to have nothing to do.
   final ringer = Object();
 
   setUp(() {
@@ -61,11 +68,6 @@ void main() {
   tearDown(() {
     Log.sink = Log.printRecord;
     Log.level = LogLevel.warn;
-    // A `Wait` answer below leaves a 30 s clock on the wall's shared claim,
-    // exactly as a real deferred ding does. `DoorbellPopupHost` drops its own
-    // from `dispose`; this stands in for that, and a case that never waited
-    // pays nothing for it.
-    popupClaim.abandon(ringer);
   });
 
   /// A second reason to open [deviceId]'s Popup, asked the way

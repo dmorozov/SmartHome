@@ -42,7 +42,9 @@ void main() {
     fakeAsync((async) {
       final (:claim, :frame) = rig();
 
-      expect(claim.acquire('doorbell', owner: 'host', onVerdict: (_) => fail('answered twice')),
+      expect(
+          claim.acquire('doorbell',
+              owner: 'host', onVerdict: (_) => fail('answered twice')),
           isA<Claim>());
       expect(async.pendingTimers, isEmpty,
           reason: 'only a deferred request waits, and nothing deferred');
@@ -140,8 +142,8 @@ void main() {
       claim.deregister('doorbell', older);
       frame();
       expect(verdicts, [isA<Claim>()]);
-      claim.abandon('host');
-      expect(async.pendingTimers, isEmpty);
+      expect(async.pendingTimers, isEmpty,
+          reason: 'the clock came off with the answer');
     });
   });
 
@@ -162,6 +164,62 @@ void main() {
       frame();
 
       expect(verdicts, [isA<Held>()]);
+      expect(async.pendingTimers, isEmpty);
+    });
+  });
+
+  test('a Popup ARRIVING for a Device answers a request waiting on it, rather '
+      'than leaving it to expire behind a camera that is on the wall', () {
+    fakeAsync((async) {
+      final (:claim, :frame) = rig();
+      final closing = _Stayer(StayVerdict.leaving);
+      claim.register('doorbell', closing);
+      final verdicts = <ClaimAnswer>[];
+      claim.acquire('doorbell', owner: 'host', onVerdict: verdicts.add);
+
+      // Somebody taps the doorbell's pin while the old Popup is still on its
+      // way out — so the Device never goes empty, and the request has nothing
+      // to be redeemed BY. Waiting for that edge alone, it sat out the whole
+      // window behind a wall showing the very camera it wanted, and was then
+      // dropped as `popup_never_closed`, which was not true of anything.
+      claim.register('doorbell', _Stayer(StayVerdict.held));
+      frame();
+
+      expect(verdicts, [isA<Held>()]);
+
+      async.elapse(kPopupClaimWindow + const Duration(seconds: 1));
+      expect(verdicts, hasLength(1), reason: 'answered, so never dropped');
+      expect(async.pendingTimers, isEmpty);
+    });
+  });
+
+  test('a redemption scheduled for a request that has since been replaced is '
+      'not spent on it', () {
+    fakeAsync((async) {
+      final (:claim, :frame) = rig();
+      final first = _Stayer(StayVerdict.leaving);
+      claim.register('doorbell', first);
+      final verdicts = <ClaimAnswer>[];
+      claim.acquire('doorbell', owner: 'host', onVerdict: verdicts.add);
+
+      // Two Popups close and two dings land inside one frame, so two offers
+      // are queued against a Device that has only ever had one request — and
+      // the first of them is holding a request that has since been thrown
+      // away, clock and all.
+      claim.deregister('doorbell', first);
+      final second = _Stayer(StayVerdict.leaving);
+      claim.register('doorbell', second);
+      claim.acquire('doorbell', owner: 'host', onVerdict: verdicts.add);
+      claim.deregister('doorbell', second);
+      frame();
+
+      // One press, one answer. Answering the superseded request as well hands
+      // the host two `Claim`s for one free Device, and `_push` has no de-dup
+      // of its own — that is two Ring sessions and two stacked modals.
+      expect(verdicts, [isA<Claim>()]);
+      // And the clock that came with the request that WAS answered is the one
+      // taken off: answering the stale one cancels a Timer already cancelled
+      // and leaves the live one running.
       expect(async.pendingTimers, isEmpty);
     });
   });
