@@ -1,8 +1,9 @@
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/ui/video/stream_director.dart';
 import 'package:panel/ui/video/timed_feed.dart';
+
+import 'support/fake_feed.dart';
 
 /// The Popup's clocks, tested through their own interface — the widget
 /// suites drive them end to end (`device_popup_test.dart`, the deadline and
@@ -12,46 +13,12 @@ import 'package:panel/ui/video/timed_feed.dart';
 /// The `linger < deadline` inequality is deliberately NOT here: it is a
 /// relation between the pool's constant and the host's, and it stays with
 /// them (`live_video_keepalive_test.dart`).
-class _RecordingFeed implements CameraFeed {
-  final calls = <String>[];
-  var released = false;
-
-  @override
-  final ValueNotifier<FeedPhase> phase = ValueNotifier(FeedPhase.connecting);
-
-  @override
-  String? failure;
-
-  @override
-  Widget get view => const SizedBox.shrink();
-
-  @override
-  set visible(bool value) => calls.add('visible=$value');
-
-  @override
-  final ValueNotifier<int> retryAttempt = ValueNotifier(0);
-
-  @override
-  Reachability get reachability => Reachability.unknown;
-
-  @override
-  void setMuted(bool muted) => calls.add('setMuted=$muted');
-
-  @override
-  void start() => calls.add('start');
-
-  @override
-  void release() {
-    released = true;
-    calls.add('release');
-  }
-}
 
 void main() {
   test('no deadline means no clocks at all — D14\'s person-opened Popup, '
       'and extend has nothing to restart', () {
     fakeAsync((async) {
-      final inner = _RecordingFeed();
+      final inner = FakeFeed();
       var fired = 0;
       final timed = TimedFeed(inner,
           // A ceiling without a deadline caps nothing and arms nothing.
@@ -69,7 +36,7 @@ void main() {
   test('the deadline arms at construction, fires once per armed stretch, '
       'and extend restarts it from zero', () {
     fakeAsync((async) {
-      final inner = _RecordingFeed();
+      final inner = FakeFeed();
       var deadlines = 0;
       final timed = TimedFeed(inner,
           deadline: const Duration(seconds: 30),
@@ -88,7 +55,7 @@ void main() {
   test('the ceiling fires once, counted from construction however many '
       'extensions land, stops the deadline for good and refuses extend', () {
     fakeAsync((async) {
-      final inner = _RecordingFeed();
+      final inner = FakeFeed();
       var deadlines = 0;
       var ceilings = 0;
       final timed = TimedFeed(inner,
@@ -116,7 +83,7 @@ void main() {
   test('release cancels both clocks — no Timer outlives the surface — and '
       'releases the feed under it, idempotently', () {
     fakeAsync((async) {
-      final inner = _RecordingFeed();
+      final inner = FakeFeed();
       final timed = TimedFeed(inner,
           deadline: const Duration(seconds: 30),
           ceiling: const Duration(minutes: 2),
@@ -136,12 +103,14 @@ void main() {
 
   test('the feed passes through untimed — the decorator adds clocks, '
       'never opinions', () {
-    final inner = _RecordingFeed();
+    final inner = FakeFeed();
     final timed = TimedFeed(inner,
         onDeadline: () {}, onCeiling: () {});
     expect(timed.phase, same(inner.phase));
     expect(timed.retryAttempt, same(inner.retryAttempt));
-    expect(timed.reachability, Reachability.unknown);
+    expect(timed.stillGrabAllowed, isTrue);
+    inner.stillGrabAllowed = false;
+    expect(timed.stillGrabAllowed, isFalse, reason: 'read through, not cached');
     timed.setMuted(false);
     timed.start();
     timed.visible = false;

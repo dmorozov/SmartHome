@@ -103,7 +103,7 @@ class TimedFeed implements CameraFeed {
   ValueListenable<int> get retryAttempt => _inner.retryAttempt;
 
   @override
-  Reachability get reachability => _inner.reachability;
+  bool get stillGrabAllowed => _inner.stillGrabAllowed;
 
   @override
   void start() => _inner.start();

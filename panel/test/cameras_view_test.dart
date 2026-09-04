@@ -73,11 +73,17 @@ void main() {
   /// [opener] replaces the raw fake for the one case that needs something
   /// *between* the tiles and it — the keep-alive. Everything else drives
   /// [go2rtc] directly, because what it asserts is the tile's own lifecycle.
+  ///
+  /// [health] rides into the fixture's Director. [director] is for the case
+  /// that needs the handle itself (to flip `overlaid`); it then brings its
+  /// opener inside, and this rig's go2rtc default is not built at all — the
+  /// `auto_live` count and every dial read the Director's own VideoConfig.
   Future<void> pumpPanel(
     WidgetTester tester, {
     String? autoLiveStream,
     LiveVideoOpener? opener,
     VideoConfig? video,
+    CameraHealthSource? health,
     Go2rtcStillsConfig? stills,
     StreamDirector? director,
     House Function(House house)? stage,
@@ -98,11 +104,14 @@ void main() {
     await tester.pumpWidget(
       panelApp(
         controller,
-        video: video ??
-            VideoConfig(
-              go2rtcUrl: 'http://hub:1984',
-              open: opener ?? go2rtc.open,
-            ),
+        video: director != null
+            ? const VideoConfig()
+            : video ??
+                VideoConfig(
+                  go2rtcUrl: 'http://hub:1984',
+                  open: opener ?? go2rtc.open,
+                ),
+        health: health,
         snapshots: SnapshotConfig(
           haUrl: 'http://hub:8123',
           token: 'tok',
@@ -325,12 +334,12 @@ void main() {
     (tester) async {
       final stills = FakeSnapshots();
       final health = FakeHealth();
-      final director =
-          StreamDirector(video: const VideoConfig(), health: health);
-      addTearDown(director.dispose);
+      // Health rides into the fixture's Director; go2rtc-for-video stays
+      // unconfigured so the feed parks where health never moves it.
       await pumpPanel(
         tester,
-        director: director,
+        video: const VideoConfig(),
+        health: health,
         stills: Go2rtcStillsConfig(
           go2rtcUrl: 'http://hub:1984',
           fetch: stills.fetch,
@@ -898,8 +907,10 @@ void main() {
       closed.fields?['live'],
       1,
       reason:
-          'children unmount first — a census drained by tile '
-          'dispose always read 0 here, and 0 is what this guards against',
+          'the count is read off the Director at deactivate(), parent-first, '
+          'while the tile\'s feed is still attached — read at dispose(), after '
+          'the children released theirs, it is 0, and 0 is what this guards '
+          'against',
     );
     await unmount(tester);
   });
@@ -923,8 +934,10 @@ void main() {
     expect(
       closed.fields?['live'],
       0,
-      reason: 'the live tile died at zoom-in; carrying its census entry '
-          'through the zoom logged a stream the teardown never released',
+      reason: 'the live tile\'s feed was released at zoom-in, so the Director '
+          'no longer counts it; the hand-kept set once carried its entry '
+          'through the zoom and logged a stream the teardown never released '
+          '(handoff D6)',
     );
     await unmount(tester);
   });
@@ -992,6 +1005,105 @@ void main() {
       );
       // Already playing, so the grid has its picture back on the first frame.
       expect(find.text('a moving picture'), findsOneWidget);
+
+      await unmount(tester);
+      keepAlive.dispose();
+    });
+
+    testWidgets('a tile handed a lingered picture that drops back and then '
+        'dies says "Reconnecting…" — the born-playing latch is one latch, '
+        'not three', (tester) async {
+      // Until 2026-09-02 only the Popup read the born phase. A tile
+      // re-attached to a playing session (a listener never fires for the
+      // value it was born with) was still saved on a straight death by an
+      // accident of ordering — the Director climbs the count BEFORE it
+      // flips the phase, and the tile listened to the count while the phase
+      // still read playing. What it could not survive was the player
+      // dropping back to `connecting` first (the MSE rebuild after a
+      // media-element error) and then giving up: that tile wore
+      // "Connecting…" through the whole ladder, over a picture that was up.
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+      await pumpPanel(tester,
+          autoLiveStream: 'cam_living', opener: keepAlive.open);
+      await openCameras(tester);
+      go2rtc.only.plays();
+      await tester.pump();
+
+      // Zoom and back: the zoom dials its own session (the tile's is still
+      // held while the grid unmounts), and the returning grid re-attaches
+      // the tile to the FIRST one — born playing off the pool.
+      await tester.tap(find.byKey(const ValueKey('tile-cam-living')));
+      await tester.pumpAndSettle();
+      final dialsWhileZoomed = go2rtc.opened.length;
+      await tester.tap(find.byKey(const ValueKey('cameras-close')));
+      await tester.pumpAndSettle();
+      expect(go2rtc.opened, hasLength(dialsWhileZoomed),
+          reason: 're-attached, not re-dialled');
+      expect(find.text('a moving picture'), findsOneWidget);
+
+      // Off the picture first, count still 0: nothing but the face's birth
+      // read can know it was up. (A straight playing→failed death latches
+      // on the count notification alone, which is why this case does not
+      // take that path.)
+      go2rtc.opened.first.phase.value = LiveVideoPhase.connecting;
+      await tester.pump();
+      expect(find.text('Connecting…'), findsOneWidget,
+          reason: 'a first dial\'s wait, until the ladder counts');
+
+      go2rtc.opened.first.fails('the camera stopped sending');
+      await tester.pump();
+
+      expect(find.text('Reconnecting…'), findsOneWidget,
+          reason: 'the picture was on the wall a moment ago');
+      expect(find.text('Connecting…'), findsNothing);
+
+      await unmount(tester);
+      keepAlive.dispose();
+    });
+
+    testWidgets('a zoom handed the previous zoom\'s lingered picture that '
+        'drops back and then dies counts a restoration, not a first connect',
+        (tester) async {
+      final keepAlive = LiveVideoKeepAlive(opener: go2rtc.open);
+      await pumpPanel(tester,
+          autoLiveStream: 'cam_living', opener: keepAlive.open);
+      await openCameras(tester);
+      go2rtc.only.plays();
+      await tester.pump();
+
+      // The first zoom dials its own session — the tile's is still held
+      // while the grid unmounts — and it plays.
+      await tester.tap(find.byKey(const ValueKey('tile-cam-living')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ZoomedCamera), findsOneWidget);
+      expect(go2rtc.opened, hasLength(2));
+      go2rtc.opened.last.plays();
+      await tester.pump();
+      expect(find.text('a moving picture'), findsOneWidget);
+
+      // Out and straight back in: the pool hands the second zoom the first
+      // zoom's lingered session — born playing, no dial, and a State that
+      // never saw a frame ARRIVE.
+      await tester.tap(find.byKey(const ValueKey('cameras-close')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tile-cam-living')));
+      await tester.pumpAndSettle();
+      expect(find.byType(ZoomedCamera), findsOneWidget);
+      expect(go2rtc.opened, hasLength(2), reason: 're-attached, not re-dialled');
+
+      // The same drop-back as the tile case: off `playing` before the count
+      // climbs, so only the birth read can vouch for the picture.
+      go2rtc.opened.last.phase.value = LiveVideoPhase.connecting;
+      await tester.pump();
+      expect(find.text('Connecting…'), findsOneWidget);
+
+      go2rtc.opened.last.fails('mid-watch death');
+      await tester.pump();
+
+      expect(find.text('Reconnecting… try 2'), findsOneWidget,
+          reason: 'the zoom never saw a frame arrive, but the picture it '
+              'was handed WAS up');
+      expect(find.text('Connecting… try 2'), findsNothing);
 
       await unmount(tester);
       keepAlive.dispose();

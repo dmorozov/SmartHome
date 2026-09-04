@@ -11,10 +11,12 @@ import 'package:panel/ui/device_presentation.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/live_video_keepalive.dart';
 import 'package:panel/ui/video/snapshot.dart';
+import 'package:panel/ui/video/stream_director.dart';
 
 import 'support/fake_go2rtc.dart';
 import 'support/fake_snapshots.dart';
 import 'support/fake_talk.dart';
+import 'support/hermetic_director.dart';
 
 /// The Popup's three honest bodies, and the promise that goes with the one
 /// that plays: a live session opened when the Popup opens and closed when it
@@ -79,6 +81,12 @@ void main() {
   /// Pumps a screen with one button that opens the Popup, and taps it — so
   /// the Popup is reached through `showDialog` and a real route, which is
   /// what makes the barrier and the deadline behave as they do on the wall.
+  ///
+  /// The Popup attaches to the fixture's Director over [video] — the
+  /// hermetic adapter at that seam (`support/hermetic_director.dart`), the
+  /// same shape `main()` composes. No case here passes a Director of its
+  /// own, and none needs to: what these cases assert is the Popup's side of
+  /// the seam.
   Future<void> openPopup(
     WidgetTester tester, {
     Device device = camera,
@@ -89,19 +97,23 @@ void main() {
     Duration? dismissCeiling,
   }) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showDevicePopup(
-              context,
-              presentation: DevicePresentation(device, null),
-              video: video,
-              snapshots: snapshots,
-              talk: talk,
-              dismissAfter: dismissAfter,
-              dismissCeiling: dismissCeiling,
+      HermeticDirector(
+        key: UniqueKey(),
+        video: video,
+        builder: (_, director) => MaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showDevicePopup(
+                context,
+                presentation: DevicePresentation(device, null),
+                director: director,
+                snapshots: snapshots,
+                talk: talk,
+                dismissAfter: dismissAfter,
+                dismissCeiling: dismissCeiling,
+              ),
+              child: const Text('tap the pin'),
             ),
-            child: const Text('tap the pin'),
           ),
         ),
       ),
@@ -262,6 +274,74 @@ void main() {
 
     expect(go2rtc.only.closes, 1, reason: 'nothing was left to close');
     expect(cameraLines('popup_closed'), hasLength(1));
+  });
+
+  testWidgets('a ladder re-dial held at the admission gate keeps saying '
+      '"Reconnecting" — the queued wait is the climb, not a fresh start',
+      (tester) async {
+    // A cap of one, held by a tile feed attached straight to the fixture's
+    // Director: the Popup's first dial is a person's and bypasses the cap,
+    // but its ladder re-dials take admission and park at `queued` behind
+    // it. Until 2026-09-02 the Popup's own table fell back to "Connecting
+    // to the camera…" for that wait — the mid-climb flicker the case below
+    // guards against on the connecting arm, one phase over.
+    final go2rtc = FakeGo2rtc();
+    const other = Device(
+      id: 'cam-garage',
+      name: 'Garage Camera',
+      kind: DeviceKind.camera,
+      connectivity: Connectivity.local,
+      position: Offset.zero,
+      streamName: 'garage',
+    );
+    late StreamDirector director;
+    await tester.pumpWidget(
+      HermeticDirector(
+        key: UniqueKey(),
+        video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+        policy: const DirectorPolicy(maxConcurrent: 1),
+        builder: (_, d) {
+          director = d;
+          return MaterialApp(
+            home: Builder(
+              builder: (context) => TextButton(
+                onPressed: () => showDevicePopup(
+                  context,
+                  presentation: DevicePresentation(camera, null),
+                  director: d,
+                ),
+                child: const Text('tap the pin'),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+    // The slot-holder: a tile want the Director admits at once.
+    final holder = director.attach(other, role: FeedRole.tile);
+    addTearDown(holder.release);
+    expect(go2rtc.opened, hasLength(1));
+
+    await tester.tap(find.text('tap the pin'));
+    await tester.pumpAndSettle();
+    expect(go2rtc.opened, hasLength(2), reason: 'a person dial never waits');
+    go2rtc.opened.last.plays();
+    await tester.pump();
+    expect(find.text('a moving picture'), findsOneWidget);
+
+    go2rtc.opened.last.fails('the camera stopped sending');
+    await tester.pump();
+    expect(find.text('Reconnecting to the camera…'), findsOneWidget);
+
+    // The first rung fires into a full cap: the re-dial parks at `queued`,
+    // no third session is opened — and the word holds.
+    await tester.pump(const Duration(seconds: 5, milliseconds: 100));
+    expect(go2rtc.opened, hasLength(2), reason: 'held at the gate, not dialled');
+    expect(find.text('Reconnecting to the camera…'), findsOneWidget);
+    expect(find.text('Connecting to the camera…'), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('popup-close')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a picture that dies mid-watch says the ladder is climbing, and '
@@ -799,29 +879,38 @@ void main() {
     final go2rtc = FakeGo2rtc();
     final video = VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open);
     late BuildContext wall;
+    late StreamDirector director;
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) {
-            wall = context;
-            return const SizedBox.shrink();
-          },
-        ),
+      HermeticDirector(
+        key: UniqueKey(),
+        video: video,
+        builder: (_, d) {
+          director = d;
+          return MaterialApp(
+            home: Builder(
+              builder: (context) {
+                wall = context;
+                return const SizedBox.shrink();
+              },
+            ),
+          );
+        },
       ),
     );
 
     // The older one is a person's: no deadline, so it stays until somebody
-    // closes it (D14).
+    // closes it (D14). Both Popups attach to the one Director, as on the
+    // wall — two feeds, two sessions, one census.
     showDevicePopup(
       wall,
       presentation: DevicePresentation(camera, null),
-      video: video,
+      director: director,
     );
     await tester.pumpAndSettle();
     showDevicePopup(
       wall,
       presentation: DevicePresentation(camera, null),
-      video: video,
+      director: director,
       dismissAfter: const Duration(seconds: 30),
       dismissCeiling: const Duration(minutes: 2),
     );
@@ -948,6 +1037,14 @@ void main() {
       await tester.tap(find.text('tap the pin'));
       await tester.pumpAndSettle();
       expect(go2rtc.opened, hasLength(1), reason: 're-attached, not re-dialled');
+
+      // Off the picture first: the Director climbs the count BEFORE it moves
+      // the phase, so a fail straight out of `playing` would latch the face
+      // on the count notification alone. Passing through `connecting` (the
+      // MSE rebuild after a media-element error) leaves the born value as
+      // the only way this sentence can say "re-".
+      go2rtc.only.phase.value = LiveVideoPhase.connecting;
+      await tester.pump();
 
       go2rtc.only.fails('the camera stopped sending');
       await tester.pump();

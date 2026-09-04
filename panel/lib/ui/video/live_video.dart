@@ -67,6 +67,27 @@ enum LiveVideoPhase {
 /// a browser. So every test that has an opinion about *when* a session is
 /// opened and closed drives one of these by hand.
 abstract interface class LiveVideoSession {
+  /// This session's story, one value at a time.
+  ///
+  /// **[LiveVideoPhase.unconfigured] never follows a live one.** Once a
+  /// session has been [LiveVideoPhase.connecting] or
+  /// [LiveVideoPhase.playing], it may not walk back into "nothing was ever
+  /// dialled": the Stream Director reads the phase as a story rather than a
+  /// snapshot, and maps that value to a face saying nothing is wrong and
+  /// nobody told the Panel — over a camera that was on the wall a moment
+  /// ago, which is a lie about a fault.
+  ///
+  /// **[LiveVideoPhase.unsupported] follows a live one on the web branch
+  /// alone, and only there.** `MseLiveVideoSession` is born `connecting`
+  /// because it dials its socket first, and settles `unsupported` when
+  /// `sourceopen` finds the browser will decode none of go2rtc's codecs —
+  /// the fault is on the glass, and `failed` would send an operator to look
+  /// at a healthy server. The Director tolerates it by ignoring the
+  /// transition. The dial-first players owe the stricter rule: neither
+  /// settled value may follow a live one.
+  ///
+  /// Stated here since 2026-09-03; it lived in a Director comment before,
+  /// which is not where an implementer looks.
   ValueListenable<LiveVideoPhase> get phase;
 
   /// The last failure verbatim from go2rtc, for the log — never for the
@@ -171,8 +192,9 @@ abstract interface class LiveVideoSession {
 typedef LiveVideoOpener = LiveVideoSession Function(Uri url,
     {required String name});
 
-/// Where go2rtc is and how to reach it — one value, so the Popup takes one
-/// parameter and a test can stage every scene without a `--dart-define`.
+/// Where go2rtc is and how to reach it — one value, held once by
+/// `StreamDirector.video`; every surface takes the Director, and a test can
+/// stage every scene without a `--dart-define`.
 ///
 /// Passed in rather than read from the build's dart-defines, exactly like
 /// [PanelApp.hubLabel] and for the same reason: the widget tree must know

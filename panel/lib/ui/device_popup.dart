@@ -13,7 +13,7 @@ import 'device_presentation.dart';
 import 'hub_controller.dart';
 import 'theme.dart';
 import 'thermostat_controls.dart';
-import 'video/live_video.dart';
+import 'video/camera_face.dart';
 import 'video/snapshot.dart';
 import 'video/stream_director.dart';
 import 'video/timed_feed.dart';
@@ -55,17 +55,20 @@ import 'video/timed_feed.dart';
 /// simply has none, and the Popup then says what it said before — see
 /// [_LiveVideoBox].
 ///
-/// [director] is the process-wide Stream Director, when `main()` composed
-/// one: since 2026-08-28 the Popup's live view is a MANAGED feed
-/// ([FeedRole.popup]) rather than a hand-rolled copy of the dial dance
-/// beside it. Null in hermetic fixtures — the Popup then builds its own
-/// over [video], the same policy over the same opener (the CamerasView
-/// precedent), minus the cross-surface census only the wall cares about.
+/// [director] is the Stream Director this Popup's live view attaches to:
+/// since 2026-08-28 that view is a MANAGED feed ([FeedRole.popup]) rather
+/// than a hand-rolled copy of the dial dance beside it. Required, for every
+/// body — a thermostat's never attaches, but the seam is one seam. On the
+/// wall it is `main()`'s process-wide one; in a hermetic scene the fixture
+/// builds it (`test/support/hermetic_director.dart`). There is no
+/// Popup-built fallback: one would dial the same go2rtc and play the same
+/// picture while Camera Health and the census silently stopped hearing
+/// from it (measured by the 2026-09-02 review — every Popup test ran that
+/// path).
 Future<void> showDevicePopup(
   BuildContext context, {
   required DevicePresentation presentation,
-  required VideoConfig video,
-  StreamDirector? director,
+  required StreamDirector director,
   HubController? controller,
   SnapshotConfig? snapshots,
   TalkConfig talk = const TalkConfig(),
@@ -78,7 +81,6 @@ Future<void> showDevicePopup(
     barrierColor: Colors.black26,
     builder: (context) => _DevicePopupBody(
       presentation: presentation,
-      video: video,
       director: director,
       talk: talk,
       controller: controller,
@@ -274,7 +276,6 @@ void whenDevicePopupGone(String deviceId, VoidCallback onGone) {
 class _DevicePopupBody extends StatefulWidget {
   const _DevicePopupBody({
     required this.presentation,
-    required this.video,
     required this.director,
     required this.talk,
     required this.controller,
@@ -285,8 +286,7 @@ class _DevicePopupBody extends StatefulWidget {
   });
 
   final DevicePresentation presentation;
-  final VideoConfig video;
-  final StreamDirector? director;
+  final StreamDirector director;
   final TalkConfig talk;
   final HubController? controller;
   final SnapshotConfig? snapshots;
@@ -316,11 +316,6 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
   /// [FeedPhase.unconfigured], and the three are told apart in the log
   /// (`cameras.popup_skipped`), not on the wall.
   TimedFeed? _feed;
-
-  /// The Director this Popup built for itself when it was not handed one —
-  /// hermetic fixtures — and therefore owes a dispose. The CamerasView
-  /// precedent, `_ownsDirector` there.
-  StreamDirector? _ownDirector;
 
   /// The retry that replaces the deadline once it has expired against a
   /// route it may not pop — see [_dismiss]. Widget-owned, not [TimedFeed]'s:
@@ -604,10 +599,6 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     // for a stream it said it opened), and the keep-alive below may linger
     // the socket.
     _feed?.release();
-    // A Popup that built its own Director owns its lifecycle too — the
-    // CamerasView precedent. After the release: dispose would release the
-    // feed anyway, but with `panel_stopped` where the honest reason is ours.
-    _ownDirector?.dispose();
     // Last, so that whoever is waiting on it learns this Popup is gone only
     // once its go2rtc session really is closed.
     widget.onGone?.call();
@@ -649,10 +640,8 @@ class _DevicePopupBodyState extends State<_DevicePopupBody>
     assert(widget.dismissAfter == null || widget.presentation.isVideo,
         'a dismissAfter deadline rides the video feed (TimedFeed)');
     if (!widget.presentation.isVideo) return;
-    final director =
-        widget.director ?? (_ownDirector = StreamDirector(video: widget.video));
     _feed = TimedFeed(
-      director.attach(widget.presentation.device, role: FeedRole.popup),
+      widget.director.attach(widget.presentation.device, role: FeedRole.popup),
       deadline: widget.dismissAfter,
       ceiling: widget.dismissCeiling,
       onDeadline: _dismiss,
@@ -1197,45 +1186,39 @@ class _LiveVideoBox extends StatefulWidget {
 }
 
 class _LiveVideoBoxState extends State<_LiveVideoBox> {
-  /// Whether a picture has ever arrived in this box's life — the whole of
-  /// what separates "Connecting" from "Reconnecting", because **"re-"
-  /// claims a restoration**: a first connect that keeps failing has nothing
-  /// to restore and may not imply it had (ADR-0007's rule, applied to a
-  /// verb). Stateful for this one latch; the Cameras view's tile and zoom
-  /// each keep their own copy of it, which is the drift the shared
-  /// CameraFace module would end.
-  var _sawPlaying = false;
+  /// The shared core of the not-live face — whether a picture was ever up
+  /// in this box's life, and whether the wait it is in is a restoration
+  /// (**"re-" claims one**: ADR-0007's rule applied to a verb). One copy for
+  /// the Popup, the tile and the zoom since 2026-09-02 (`camera_face.dart`);
+  /// it reads the born phase and listens to both of the feed's notifiers,
+  /// so this box no longer keeps a latch of its own. What stays here is the
+  /// Popup's own phrase table, below.
+  late final CameraFace _cameraFace = CameraFace(widget.feed);
 
   @override
   void initState() {
     super.initState();
-    // Read at birth as well as on change: a feed can be born playing — the
-    // keep-alive pool handing back a lingered picture — and a listener
-    // never fires for the value it was born with.
-    _sawPlaying = widget.feed.phase.value == FeedPhase.playing;
-    widget.feed.phase.addListener(_onPhase);
+    _cameraFace.addListener(_onFace);
   }
 
   @override
   void dispose() {
     // The feed outlives this box by a frame — the Popup releases it in its
-    // own dispose — so the listener comes off here.
-    widget.feed.phase.removeListener(_onPhase);
+    // own dispose — so the face's listeners come off the feed here.
+    _cameraFace.dispose();
     super.dispose();
   }
 
-  void _onPhase() {
+  void _onFace() {
     if (!mounted) return;
-    setState(() {
-      if (widget.feed.phase.value == FeedPhase.playing) _sawPlaying = true;
-    });
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return _VideoFrame(
       docked: widget.docked,
-      child: _body(widget.feed.phase.value),
+      child: _body(_cameraFace.phase),
     );
   }
 
@@ -1247,22 +1230,21 @@ class _LiveVideoBoxState extends State<_LiveVideoBox> {
     }
     // The ladder's own word, and it is only honest over a picture that was
     // up (2026-08-28, the phase-2 flip; the Cameras view says the same
-    // thing about the same phases). A camera Popup climbs 5/15/60 like the
-    // zoom, so `retrying` is a wait between dials, not a verdict — the
-    // verdict words below belong to the phases nothing is coming back from.
-    final reconnecting = switch (phase) {
-      FeedPhase.retrying => _sawPlaying,
-      // A fresh dial after a picture died is the ladder mid-climb; a fresh
-      // dial with the count at zero is a fresh start, whatever came before.
-      FeedPhase.connecting => _sawPlaying && widget.feed.retryAttempt.value > 0,
-      _ => false,
-    };
+    // thing about the same phases) — the face's verdict, not this box's. A
+    // camera Popup climbs 5/15/60 like the zoom, so `retrying` is a wait
+    // between dials, not a verdict — the verdict words below belong to the
+    // phases nothing is coming back from.
+    final reconnecting = _cameraFace.reconnecting;
     final text = switch (phase) {
       FeedPhase.unconfigured => 'Live view placeholder — go2rtc stream',
-      // idle and queued are policy phases the popup role never wears: it is
-      // person-origin from birth and dials at attach. Armed with their
-      // nearest honest sentence rather than left to throw, so the face
-      // stays truthful on the day a trait flips before its copy lands.
+      // `idle` is a policy phase the popup role never wears: it is
+      // person-origin from birth and dials at attach. `queued` it CAN wear —
+      // its ladder re-dials take admission (`_requestDial(ladder: true)` in
+      // the Director) and park there behind an armed gate or a full cap —
+      // and the face's verdict keeps the ladder's own word through that
+      // wait (2026-09-02; this table used to drop to "Connecting" for it).
+      // Both arms are armed rather than left to throw, so the face stays
+      // truthful on the day a trait flips before its copy lands.
       FeedPhase.idle ||
       FeedPhase.queued ||
       FeedPhase.retrying ||

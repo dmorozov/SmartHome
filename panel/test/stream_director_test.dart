@@ -13,9 +13,10 @@ import 'support/fake_health.dart';
 /// viewport and overlay debounces — driven in plain fakeAsync over
 /// [FakeGo2rtc], with no widget tree and no real clock.
 ///
-/// The widget-level halves (which face a phase renders, wantKeepAlive,
-/// the census line) stay pinned in `cameras_view_test.dart`; what is pinned
-/// HERE is the policy machine those widgets render.
+/// The widget-level halves (which face a phase renders, wantKeepAlive, that
+/// the closing line reads the census at `deactivate()`) stay pinned in
+/// `cameras_view_test.dart`; what is pinned HERE is the policy machine those
+/// widgets render — the closing-census count included, since 2026-09-03.
 void main() {
   late FakeGo2rtc go2rtc;
   late List<LogRecord> records;
@@ -649,37 +650,6 @@ void main() {
     });
   });
 
-  group('the counted pass-through', () {
-    test('open delegates, counts, and lets go once on close', () {
-      final d = director(
-          policy: const DirectorPolicy(maxConcurrent: 1));
-      addTearDown(d.dispose);
-      final session =
-          d.open(Uri.parse('ws://hub:1984/api/ws?src=ring'), name: 'ring');
-      expect(go2rtc.only.name, 'ring');
-      // The cap is occupied by the counted session: a policy want holds.
-      final feed = d.attach(cam('c1', stream: 's1'), role: FeedRole.tile);
-      expect(feed.phase.value, FeedPhase.queued);
-      session.close();
-      session.close();
-      expect(go2rtc.opened.first.closes, 2,
-          reason: 'close passes through each time; the census lets go once');
-      expect(feed.phase.value, FeedPhase.connecting,
-          reason: 'the freed slot admits the queued want');
-      d.dispose();
-    });
-
-    test('a throwing opener is answered with a settled failure, not a throw',
-        () {
-      final d = director(open: (url, {required name}) => throw StateError('x'));
-      addTearDown(d.dispose);
-      final session =
-          d.open(Uri.parse('ws://hub:1984/api/ws?src=s'), name: 's');
-      expect(session.phase.value, LiveVideoPhase.failed);
-      expect(session.failure, contains('StateError'));
-    });
-  });
-
   group('the popup role', () {
     // The third managed surface (2026-08-28): person-origin from birth even
     // when a ding opened it, main stream, health-blind for gating, one dial
@@ -926,8 +896,199 @@ void main() {
       );
     });
   });
+
+  group('the closing census', () {
+    // How many streams a closing surface is about to release — one answer,
+    // the Director's, since 2026-09-03; the Cameras view used to keep it by
+    // hand in a set the tiles reported into, and got it wrong once (D6).
+    // Not `_activeSessions`, which counts held sessions for the cap.
+    test('activeFeeds counts pursued and playing feeds of the asked roles — '
+        'idle and settled ones are not streams, and a Popup is not the '
+        'grid\'s', () {
+      fakeAsync((async) {
+        final d = director();
+        const grid = {FeedRole.tile, FeedRole.zoom};
+        final first = d.attach(cam('c1', stream: 's1'), role: FeedRole.tile);
+        final second = d.attach(cam('c2', stream: 's2'), role: FeedRole.tile);
+        expect(first.phase.value, FeedPhase.connecting);
+        expect(second.phase.value, FeedPhase.queued,
+            reason: 'behind the gate, and still a stream about to be');
+        expect(d.activeFeeds(roles: grid), 2);
+
+        // A doorbell tile is idle at attach: wanted, not pursued.
+        final door = d.attach(
+            cam('door', stream: 'ring', kind: DeviceKind.doorbell),
+            role: FeedRole.tile);
+        expect(d.activeFeeds(roles: grid), 2);
+
+        // A tile with nothing to dial settles at unconfigured on attach:
+        // in the set, not a stream.
+        final bare = d.attach(cam('c4'), role: FeedRole.tile);
+        expect(bare.phase.value, FeedPhase.unconfigured);
+        expect(d.activeFeeds(roles: grid), 2,
+            reason: 'settled is not a stream');
+
+        // The Popup rides the same Director on the wall; the grid's closing
+        // line must not count a ding riding over it.
+        final popup = d.attach(cam('c3', stream: 's3'), role: FeedRole.popup);
+        expect(popup.phase.value, FeedPhase.connecting);
+        expect(d.activeFeeds(roles: grid), 2);
+        expect(d.activeFeeds(roles: const {FeedRole.popup}), 1);
+
+        go2rtc.opened.first.plays();
+        expect(d.activeFeeds(roles: grid), 2, reason: 'playing is pursued too');
+        go2rtc.opened.first.fails('gone');
+        expect(first.phase.value, FeedPhase.retrying);
+        expect(d.activeFeeds(roles: grid), 2, reason: 'a climbing ladder is');
+
+        // A released feed has left the set — the zoom-in and zoom-out
+        // pruning the view used to do by hand.
+        first.release();
+        expect(d.activeFeeds(roles: grid), 1);
+        second.release();
+        door.release();
+        bare.release();
+        popup.release();
+        expect(d.activeFeeds(roles: grid), 0);
+        expect(d.activeFeeds(roles: const {FeedRole.popup}), 0);
+        d.dispose();
+      });
+    });
+
+    test('a zoom counts under the grid roles beside the tiles', () {
+      final d = director();
+      addTearDown(d.dispose);
+      final zoom = d.attach(cam('c1', stream: 'main'), role: FeedRole.zoom);
+      expect(d.activeFeeds(roles: const {FeedRole.tile, FeedRole.zoom}), 1);
+      expect(d.activeFeeds(roles: const {FeedRole.tile}), 0);
+      zoom.release();
+      expect(d.activeFeeds(roles: const {FeedRole.tile, FeedRole.zoom}), 0);
+    });
+  });
+
+  group('the still-grab gate', () {
+    // The tile's still loop asks the feed whether a go2rtc frame grab is
+    // worth its keyframe dial. Four facts, every one the Director's own,
+    // answered as one verdict since 2026-09-02 — pinned here, where the
+    // verdict lives, instead of through FakeSnapshots request counts in the
+    // view suite (which keeps its cases as the loop-meets-verdict pins).
+    test('a pursued feed never grabs — connecting, playing, retrying, and '
+        'queued behind the gate all decline', () {
+      fakeAsync((async) {
+        final d = director();
+        final first = d.attach(cam('c1', stream: 's1'), role: FeedRole.tile);
+        expect(first.phase.value, FeedPhase.connecting);
+        expect(first.stillGrabAllowed, isFalse);
+        // Behind the 400 ms gate: a live dial is milliseconds away, and at
+        // view-open every tile past the first sits here — a grab now would
+        // be the burst admission exists to space.
+        final second = d.attach(cam('c2', stream: 's2'), role: FeedRole.tile);
+        expect(second.phase.value, FeedPhase.queued);
+        expect(second.stillGrabAllowed, isFalse);
+        go2rtc.opened.first.plays();
+        expect(first.stillGrabAllowed, isFalse,
+            reason: 'the video is on screen — a grab buys nobody anything');
+        go2rtc.opened.first.fails('gone');
+        expect(first.phase.value, FeedPhase.retrying);
+        expect(first.stillGrabAllowed, isFalse,
+            reason: 'the retry ladder owns this camera\'s dial budget');
+        first.release();
+        second.release();
+        d.dispose();
+      });
+    });
+
+    test('the faces that can show a still may grab — idle, unconfigured, '
+        'unsupported', () {
+      // Stills-first is where this verdict becomes load-bearing: no tile
+      // starts on its own, so every tile is idle and every tick asks.
+      final stillsFirst = director(
+          policy: const DirectorPolicy(autoLive: DirectorPolicy.never));
+      addTearDown(stillsFirst.dispose);
+      final idle = stillsFirst.attach(cam('c1', stream: 'main'),
+          role: FeedRole.tile);
+      expect(idle.phase.value, FeedPhase.idle);
+      expect(idle.stillGrabAllowed, isTrue);
+
+      final noAddress = director(go2rtcUrl: '');
+      addTearDown(noAddress.dispose);
+      final unconfigured =
+          noAddress.attach(cam('c2', stream: 'main'), role: FeedRole.tile);
+      expect(unconfigured.phase.value, FeedPhase.unconfigured);
+      expect(unconfigured.stillGrabAllowed, isTrue,
+          reason: 'the still is the whole face where nothing can be dialled');
+
+      final noPlayer = director(
+          open: (url, {required name}) =>
+              SettledLiveVideoSession(LiveVideoPhase.unsupported));
+      addTearDown(noPlayer.dispose);
+      final unsupported =
+          noPlayer.attach(cam('c3', stream: 'main'), role: FeedRole.tile);
+      expect(unsupported.phase.value, FeedPhase.unsupported);
+      expect(unsupported.stillGrabAllowed, isTrue);
+
+      idle.release();
+      unconfigured.release();
+      unsupported.release();
+    });
+
+    test('Camera Health is read live — only unreachable gates, and the next '
+        'tick sees the flip with no listener', () {
+      final health = FakeHealth();
+      final d = director(
+          policy: const DirectorPolicy(autoLive: DirectorPolicy.never),
+          health: health);
+      addTearDown(d.dispose);
+      final feed = d.attach(cam('c1', stream: 'main'), role: FeedRole.tile);
+      expect(feed.phase.value, FeedPhase.idle);
+      expect(feed.stillGrabAllowed, isTrue,
+          reason: 'unknown is absence of evidence, not a verdict');
+
+      // The daemon dies. An idle feed never transitions on a probe — the
+      // hole a phase-only gate had — so the verdict must read it itself.
+      health.of('c1').value = Reachability.unreachable;
+      expect(feed.phase.value, FeedPhase.idle);
+      expect(feed.stillGrabAllowed, isFalse,
+          reason: 'a frame grab IS a dial — health-gated like every dial');
+
+      health.of('c1').value = Reachability.reachable;
+      expect(feed.stillGrabAllowed, isTrue,
+          reason: 'recovery needs no listener');
+      feed.release();
+    });
+
+    test('a tile nobody can see does not grab — the viewport fact, pushed '
+        'through the seam and read back as the verdict', () {
+      final d = director(
+          policy: const DirectorPolicy(autoLive: DirectorPolicy.never));
+      addTearDown(d.dispose);
+      final feed = d.attach(cam('c1', stream: 'main'), role: FeedRole.tile);
+      expect(feed.stillGrabAllowed, isTrue, reason: 'born visible');
+      feed.visible = false;
+      expect(feed.stillGrabAllowed, isFalse,
+          reason: 'airtime for a face nobody can see');
+      feed.visible = true;
+      expect(feed.stillGrabAllowed, isTrue);
+      feed.release();
+    });
+
+    test('a covering overlay pauses the grabs — the same didPushNext fact '
+        'that pauses the streams', () {
+      final d = director(
+          policy: const DirectorPolicy(autoLive: DirectorPolicy.never));
+      addTearDown(d.dispose);
+      final feed = d.attach(cam('c1', stream: 'main'), role: FeedRole.tile);
+      expect(feed.stillGrabAllowed, isTrue);
+      d.overlaid = true;
+      expect(feed.stillGrabAllowed, isFalse,
+          reason: 'invisible by route, which no visibility callback sees');
+      d.overlaid = false;
+      expect(feed.stillGrabAllowed, isTrue);
+      feed.release();
+    });
+  });
 }
 
 // FakeHealth and ProbeNotifier moved to `support/fake_health.dart` — the
-// Cameras view's suite stages health now too (the tile's frame-grab gate
-// reads `CameraFeed.reachability` live).
+// Cameras view's suite stages health now too (the tile's still loop declines
+// through `CameraFeed.stillGrabAllowed`, which reads the verdict live).

@@ -7,7 +7,6 @@ import '../domain/house.dart';
 import 'device_popup.dart';
 import 'hub_controller.dart';
 import 'audio/talk.dart';
-import 'video/live_video.dart';
 import 'video/snapshot.dart';
 import 'video/stream_director.dart';
 
@@ -82,8 +81,7 @@ class DoorbellPopupHost extends StatefulWidget {
   const DoorbellPopupHost({
     super.key,
     required this.controller,
-    required this.video,
-    this.director,
+    required this.director,
     this.snapshots,
     required this.child,
     this.talk = const TalkConfig(),
@@ -93,17 +91,14 @@ class DoorbellPopupHost extends StatefulWidget {
 
   final HubController controller;
 
-  /// The process-wide Stream Director, forwarded so the Popups this host
-  /// pushes attach their feed to it ([FeedRole.popup]) — one census, one
-  /// lifecycle. Null in hermetic fixtures; the Popup then builds its own
-  /// over [video], the CamerasView precedent.
-  final StreamDirector? director;
-
-  /// Where go2rtc is, forwarded to the Popup this host pushes. The doorbell's
-  /// live view is the whole reason the Popup opens unprompted, so a host that
-  /// minted its own [VideoConfig] would open a Popup guaranteed to show the
-  /// unconfigured placeholder.
-  final VideoConfig video;
+  /// The Stream Director, forwarded so the Popups this host pushes attach
+  /// their feed to it ([FeedRole.popup]) — one census, one lifecycle, and
+  /// where go2rtc is inside it. The doorbell's live view is the whole reason
+  /// the Popup opens unprompted, so a host that minted its own would open a
+  /// Popup guaranteed to show the unconfigured placeholder — and one Camera
+  /// Health and the census never heard from. Required; the fixture builds
+  /// one for hermetic scenes.
+  final StreamDirector director;
 
   /// Where the Hub is, for the still the Popup shows while the live view has
   /// no decodable picture. **This is the path that matters most for issue #1**:
@@ -113,10 +108,10 @@ class DoorbellPopupHost extends StatefulWidget {
   /// the porch right now rather than read why they cannot.
   final SnapshotConfig? snapshots;
 
-  /// Where the doorbell's push-to-talk pushes. Forwarded for [video]'s reason
-  /// and mattering here more than anywhere: the Popups this host pushes are
-  /// the ones a visitor is standing in front of, so they are the ones whose
-  /// talk button is actually going to be pressed.
+  /// Where the doorbell's push-to-talk pushes. Forwarded for [director]'s
+  /// reason and mattering here more than anywhere: the Popups this host
+  /// pushes are the ones a visitor is standing in front of, so they are the
+  /// ones whose talk button is actually going to be pressed.
   final TalkConfig talk;
 
   final Widget child;
@@ -290,7 +285,6 @@ class _DoorbellPopupHostState extends State<DoorbellPopupHost> {
     showDevicePopup(
       context,
       presentation: widget.controller.presentationOf(doorbell),
-      video: widget.video,
       director: widget.director,
       snapshots: widget.snapshots,
       talk: widget.talk,

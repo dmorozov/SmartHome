@@ -73,7 +73,7 @@ Speaking from the Panel to a Device that has a speaker — today the doorbell al
 _Avoid_: two-way audio (that is the thing this is half of), intercom, talkback (the vendor's word for the whole duplex)
 
 **Stream Director**:
-The Panel module that decides which camera streams play: which stream a surface gets (substream for a tile, main for a zoom or a Popup), when a stream may start (admission spacing, visibility, Camera Health), when it stops (debounced scroll-out, zoom, close), and the one implementation of the session lifecycle. Every video surface opens through it as a managed feed — since 2026-08-28 the Popup too (ADR-0013), its role health-blind by decision: a tap or a ding dials whatever the probe says. Roles are rows of traits, and its policy is data — auto-live today, stills-first is a swap, not a rewrite (phase-8).
+The Panel module that decides which camera streams play: which stream a surface gets (substream for a tile, main for a zoom or a Popup), when a stream may start (admission spacing, visibility, Camera Health), when it stops (debounced scroll-out, zoom, close), whether a tile's cache-miss still is worth its dial (since 2026-09-02 one verdict over the same facts — phase, Camera Health, viewport, overlay — that gate its own dials), and the one implementation of the session lifecycle. Every video surface opens through it as a managed feed — since 2026-08-28 the Popup too (ADR-0013), its role health-blind by decision: a tap or a ding dials whatever the probe says. Roles are rows of traits, and its policy is data — auto-live today, stills-first is a swap, not a rewrite (phase-8).
 _Avoid_: stream manager, video controller, budget (that is one input to it, not the thing)
 
 **Camera Health**:

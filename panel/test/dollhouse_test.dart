@@ -6,7 +6,6 @@ import 'package:panel/ui/cameras/cameras_view.dart';
 import 'package:panel/ui/dollhouse/dollhouse_view.dart';
 import 'package:panel/ui/edge_tab.dart';
 import 'package:panel/ui/video/live_video.dart';
-import 'package:panel/ui/video/stream_director.dart';
 
 import 'dollhouse_geometry.dart';
 import 'fixtures.dart';
@@ -247,28 +246,31 @@ void main() {
   /// The wiring `main()` does by hand between the Panel's one Director
   /// and the surfaces that attach feeds to it.
   group('the Panel\'s Director reaches its surfaces', () {
-  testWidgets('a pin\'s Popup attaches to the PANEL\'s Director, not one of '
-      'its own — the hand-wiring `main()` does, and the only thing that '
-      'carries Camera Health to a Popup', (tester) async {
-    // The failure this exists for is silent. A Popup handed no Director
-    // builds its own over the same [VideoConfig] (the CamerasView
-    // precedent), so it dials the same go2rtc, plays the same picture and
-    // writes the same `cameras.popup_*` lines — while its Director has
-    // `health: null` and a census of one. Drop the `director:` argument
-    // anywhere on the way down and nothing goes red; the wall just
-    // quietly stops feeding Camera Health and stops counting.
+  testWidgets('a pin\'s Popup attaches to the PANEL\'s Director — the '
+      'hand-wiring `main()` does, and the only thing that carries Camera '
+      'Health to a Popup', (tester) async {
+    // Until 2026-09-02 the failure this pinned was silent: a Popup handed
+    // no Director built its own over the same [VideoConfig], dialled the
+    // same go2rtc and wrote the same `cameras.popup_*` lines — while its
+    // Director had `health: null` and a census of one, so a `director:`
+    // dropped anywhere on the way down went unnoticed. `director` is
+    // required on every surface now and the fallbacks are gone, so a
+    // dropped argument no longer compiles; what this still pins is the
+    // end-to-end fact — an outcome from a pin's Popup lands in the Panel's
+    // Camera Health, through every forward between `main()` and the body.
     final go2rtc = FakeGo2rtc();
     final health = FakeHealth();
     final (controller, _) = fakeHubRig(
       house: houseWithStream(loadTestHouse(), 'cam-garage', 'garage'),
     );
-    final video = VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open);
-    final director = StreamDirector(video: video, health: health);
-    addTearDown(director.dispose);
 
-    await tester.pumpWidget(
-      panelApp(controller, video: video, director: director),
-    );
+    // Health rides into the fixture's Director, which is disposed with the
+    // tree — the one place a hermetic scene builds one.
+    await tester.pumpWidget(panelApp(
+      controller,
+      video: VideoConfig(go2rtcUrl: 'http://hub:1984', open: go2rtc.open),
+      health: health,
+    ));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey('pin-cam-garage')));
@@ -371,8 +373,9 @@ void main() {
   testWidgets('a tapped camera pin plays the stream the House Plan named, '
       'from the go2rtc the Panel was configured with', (tester) async {
     // The wiring nothing else can see: DollhouseView carries the Panel's
-    // VideoConfig to the Popup it pushes. Replace `widget.video` with a
-    // fresh `VideoConfig()` there and every other test in this file still
+    // Director — and, inside it, where go2rtc is — to the Popup it pushes.
+    // Hand the Popup a Director over a fresh `VideoConfig()` in place of
+    // `widget.director` there and every other test in this file still
     // passes — the Popup would simply, silently, never play anything.
     final (controller, _) = fakeHubRig(
       house: houseWithStream(loadTestHouse(), 'doorbell', 'ring_doorbell'),

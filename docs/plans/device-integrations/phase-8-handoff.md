@@ -226,7 +226,15 @@ symbol names and grep anchors will not.
   (~531): one live tile, zoom into the not-wired `cam-office`, non-tap pop
   of the whole view → `closed live: 0`. The pre-existing grid-close census
   test (`live: 1`) still passes untouched.
-- **Verify applied:** `grep -n "_live.clear()" lib/ui/cameras/cameras_view.dart`
+- *(Superseded 2026-09-03 — panel-deepening-plan Phase D: the closing count
+  is `StreamDirector.activeFeeds(roles: {FeedRole.tile, FeedRole.zoom})`,
+  read once in `_CamerasViewState.deactivate()` — Flutter deactivates a
+  removed subtree parent-first, so every tile and zoom feed is still
+  attached — and logged from `dispose()`. `_live`, `onWent`, the zoom-in
+  clear and the zoom-out prune are gone; the tile keeps `_wasActive` only
+  for `wantKeepAlive`. The regression test named above still pins the
+  scenario through the new path.)*
+- **Verify applied:** `grep -n "activeFeeds" lib/ui/cameras/cameras_view.dart`
 
 ---
 
@@ -285,7 +293,8 @@ argument in the module docs:
 8. Failure strings never contain URLs; stream names are the loggable
    half; never log secrets (`diagnostics/log.dart`).
 9. No `Timer` outlives its owner: feeds cancel on `release()`, the
-   Director on `dispose()`; the view-owned Director dies with the view.
+   Director on `dispose()` — `main()`'s never, the fixture's
+   (`test/support/hermetic_director.dart`) with the tree.
 10. Person-origin exemptions: no viewport stop, no overlay pause, no
     admission spacing. *The no-automatic-retry exemption was retired
     2026-08-26 (N11): person-origin cameras ride the ladder; only a
@@ -677,8 +686,15 @@ What was built (all unstaged, alongside the phase-8 tree):
   device session, fetched regardless of phase as before), else the frame
   grab over `substream ?? streamName` — **`_grabStream` returns null for
   every kind but `DeviceKind.camera`**, which is the doorbell's wall
-  (#177014). The grab is phase-gated (`_grabAllowed`): only
-  idle/queued/unconfigured/unsupported. Live buys nothing, failed/retrying
+  (#177014). The grab is gated by the Director's own verdict
+  (`CameraFeed.stillGrabAllowed`, since 2026-09-02 — it used to be the
+  tile's `_grabAllowed`, re-deriving the same four facts through two seam
+  getters and a viewport mirror): only idle/unconfigured/unsupported.
+  Queued is deliberately excluded — an earlier draft of this line listed
+  it, but the shipped gate never allowed it and the change that landed the
+  gate pinned the exclusion ("view-open fires no grab burst"): at view-open
+  every tile past the first is queued, and a grab there is the
+  N-simultaneous-dials burst admission exists to prevent. Live buys nothing, failed/retrying
   belongs to the retry ladder, offline is Camera Health's verdict — a grab
   IS a dial when the producer is cold, and recovery detection is the
   monitor's job.
@@ -696,11 +712,14 @@ What was built (all unstaged, alongside the phase-8 tree):
   ladder) never grabs.
 
 Still open under this heading:
-- The **offline** arm of `_grabAllowed` is exercised by no widget test
-  (staging it needs a health-injected Director in the view suite —
-  `FakeHealth` lives in `stream_director_test.dart`; move it to
-  `test/support/` if that test is ever wanted). The arm is one case in one
-  switch the other arms pin.
+- *(Closed.)* The **offline** arm of the gate was exercised by no widget
+  test when this was written; `FakeHealth` moved to `test/support/`, the
+  view suite grew a health-injected case ("the grab gate reads Camera
+  Health live"), and since 2026-09-02 every arm — the viewport one
+  included, which no widget test ever reached — is pinned in
+  `stream_director_test.dart`, where the verdict lives (the pursued arm
+  under fakeAsync, since it rides the gate and retry timers; the other
+  four are plain synchronous cases).
 - Cadence: 60 s with `cache=45s` means every steady-state tick is a cache
   miss — but under today's **auto-live** policy the grab loop almost never
   runs steady-state (auto-live tiles sit in pursued phases; idle happens
@@ -713,10 +732,12 @@ Still open under this heading:
 
 The policy-as-data payoff. Mechanics:
 - The wall: `main.dart`'s `StreamDirector(policy: DirectorPolicy(autoLive:
-  DirectorPolicy.never), …)`. **Detail that bites:** the view-owned
-  fallback Director (hermetic tests, and any surface not handed the
-  global one) constructs `const DirectorPolicy()` — auto-live. That is
-  correct for tests; just be aware the flip lives in `main()` only.
+  DirectorPolicy.never), …)`. *(Was "detail that bites": the view-owned
+  fallback Director constructed `const DirectorPolicy()` — auto-live — so
+  the flip lived in `main()` only. Closed 2026-09-02: no surface builds
+  its own Director any more, so the flip reaches every surface; a hermetic
+  test that wants stills-first passes `policy:` to its `HermeticDirector`
+  in `test/support/hermetic_director.dart`.)*
 - UI: idle tiles then wear the N6 stills + "Tap for live"; a tap today
   ZOOMS (it does not start the tile) — decide with the owner whether
   stills-first changes the tap to `feed.start()` (tile goes live in
@@ -903,8 +924,9 @@ the missing LISTEN leg of ADR-0011 (inbound doorbell audio at the wall).
   half-duplex mechanism, the wall's speaker feeding the wall's mic being
   the echo loop it breaks — restoring on release. Pinned by an
   unmute/duck/restore ordering test.
-- Both wrappers (`_CountedSession`, the pool lease) delegate; the test
-  fake records `muted` + ordered `mutedChanges`.
+- The pool lease delegates (so did `_CountedSession`, the counted
+  pass-through, until it went with the surface-built Directors on
+  2026-09-02); the test fake records `muted` + ordered `mutedChanges`.
 
 **Deliberately out, with reasons:** zoom/tile audio (the zoom would need
 `CameraFeed` to carry the muted want across re-dials — add it only if the

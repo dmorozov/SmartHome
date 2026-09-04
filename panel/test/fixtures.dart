@@ -9,6 +9,7 @@ import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/snapshot.dart';
 import 'package:panel/ui/video/stream_director.dart';
 
+import 'support/hermetic_director.dart';
 import 'test_house.dart';
 
 /// The standard rig for widget and golden tests: the shipped House Plan, a
@@ -132,30 +133,61 @@ House _rebuilt(House house, Device Function(Device) retarget) {
 /// [PanelApp], which is why it does not default in the widget itself. A
 /// scene about the production Panel passes `hubLabel: 'HUB'`.
 ///
-/// [video] defaults to unconfigured for the same reason and one more: it is
-/// what every existing scene — goldens included — was baked with, so a test
-/// that says nothing about video gets the Popup body the Panel has always
-/// drawn.
+/// [video] is what this scene's Stream Director dials through — the
+/// [HermeticDirector] this rig builds over it is the hermetic adapter at that
+/// seam, disposed with the tree. It defaults to unconfigured for the
+/// same reason [hubLabel] does and one more: it is what every existing
+/// scene — goldens included — was baked with, so a test that says nothing
+/// about video gets the Popup body the Panel has always drawn.
+///
+/// [policy] and [health] ride into that Director the same way — a
+/// stills-first scene or a Camera Health scene names them here and never
+/// builds a Director of its own. [director] is the escape for the case that
+/// needs the handle itself (to flip `overlaid`, to attach a feed); that case
+/// owns its dispose, and it brings its opener, policy and health INSIDE the
+/// Director — the assert below is what stops a [video] passed beside a
+/// [director] from being silently unread, which is the trap shape this
+/// fixture exists to remove.
 Widget panelApp(
   HubController controller, {
   String hubLabel = 'FAKE HUB',
   VideoConfig video = const VideoConfig(),
+  DirectorPolicy policy = const DirectorPolicy(),
+  CameraHealthSource? health,
   SnapshotConfig snapshots = const SnapshotConfig(),
   Go2rtcStillsConfig stills = const Go2rtcStillsConfig(),
   TalkConfig talk = const TalkConfig(),
   CameraOrderStore? order,
   StreamDirector? director,
-}) =>
-    PanelApp(
-        controller: controller,
-        hubLabel: hubLabel,
-        video: video,
-        snapshots: snapshots,
-        stills: stills,
-        talk: talk,
-        // A store with no writer: it remembers an arrangement for as long as
-        // the scene is up — which is what a case about reopening the view
-        // needs — and touches no platform channel, which is what every other
-        // case needs.
-        order: order ?? CameraOrderStore(),
-        director: director);
+}) {
+  Widget app(StreamDirector director) => PanelApp(
+      controller: controller,
+      hubLabel: hubLabel,
+      director: director,
+      snapshots: snapshots,
+      stills: stills,
+      talk: talk,
+      // A store with no writer: it remembers an arrangement for as long as
+      // the scene is up — which is what a case about reopening the view
+      // needs — and touches no platform channel, which is what every other
+      // case needs.
+      order: order ?? CameraOrderStore());
+  if (director != null) {
+    assert(
+        identical(video, const VideoConfig()) &&
+            identical(policy, const DirectorPolicy()) &&
+            health == null,
+        'a case that brings its own Director brings its opener, policy and '
+        'health inside it — anything passed beside it would be unread');
+    return app(director);
+  }
+  // A fresh scene per pump: without the key, a second `pumpWidget` at the
+  // same position would keep the first Director — and its opener.
+  return HermeticDirector(
+    key: UniqueKey(),
+    video: video,
+    policy: policy,
+    health: health,
+    builder: (_, director) => app(director),
+  );
+}

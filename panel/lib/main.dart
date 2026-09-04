@@ -187,9 +187,9 @@ Future<void> main() async {
   // what it is for. Here and not inside `VideoConfig`, whose `open` this
   // becomes: that class is `@immutable` and every hermetic test builds one,
   // while this holds live sessions and running Timers. Composed at the root
-  // instead, so the widget tree is unchanged, both video surfaces get it
-  // through the seam they already use, and `test/fixtures.dart` still
-  // defaults to the raw opener.
+  // instead, so the widget tree is unchanged, the Director dials it through
+  // `VideoConfig.open` — the seam it already uses — and `test/fixtures.dart`
+  // still defaults to the raw opener.
   final keepAlive = LiveVideoKeepAlive(opener: rawOpen);
   // The Cameras tile order, read from this screen's own storage before the
   // first frame. Awaited here and not lazily in the view for the reason
@@ -203,9 +203,10 @@ Future<void> main() async {
   // stream the pool may linger — and BELOW every surface: the Cameras view
   // and every Popup attach managed feeds (FeedRole.popup since 2026-08-28;
   // the ding arbitration stays `doorbell_popup_host.dart`'s own, and the
-  // Popup's route clocks are `timed_feed.dart`'s). The `VideoConfig` below
-  // keeps `director.open`, the counted pass-through, as the fallback seam
-  // for a Popup built without a Director — hermetic fixtures.
+  // Popup's route clocks are `timed_feed.dart`'s). Where go2rtc is travels
+  // INSIDE it — the one `VideoConfig` in this process — and every surface
+  // takes the Director itself, required (2026-09-02): there is no second
+  // seam for a forgotten argument to fall back to.
   final director = StreamDirector(
     video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: keepAlive.open),
     // Camera Health off the Hub's own port-322 probes (phase-8 A2): the
@@ -214,31 +215,32 @@ Future<void> main() async {
     // dial rides the probe flipping back, not a timer.
     health: HubCameraHealth(controller: boot.controller),
   );
-  // `video` travels beside `controller`/`hubLabel` and deliberately not
-  // through `bootPanel`: boot's contract is that it fails "in exactly three
-  // ways" and brings up two things, the House and the Hub adapter. go2rtc is
-  // neither, and a field there would invite a fourth boot failure for the
-  // one setting that must never stop the wall coming up.
+  // The Director — go2rtc's address inside it — travels beside
+  // `controller`/`hubLabel` and deliberately not through `bootPanel`: boot's
+  // contract is that it fails "in exactly three ways" and brings up two
+  // things, the House and the Hub adapter. go2rtc is neither, and a field
+  // there would invite a fourth boot failure for the one setting that must
+  // never stop the wall coming up.
   runApp(
     PanelApp(
       controller: boot.controller,
       hubLabel: boot.hubLabel,
       director: director,
-      video: VideoConfig(go2rtcUrl: config.go2rtcUrl, open: director.open),
       // The Hub's own address and token, reused: a camera snapshot is an HA
       // REST fetch authenticated exactly like the socket. The token travels
       // in this object to become a header — never a URL part (snapshot.dart).
       snapshots: SnapshotConfig(haUrl: config.url, token: config.token),
-      // The same go2rtc `video` dials, for the Wyze tiles' still faces
+      // The same go2rtc the Director dials, for the Wyze tiles' still faces
       // (phase-8 A7): a `frame.jpeg` grab off the substream, tokenless,
       // bounded by its `cache=45s`. The doorbell never uses this source —
       // its still stays HA-held through `snapshots` (#177014).
       stills: Go2rtcStillsConfig(go2rtcUrl: config.go2rtcUrl),
       // The same go2rtc, reached over the same address, for the other half of
-      // the doorbell: `video` plays what the camera sees, `talk` pushes a
-      // microphone back into it. Two configs and not one because every camera
-      // Popup in the house carries the first and only a doorbell can use the
-      // second (ADR-0011; `ui/audio/talk.dart`).
+      // the doorbell: the Director plays what the camera sees, `talk` pushes
+      // a microphone back into it. A config of its own and not a field of the
+      // Director's because every camera Popup in the house plays through the
+      // Director and only a doorbell can talk back (ADR-0011;
+      // `ui/audio/talk.dart`).
       talk: TalkConfig(go2rtcUrl: config.go2rtcUrl),
       // The tile order somebody dragged into place, read back off this
       // screen's own storage. Awaited above rather than resolved inside the
@@ -295,52 +297,51 @@ class PanelApp extends StatelessWidget {
     super.key,
     required this.controller,
     required this.hubLabel,
-    required this.video,
+    required this.director,
     required this.snapshots,
     required this.stills,
     required this.talk,
     required this.order,
-    this.director,
   });
 
   final HubController controller;
 
-  /// The process-wide Stream Director, when `main()` composed one. Null in
-  /// every hermetic fixture — the Cameras view then builds its own over
-  /// [video], which is the same policy over the same opener, minus the
-  /// cross-surface census only the wall cares about.
-  final StreamDirector? director;
+  /// The Stream Director every video surface below attaches to — `main()`'s
+  /// process-wide one on the wall, the fixture's in a hermetic scene
+  /// (`test/support/hermetic_director.dart`). Where go2rtc is travels
+  /// inside it. Required, like every other setting here: a default would be
+  /// a test-fixture fact wearing a Panel costume, and a surface-built
+  /// fallback would let a forgotten argument degrade the wall silently —
+  /// which is what the 2026-09-02 review found every Popup test doing.
+  final StreamDirector director;
 
   /// What the Hub badge calls the Hub. Passed in rather than read from the
   /// build's dart-defines, so this widget knows nothing about which Hub it
   /// was compiled against — and so a test can render the production scene.
   final String hubLabel;
 
-  /// Where go2rtc is, for the Popup a camera pin opens. Passed in for the
-  /// same reason [hubLabel] is, and required for the same reason: an
-  /// unconfigured default here would be a fact about test fixtures wearing
-  /// the costume of a fact about the Panel. `test/fixtures.dart` is where it
-  /// defaults, and it defaults to unconfigured.
-  final VideoConfig video;
-
   /// Where the Hub's REST API is, for the still faces in the Cameras view.
-  /// Required for [video]'s reason: an unconfigured default here would be a
-  /// test-fixture fact wearing a Panel costume — `test/fixtures.dart` is
-  /// where it defaults, and it defaults to unconfigured.
+  /// Passed in for the same reason [hubLabel] is, and required for the same
+  /// reason: an unconfigured default here would be a fact about test
+  /// fixtures wearing the costume of a fact about the Panel.
+  /// `test/fixtures.dart` is where it defaults, and it defaults to
+  /// unconfigured.
   final SnapshotConfig snapshots;
 
   /// go2rtc's frame-grab source, for the Wyze tiles' still faces — the
   /// other half of the Cameras view's stills, beside [snapshots]. Required
-  /// for [video]'s reason, and defaulted to unconfigured in the same place.
+  /// for [snapshots]'s reason, and defaulted to unconfigured in the same
+  /// place.
   final Go2rtcStillsConfig stills;
 
-  /// Where the doorbell's push-to-talk pushes. Required for [video]'s reason:
-  /// an unconfigured default here would be a fact about test fixtures wearing
-  /// the costume of a fact about the Panel. `test/fixtures.dart` is where it
-  /// defaults, and it defaults to unconfigured.
+  /// Where the doorbell's push-to-talk pushes. Required for [snapshots]'s
+  /// reason: an unconfigured default here would be a fact about test
+  /// fixtures wearing the costume of a fact about the Panel.
+  /// `test/fixtures.dart` is where it defaults, and it defaults to
+  /// unconfigured.
   final TalkConfig talk;
 
-  /// The person's camera-tile order. Required for [video]'s reason, and
+  /// The person's camera-tile order. Required for [snapshots]'s reason, and
   /// defaulted in the same place to a store that forgets at process exit —
   /// a widget test must not touch a platform channel to draw a grid.
   final CameraOrderStore order;
@@ -382,7 +383,6 @@ class PanelApp extends StatelessWidget {
         // a reading moves.
         body: DoorbellPopupHost(
           controller: controller,
-          video: video,
           director: director,
           snapshots: snapshots,
           talk: talk,
@@ -433,7 +433,6 @@ class PanelApp extends StatelessWidget {
                           listenable: controller,
                           builder: (context, _) => DollhouseView(
                             controller: controller,
-                            video: video,
                             director: director,
                             snapshots: snapshots,
                             talk: talk,
@@ -460,7 +459,6 @@ class PanelApp extends StatelessWidget {
                             onTap: () => showDevicePopup(
                               context,
                               presentation: controller.presentationOf(doorbell),
-                              video: video,
                               director: director,
                               talk: talk,
                               controller: controller,
@@ -476,11 +474,10 @@ class PanelApp extends StatelessWidget {
                             onTap: () => showCamerasView(
                               context,
                               controller: controller,
-                              video: video,
+                              director: director,
                               snapshots: snapshots,
                               stills: stills,
                               order: order,
-                              director: director,
                             ),
                           ),
                         ),
@@ -493,11 +490,10 @@ class PanelApp extends StatelessWidget {
                       open: () => showCamerasView(
                         context,
                         controller: controller,
-                        video: video,
+                        director: director,
                         snapshots: snapshots,
                         stills: stills,
                         order: order,
-                        director: director,
                       ),
                     ),
                   ),

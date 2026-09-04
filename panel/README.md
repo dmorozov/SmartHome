@@ -505,7 +505,7 @@ says it should never have to, one habit at every layer.
 
 It is composed in `main()` — one pool per process, `VideoConfig(open:)` — and
 not inside `VideoConfig`, which is `@immutable` and built by every hermetic
-test. So both surfaces get it through the seam they already use, no widget
+test. So the Director dials it through the seam it already uses, no widget
 changed, and the suites still drive the raw opener.
 
 | Log line | Means |

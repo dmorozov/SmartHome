@@ -116,10 +116,11 @@ const kLiveVideoMaxHeld = Duration(minutes: 2);
 /// and `video.stream_reused` is the line that will say so.
 ///
 /// **Where it sits.** Above the seam, wrapping a [LiveVideoOpener] and handing
-/// out [LiveVideoSession]s, so neither player knows it exists and neither
-/// call site changed: `device_popup.dart` and `cameras/cameras_view.dart` both
-/// already open through `VideoConfig.open` and close through
-/// `LiveVideoSession.close`, which is the entire contract this needs. Rejected:
+/// out [LiveVideoSession]s, so no player knows it exists and the one call
+/// site did not change: the Stream Director's `_Feed.dial()`
+/// (`stream_director.dart`) opens through `VideoConfig.open` and closes
+/// through `LiveVideoSession.close`, which is the entire contract this needs.
+/// Rejected:
 /// a linger inside each player, which would be the same logic written twice
 /// and untestable on the branch that needs a browser; and rejected: a go2rtc
 /// setting, because 1.9.10 has no such knob — `streams` stop on their last

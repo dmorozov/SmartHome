@@ -4,10 +4,13 @@ import 'package:panel/ui/video/stream_director.dart';
 /// Camera Health as the Director assumes it: a listenable verdict per
 /// Device, and a sink recording what the Director reported back.
 ///
-/// In `support/` rather than beside the Director's suite because two suites
-/// stage health now: the Director's (gating, recovery, listener hygiene)
-/// and the Cameras view's (the tile's frame-grab gate reads the verdict
-/// live through `CameraFeed.reachability`).
+/// In `support/` rather than beside the Director's suite because more than
+/// one suite stages health: the Director's (gating, recovery, listener
+/// hygiene, and the still-grab verdict `CameraFeed.stillGrabAllowed` reads
+/// live), the Cameras view's (the tile's still loop declines through that
+/// verdict), and the Dollhouse's (a pin's Popup outcome landing in the
+/// Panel's Camera Health — the outcome sink, proving the Popup rides the
+/// Panel's Director).
 class FakeHealth implements CameraHealthSource {
   final _verdicts = <String, ProbeNotifier>{};
   final outcomes = <(String, bool)>[];

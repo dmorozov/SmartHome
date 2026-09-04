@@ -333,6 +333,27 @@ void main() {
       });
     });
 
+    test('a stale setMuted from a consumer that already let go cannot '
+        'un-mute the session the pool is holding for whoever comes next', () {
+      withKeepAlive((async, go2rtc, keep) {
+        final lease = keep.open(doorbell, name: 'ring_doorbell');
+        go2rtc.only.plays();
+        lease.setMuted(false);
+        lease.close();
+        expect(go2rtc.only.muted, isTrue, reason: 'the pool re-mutes');
+
+        // The Popup's talkback release arriving a frame after the close —
+        // the same lateness the holder-identity check defends `close`
+        // against, on the member that has no such check to fall back on.
+        lease.setMuted(false);
+
+        expect(go2rtc.only.muted, isTrue,
+            reason: 'a lingered session is SILENT: the surface that unmuted '
+                'it is gone, and the next consumer starts from the seam\'s '
+                'born-muted default');
+      });
+    });
+
     test('a stale close from a consumer that already let go does not evict '
         'the one now holding the stream', () {
       withKeepAlive((async, go2rtc, keep) {

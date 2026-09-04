@@ -26,9 +26,9 @@ import 'live_video.dart';
 /// that is true of Popups rather than of streams: the ding arbitration and
 /// deferral (#177014, `doorbell_popup_host.dart`), the route mechanics, and
 /// the deadline/ceiling clocks (`timed_feed.dart` — they time a ROUTE, so
-/// the Director never learns the Navigator exists). [open], the counted
-/// pass-through, remains for any unmanaged caller, so "how many streams is
-/// this wall playing" keeps one answer either way.
+/// the Director never learns the Navigator exists). Every surface attaches
+/// — there is no unmanaged path and no surface-built fallback (2026-09-02)
+/// — so "how many streams is this wall playing" has exactly one answer.
 ///
 /// [LiveVideoPhase] is deliberately NOT extended. queued/retrying/offline
 /// are facts about *policy and the world* — an admission slot not reached, a
@@ -99,9 +99,9 @@ extension FeedPhaseFacts on FeedPhase {
 
   /// Whether the Director is holding or pursuing a session for this feed —
   /// the tile's `wantKeepAlive` (a pursued tile may not be unmounted by the
-  /// grid's lazy viewport). The tile's frame-grab gate is deliberately NOT
-  /// this getter: grabbing has its own allow-list (`_grabAllowed` in
-  /// `cameras_view.dart`), which excludes more than pursuit does.
+  /// grid's lazy viewport). The frame-grab gate is deliberately NOT the
+  /// negation of this: [CameraFeed.stillGrabAllowed] excludes more than
+  /// pursuit does, and reads three facts phase cannot carry.
   bool get isActive =>
       this == FeedPhase.queued ||
       this == FeedPhase.connecting ||
@@ -309,12 +309,11 @@ class DirectorPolicy {
   /// somebody is standing there.
   final Duration dialSpacing;
 
-  /// Cap on concurrent sessions, counting managed feeds and counted
-  /// pass-throughs alike. Null — the v1 shipped value, decided against the
-  /// 2026-08-25 probe (capacity was not the failure) — means uncapped; the
-  /// slot exists so capping is a policy edit, not a redesign. When set and
-  /// reached, policy wants hold at [FeedPhase.queued]; person dials and
-  /// pass-throughs are never made to wait (a doorbell ding dials now).
+  /// Cap on concurrent sessions. Null — the v1 shipped value, decided
+  /// against the 2026-08-25 probe (capacity was not the failure) — means
+  /// uncapped; the slot exists so capping is a policy edit, not a redesign.
+  /// When set and reached, policy wants hold at [FeedPhase.queued]; person
+  /// dials are never made to wait (a doorbell ding dials now).
   final int? maxConcurrent;
 
   /// Backoff for failed policy dials; the last entry repeats forever
@@ -371,8 +370,11 @@ abstract interface class CameraFeed {
   /// The surface's viewport fact, pushed not polled; `true` at attach.
   /// `false` starts [DirectorPolicy.offscreenLinger] on a policy-started
   /// feed (stop → [FeedPhase.idle], want retained); `true` cancels the
-  /// debounce and re-queues an idle want through admission. Ignored for
-  /// person-origin feeds and for [FeedRole.zoom]. No-op after [release].
+  /// debounce and re-queues an idle want through admission. Recorded for
+  /// every viewport-governed feed — [stillGrabAllowed] reads it — while the
+  /// stop/resume it drives is skipped for person-origin feeds. Refused on
+  /// roles without [FeedRole.viewportGoverned] (the zoom, the Popup). No-op
+  /// after [release].
   set visible(bool value);
 
   /// How many automatic re-dials the ladder has scheduled since the last
@@ -392,16 +394,43 @@ abstract interface class CameraFeed {
   /// [phase]; remove the listener in `dispose` like any other.
   ValueListenable<int> get retryAttempt;
 
-  /// Camera Health's current verdict for this feed's Device — [Reachability
-  /// .unknown] where no health source is wired. Exposed because phase is
-  /// not a health proxy: a feed parked at [FeedPhase.idle] (or settled at
-  /// unconfigured/unsupported) never transitions when the probe flips, so
-  /// a caller that must not touch a dead camera — the tile's frame-grab
-  /// loop — has to read the verdict itself, live, not infer it from phase.
-  /// Three-valued on purpose: only [Reachability.unreachable] may gate;
-  /// unknown is absence of evidence, not a verdict (the health module's own
-  /// rule).
-  Reachability get reachability;
+  /// Whether a go2rtc frame grab is worth its keyframe dial right now — the
+  /// Cameras tile's still loop asks before it bills the camera (phase-8 A7;
+  /// a cache-miss grab IS a camera dial, ~3 s of stream). Four facts, each
+  /// with its own reason, and every one of them already the Director's —
+  /// it ANDs the same four for the dial itself — so since 2026-09-02 they
+  /// are answered here as one verdict rather than re-derived by a surface
+  /// through two seam members that existed only for that and a private
+  /// viewport mirror:
+  ///
+  /// 1. **Phase**: only idle/unconfigured/unsupported — the faces that can
+  ///    *show* a still. While live the video is on screen and a grab buys
+  ///    nothing; while failed/retrying the retry ladder owns the camera's
+  ///    dial budget (each failed open costs the camera two connections,
+  ///    measured); while queued a live dial is milliseconds away — and at
+  ///    view-open every tile past the first is queued, so grabbing there
+  ///    would fire the N-simultaneous-dials burst the admission gate
+  ///    exists to prevent; while offline, see 2, of which that phase is a
+  ///    subset.
+  /// 2. **Camera Health, read live** — never inferred from phase: a feed
+  ///    parked at idle (or settled at unconfigured/unsupported) does not
+  ///    transition when the probe flips, so the phase arm alone would knock
+  ///    a dead daemon once a minute forever. Only unreachable gates;
+  ///    unknown is absence of evidence (the health module's rule). Read on
+  ///    every role, gated or not: a still is a dial whoever is asking.
+  /// 3. **Viewport**: airtime for a tile nobody can see is airtime taken
+  ///    from one somebody can — the still loop honours the same doctrine
+  ///    the viewport stop enforces for streams. Born `true` like the
+  ///    [visible] flag it reads.
+  /// 4. **Overlay**: under a covering Popup the grid is invisible by
+  ///    route, which a visibility callback cannot see (#29/#295) — the
+  ///    same `didPushNext` fact that pauses the streams pauses the grabs.
+  ///
+  /// A getter, not a listenable: the loop is a 60 s cadence that reads it
+  /// at fetch time, and recovery needs no listener — the next tick reads
+  /// the flipped verdict. The HA-held still has none of these gates and
+  /// never asks: HA serves its cached JPEG, no device ever hears about it.
+  bool get stillGrabAllowed;
 
   /// A person asked. Marks the feed person-origin (never viewport-stopped,
   /// never overlay-paused; cameras keep the retry ladder — a person
@@ -440,9 +469,14 @@ abstract interface class CameraFeed {
 }
 
 /// The Director. One per process on the wall (composed in `main()` beside
-/// the keep-alive pool, never disposed there); a view that was not handed
-/// one builds its own over its [VideoConfig], which is what keeps every
-/// hermetic fixture working unchanged. Disposed by whoever built it.
+/// the keep-alive pool, never disposed there), and one per hermetic scene
+/// (`test/support/hermetic_director.dart` builds it over whatever opener the
+/// scene names — FakeGo2rtc, or the unconfigured default — and disposes it
+/// with the tree). Every video surface takes one, required:
+/// there is no surface-built fallback, so a surface that stopped feeding
+/// Camera Health or the census could only be one that was never composed
+/// at all — the silent degradation the 2026-09-02 review measured is
+/// impossible by construction. Disposed by whoever built it.
 class StreamDirector {
   StreamDirector({
     required this.video,
@@ -474,8 +508,8 @@ class StreamDirector {
   Timer? _gate;
   final _queue = <_Feed>[];
 
-  /// Sessions currently open: managed feeds' plus counted pass-throughs'.
-  /// What [DirectorPolicy.maxConcurrent] reads, when it is ever set.
+  /// Sessions currently open, one per feed holding one. What
+  /// [DirectorPolicy.maxConcurrent] reads, when it is ever set.
   var _activeSessions = 0;
 
   var _overlaid = false;
@@ -493,11 +527,6 @@ class StreamDirector {
       feed.onOverlaid(value);
     }
   }
-
-  /// The overlay fact, readable: the tile's frame-grab gate declines to
-  /// bill a camera for a face nobody can see — the same doctrine the
-  /// overlay stop itself enforces one layer down.
-  bool get overlaid => _overlaid;
 
   /// Register a surface's want. Never throws. Synchronous contract: gates
   /// are evaluated during the call, and if the admission slot is free the
@@ -519,29 +548,27 @@ class StreamDirector {
     return feed;
   }
 
-  /// The counted pass-through, shaped exactly as [LiveVideoOpener] so
-  /// `main()` hands `VideoConfig(open: director.open)` to the Popup path
-  /// unchanged. Sessions opened here are COUNTED — they occupy the cap and
-  /// the census — but never MANAGED: no waiting, no health gate, no retry;
-  /// a doorbell ding dials now. Keeps the opener contract whole: may not
-  /// throw. After [dispose], delegates straight through, uncounted.
-  LiveVideoSession open(Uri url, {required String name}) {
-    final LiveVideoSession inner;
-    try {
-      inner = video.open(url, name: name);
-    } catch (error) {
-      // The pool's own discipline, kept here too: the type, never the
-      // message — the URL is the one string that can carry a password.
-      return SettledLiveVideoSession(LiveVideoPhase.failed,
-          failure: 'the opener threw ${error.runtimeType}');
-    }
-    if (_disposed) return inner;
-    _activeSessions++;
-    return _CountedSession(inner, () {
-      _activeSessions--;
-      _drainQueue();
-    });
-  }
+  /// How many feeds of [roles] are being pursued or played right now —
+  /// [FeedPhaseFacts.isActive] over this Director's feeds, filtered by role
+  /// because the wall's Director is shared with the Popup and the Cameras
+  /// view's closing line must not count a ding riding over it. The closing
+  /// census that view kept by hand until 2026-09-03 — a set the tiles
+  /// reported into through a callback on two widget interfaces, cleared at
+  /// zoom-in and pruned at zoom-out, and once wrong (handoff D6, the ghost
+  /// grid) — has one answer here, in the module that sets every phase. A
+  /// released feed has already left the set.
+  ///
+  /// Not [_activeSessions], which counts held sessions of every role for
+  /// [DirectorPolicy.maxConcurrent]: a feed queued behind the gate is a
+  /// stream this surface is about to release and holds no session yet.
+  ///
+  /// By ROLE, not by asking surface — the Director does not record who
+  /// attached what. That is exactly "this view's feeds" only because the
+  /// wall shows one Cameras route at a time; two live Cameras routes would
+  /// each count the other's tiles.
+  int activeFeeds({required Set<FeedRole> roles}) => _feeds
+      .where((f) => roles.contains(f.role) && f._phase.value.isActive)
+      .length;
 
   /// Test lifecycle, the pool's precedent: cancels every timer (a pending
   /// Timer outliving the tree fails a widget test by itself), closes any
@@ -619,7 +646,8 @@ class StreamDirector {
     final health = this.health;
     // A health-blind role is not subscribed at all: it would only ever
     // no-op the callbacks, and its refcount churn is bookkeeping for
-    // nothing. Its `reachability` getter still reads the source directly.
+    // nothing. Its `stillGrabAllowed` verdict still reads the source
+    // directly (a still is a dial whoever is asking).
     if (health == null || !feed.role.healthGated) return;
     final id = feed.device.id;
     final existing = _healthWatch[id];
@@ -696,9 +724,25 @@ class _Feed implements CameraFeed {
   @override
   Widget get view => _session?.view ?? const SizedBox.shrink();
 
+  /// The four facts, ANDed beside the dial rule that ANDs them ([_resume]
+  /// reads phase, autoLive, [_visible] and the overlay; [_requestDial] the
+  /// probe) — the interface's own doc carries each arm's reason.
   @override
-  Reachability get reachability =>
-      director.health?.reachableOf(device.id).value ?? Reachability.unknown;
+  bool get stillGrabAllowed {
+    final phaseOk = switch (_phase.value) {
+      FeedPhase.idle || FeedPhase.unconfigured || FeedPhase.unsupported => true,
+      FeedPhase.queued ||
+      FeedPhase.connecting ||
+      FeedPhase.playing ||
+      FeedPhase.failed ||
+      FeedPhase.retrying ||
+      FeedPhase.offline => false,
+    };
+    return phaseOk &&
+        director._reachability(device.id) != Reachability.unreachable &&
+        _visible &&
+        !director._overlaid;
+  }
 
   @override
   ValueListenable<int> get retryAttempt => _retryAttempt;
@@ -831,15 +875,16 @@ class _Feed implements CameraFeed {
     director._activeSessions++;
     switch (session.phase.value) {
       case LiveVideoPhase.unsupported:
-        // Dialled nothing: no open line, no census stay, settled forever.
+        // Dialled nothing: no open line, no stay under the cap, settled
+        // forever.
         Log.info('cameras', '${_eventPrefix}_unsupported', {'name': name});
-        _dropSession(countCensus: true);
+        _dropSession();
         setPhase(FeedPhase.unsupported);
         return;
       case LiveVideoPhase.failed:
         // The born-failed trap ([SettledLiveVideoSession] never fires a
         // listener), closed here once instead of at three call sites.
-        _dropSession(countCensus: true);
+        _dropSession();
         _onDialFailed(session.failure ?? 'unknown');
         return;
       case LiveVideoPhase.connecting ||
@@ -888,7 +933,11 @@ class _Feed implements CameraFeed {
         // than hold `playing` over a picture that is being rebuilt.
         setPhase(FeedPhase.connecting);
       case LiveVideoPhase.unconfigured || LiveVideoPhase.unsupported:
-        // Settled values cannot follow a live one in either player.
+        // `unconfigured` cannot follow a live value in any player — the
+        // seam's rule. `unsupported` can, on the web branch alone: the MSE
+        // player dials its socket before it learns the browser decodes none
+        // of go2rtc's codecs. Ignored either way — a feed that reached the
+        // network keeps the verdict its dial earned.
         break;
     }
   }
@@ -1134,42 +1183,15 @@ class _Feed implements CameraFeed {
     _openLogged = false;
   }
 
-  void _dropSession({required bool countCensus}) {
-    final session = _session;
+  /// A born-settled session (unsupported, or failed at birth) never counted
+  /// as open for longer than the dial that produced it. Only ever called
+  /// with a session up — the `!` says so, where a `?.` would let a caller
+  /// with none drive the cap's count negative and lift the cap in silence.
+  void _dropSession() {
+    final session = _session!;
     _session = null;
-    session?.close();
-    if (countCensus) {
-      director._activeSessions--;
-      director._drainQueue();
-    }
-  }
-}
-
-/// A pass-through session whose close tells the census, once.
-class _CountedSession implements LiveVideoSession {
-  _CountedSession(this._inner, this._onClose);
-
-  final LiveVideoSession _inner;
-  final VoidCallback _onClose;
-  var _closed = false;
-
-  @override
-  ValueListenable<LiveVideoPhase> get phase => _inner.phase;
-
-  @override
-  String? get failure => _inner.failure;
-
-  @override
-  Widget get view => _inner.view;
-
-  @override
-  void setMuted(bool muted) => _inner.setMuted(muted);
-
-  @override
-  void close() {
-    _inner.close();
-    if (_closed) return;
-    _closed = true;
-    _onClose();
+    session.close();
+    director._activeSessions--;
+    director._drainQueue();
   }
 }

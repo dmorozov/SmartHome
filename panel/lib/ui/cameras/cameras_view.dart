@@ -10,7 +10,7 @@ import '../close_button.dart';
 import '../edge_tab.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
-import '../video/live_video.dart';
+import '../video/camera_face.dart';
 import '../video/snapshot.dart';
 import '../video/stream_director.dart';
 import 'camera_grid.dart';
@@ -35,8 +35,9 @@ const kCamerasIdleWarning = Duration(seconds: 30);
 /// HA-held JPEG (`SnapshotConfig`) the fetch never wakes a device and the
 /// only budget is LAN chatter. For go2rtc's frame grab
 /// (`Go2rtcStillsConfig`, phase-8 A7) a cache-miss on a cold camera costs
-/// one keyframe dial (~3 s of camera stream), which is why the tile gates
-/// that source (`_grabAllowed`) and the URL carries a cache window.
+/// one keyframe dial (~3 s of camera stream), which is why that source is
+/// gated by the Director's verdict (`CameraFeed.stillGrabAllowed`) and the
+/// URL carries a cache window.
 ///
 /// **Must stay longer than [kGo2rtcStillCache]** — the ordering is what
 /// makes each tick a fresh frame while remounts inside the window stay
@@ -80,28 +81,28 @@ class CamerasTab extends StatelessWidget {
 /// the route, because tiles release in `dispose()`, which runs however the
 /// route leaves.
 ///
-/// [director] is the process-wide Stream Director when `main()` composed
-/// one; null makes the view build its own over [video], which is what keeps
-/// every hermetic fixture working unchanged — the fixture's [VideoConfig]
-/// flows into an owned Director with the shipped default policy.
+/// [director] is the Stream Director every tile attaches to — `main()`'s
+/// process-wide one on the wall, the fixture-built one in a hermetic scene
+/// (`test/support/hermetic_director.dart`). Required, with no view-built
+/// fallback: a view that built its own would dial the same go2rtc and play
+/// the same picture while Camera Health and the census silently stopped
+/// hearing from it (measured by the 2026-09-02 review).
 Future<void> showCamerasView(
   BuildContext context, {
   required HubController controller,
-  required VideoConfig video,
+  required StreamDirector director,
   required SnapshotConfig snapshots,
   required Go2rtcStillsConfig stills,
   required CameraOrderStore order,
-  StreamDirector? director,
 }) {
   return Navigator.of(context).push(
     PageRouteBuilder<void>(
       pageBuilder: (_, _, _) => CamerasView(
         controller: controller,
-        video: video,
+        director: director,
         snapshots: snapshots,
         stills: stills,
         order: order,
-        director: director,
       ),
       transitionsBuilder: (_, animation, _, child) => SlideTransition(
         position: animation.drive(
@@ -127,15 +128,18 @@ class CamerasView extends StatefulWidget {
   const CamerasView({
     super.key,
     required this.controller,
-    required this.video,
+    required this.director,
     required this.snapshots,
     required this.stills,
     required this.order,
-    this.director,
   });
 
   final HubController controller;
-  final VideoConfig video;
+
+  /// The Director the tiles attach to — see [showCamerasView]. Where go2rtc
+  /// is travels inside it ([StreamDirector.video]); nothing on this route
+  /// holds a go2rtc address of its own.
+  final StreamDirector director;
   final SnapshotConfig snapshots;
 
   /// The go2rtc frame-grab source for tiles with no HA-held snapshot (the
@@ -150,8 +154,6 @@ class CamerasView extends StatefulWidget {
   /// defaults, to a store that remembers nothing past the process.
   final CameraOrderStore order;
 
-  final StreamDirector? director;
-
   @override
   State<CamerasView> createState() => _CamerasViewState();
 }
@@ -160,12 +162,10 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   late final List<Device> _devices;
   late final DateTime _openedAt;
 
-  /// The Director the tiles attach to — `main()`'s process-wide one on the
-  /// wall, or this view's own over [CamerasView.video] in a hermetic rig.
-  /// Owned only in the second case: disposing the wall's Director would
-  /// cancel the Popup path's census with it.
-  late final StreamDirector _director;
-  late final bool _ownsDirector;
+  /// The Director the tiles attach to — [CamerasView.director], never one of
+  /// this view's own. Not owned here: it outlives every route, and disposing
+  /// it would cancel the Popup path's census with it.
+  StreamDirector get _director => widget.director;
 
   /// This view's own route, captured so the idle return can refuse to pop
   /// blind — the same discipline `device_popup.dart` keeps for its
@@ -197,16 +197,26 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   /// paying 5 s, or 17 s on a floodlight.
   Device? _zoomed;
 
-  /// Live-tile census, kept by the tiles themselves via [_tileWent] so the
-  /// closing line can say how many streams the teardown is about to release.
-  final _live = <String>{};
+  /// The closing census — how many streams the teardown is about to release
+  /// — read off the Director in [deactivate] and logged in [dispose].
+  ///
+  /// Two hooks, because of Flutter's teardown order: a removed subtree is
+  /// deactivated parent-first and unmounted children-first, so at
+  /// `deactivate()` every tile and zoom feed is still attached with its live
+  /// phase, while by `dispose()` the tiles have released theirs. Until
+  /// 2026-09-03 the view kept this count itself — a set the tiles and the
+  /// zoom reported into through a callback, cleared at zoom-in and pruned
+  /// at zoom-out, with the unmount order explained in four places and once
+  /// wrong (handoff D6, the ghost grid). The Director sets every phase; it
+  /// answers the count ([StreamDirector.activeFeeds]) — by role, so this is
+  /// "this view's feeds" only because the wall shows one Cameras route at a
+  /// time.
+  var _closingLive = 0;
 
   @override
   void initState() {
     super.initState();
     _openedAt = DateTime.now();
-    _ownsDirector = widget.director == null;
-    _director = widget.director ?? StreamDirector(video: widget.video);
     // Plan order, captured once. What the grid actually draws is this run
     // through [arrangeCameras] with the person's saved arrangement — see
     // [_arranged], which is recomputed rather than stored so that a plan
@@ -223,7 +233,7 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
           .where(
             (d) =>
                 _director.policy.autoLive(d) &&
-                widget.video.urlFor(_director.policy.tileStream(d)) != null,
+                _director.video.urlFor(_director.policy.tileStream(d)) != null,
           )
           .length,
     });
@@ -259,36 +269,36 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
   }
 
   @override
+  void deactivate() {
+    // Parent-first, so the tiles' and the zoom's feeds are all still
+    // attached — see [_closingLive]. Only this view's roles: the wall's
+    // Director is shared with the Popup, and a ding riding over the grid is
+    // not a stream this teardown releases.
+    _closingLive = _director.activeFeeds(
+      roles: const {FeedRole.tile, FeedRole.zoom},
+    );
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     widget.order.removeListener(_onOrderChanged);
     camerasRouteObserver.unsubscribe(this);
     _idleWarn?.cancel();
     _idleFire?.cancel();
     // The tiles release their own feeds in their `dispose()`; this line is
-    // the summary a log reader greps for, not the mechanism. The census is
-    // still populated here because tile teardown deliberately skips it —
-    // children unmount before their parent, so a draining census always
-    // read 0 by the time this line was written (measured).
+    // the summary a log reader greps for, not the mechanism.
     Log.info('cameras', 'closed', {
       'open_s': DateTime.now().difference(_openedAt).inSeconds,
-      'live': _live.length,
+      'live': _closingLive,
     });
-    // A view-owned Director dies with the view — its gate and retry timers
-    // with it, which is what lets a widget test end clean. The wall's
-    // Director is `main()`'s and outlives every route.
-    if (_ownsDirector) {
-      _director.dispose();
-    } else {
-      // Leaving the route is also leaving the overlay state behind: the
-      // wall's Director must not stay paused because the thing that was
-      // covered is gone.
-      _director.overlaid = false;
-    }
+    // Leaving the route is also leaving the overlay state behind: the
+    // Director outlives this route (`main()`'s on the wall, the fixture's
+    // in a test — never this view's own) and must not stay paused because
+    // the thing that was covered is gone. Its timers are its owner's to
+    // cancel.
+    _director.overlaid = false;
     super.dispose();
-  }
-
-  void _tileWent({required String device, required bool live}) {
-    live ? _live.add(device) : _live.remove(device);
   }
 
   void _zoomIn(Device device) {
@@ -300,12 +310,6 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
       'from': _director.policy.tileStream(device),
       'to': _director.policy.zoomStream(device),
     });
-    // The tiles this unmounts deliberately skip their own drain (the
-    // children-unmount-first rule below), which is right at view teardown
-    // and wrong here: a census carried through a zoom would count a grid
-    // that is not running, and a close-from-zoom would log its ghost. The
-    // zoom feed reports itself in through the same [_tileWent].
-    _live.clear();
     setState(() => _zoomed = device);
   }
 
@@ -313,10 +317,6 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
     final device = _zoomed;
     if (device == null) return;
     Log.info('cameras', 'zoom_out', {'device': device.id});
-    // The zoom's own census entry leaves with it — the remounting tiles
-    // re-report through their initState, born active off the pool's kept
-    // sessions.
-    _live.remove(device.id);
     setState(() => _zoomed = null);
   }
 
@@ -363,7 +363,6 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
     director: _director,
     snapshots: widget.snapshots,
     stills: widget.stills,
-    onWent: _tileWent,
     onZoom: () => _zoomIn(device),
   );
 
@@ -453,7 +452,6 @@ class _CamerasViewState extends State<CamerasView> with RouteAware {
                       key: ValueKey('zoom-${device.id}'),
                       device: device,
                       director: _director,
-                      onWent: _tileWent,
                     ),
                     null => CameraGrid(
                       arranged: _arranged,
@@ -565,7 +563,6 @@ class CameraTile extends StatefulWidget {
     required this.director,
     required this.snapshots,
     required this.stills,
-    required this.onWent,
     required this.onZoom,
   });
 
@@ -573,10 +570,6 @@ class CameraTile extends StatefulWidget {
   final StreamDirector director;
   final SnapshotConfig snapshots;
   final Go2rtcStillsConfig stills;
-
-  /// Tells the view a tile's feed went active or dark, for the closing
-  /// census.
-  final void Function({required String device, required bool live}) onWent;
 
   /// Fills the screen with this camera at full size.
   ///
@@ -598,17 +591,14 @@ class CameraTile extends StatefulWidget {
 class CameraTileState extends State<CameraTile>
     with AutomaticKeepAliveClientMixin {
   late final CameraFeed _feed;
+
+  /// The shared core of the not-live face (`camera_face.dart`): whether a
+  /// picture was ever up on this tile, and whether the wait it is in is a
+  /// restoration — "Reconnecting…" is worn only over one; a first connect
+  /// that keeps failing stays "Connecting…". Listens to both of the feed's
+  /// notifiers; this State listens to it.
+  late final CameraFace _cameraFace;
   var _wasActive = false;
-
-  /// Whether a picture was ever up on this tile — "Reconnecting…" is worn
-  /// only over a restoration; a first connect that keeps failing stays
-  /// "Connecting…" (the zoom's rule, quietly).
-  var _sawPlaying = false;
-
-  /// The viewport fact, mirrored for the grab gate — the feed's own
-  /// `visible` is a setter (push-only, by the seam's design), and the gate
-  /// needs to read it.
-  var _tileVisible = true;
 
   Uint8List? _still;
   String? _stillStatus;
@@ -633,40 +623,35 @@ class CameraTileState extends State<CameraTile>
   void initState() {
     super.initState();
     _feed = widget.director.attach(_device, role: FeedRole.tile);
-    _feed.phase.addListener(_onPhase);
-    // Both notifiers: the retry count can climb without a phase change
-    // (retrying→retrying on a synchronous re-dial failure), and a counted
-    // face that listens to phase alone freezes.
-    _feed.retryAttempt.addListener(_onPhase);
+    // The face listens to both of the feed's notifiers (the count can climb
+    // without a phase change) and reads the born phase — a tile handed a
+    // lingered picture by the pool knows it was up even if the player drops
+    // back to connecting before it fails.
+    _cameraFace = CameraFace(_feed)..addListener(_onPhase);
     _wasActive = _feed.phase.value.isActive;
-    if (_wasActive) {
-      widget.onWent(device: _device.id, live: true);
-      // The mixin read [wantKeepAlive] before the feed existed; tell it the
-      // real answer now that there is one.
-      updateKeepAlive();
-    }
+    // The mixin read [wantKeepAlive] before the feed existed; tell it the
+    // real answer now that there is one.
+    if (_wasActive) updateKeepAlive();
     _startStillLoop();
   }
 
   @override
   void dispose() {
     _refresh?.cancel();
-    _feed.phase.removeListener(_onPhase);
-    _feed.retryAttempt.removeListener(_onPhase);
-    // The census is deliberately not drained here: children unmount before
-    // their parent, so a census drained in tile dispose always read 0 by
-    // the time the view's closing line was written (measured).
+    _cameraFace.dispose();
+    // The view reads its closing census off the Director in `deactivate()`,
+    // which runs before any child's dispose — not from a set this tile fed
+    // — so releasing here costs the count nothing on any path (teardown,
+    // zoom-in, or a lazy-viewport eviction).
     _feed.release();
     super.dispose();
   }
 
   void _onPhase() {
     if (!mounted) return;
-    if (_feed.phase.value == FeedPhase.playing) _sawPlaying = true;
     final active = _feed.phase.value.isActive;
     if (active != _wasActive) {
       _wasActive = active;
-      widget.onWent(device: _device.id, live: active);
       updateKeepAlive();
     }
     setState(() {});
@@ -704,50 +689,6 @@ class CameraTileState extends State<CameraTile>
     _refresh ??= Timer.periodic(kCamerasSnapshotRefresh, (_) => _fetchStill());
   }
 
-  /// Whether a go2rtc frame grab is worth its dial right now. Four gates,
-  /// each with its own reason, because a cache-miss grab IS a camera dial:
-  ///
-  /// 1. **Phase**: only idle/unconfigured/unsupported — the faces that can
-  ///    *show* a still. While live the video is on screen and a grab buys
-  ///    nothing; while failed/retrying the retry ladder owns the camera's
-  ///    dial budget (each failed open costs the camera two connections,
-  ///    measured); while queued a live dial is milliseconds away — and at
-  ///    view-open every tile past the first is queued, so grabbing there
-  ///    would fire the N-simultaneous-dials burst the admission gate
-  ///    exists to prevent; while offline, see gate 2, of which that phase
-  ///    is a subset.
-  /// 2. **Camera Health, read live** — never inferred from phase: a feed
-  ///    parked at idle (or settled at unconfigured/unsupported) does not
-  ///    transition when the probe flips, so the phase arm alone would knock
-  ///    a dead daemon once a minute forever. Only `unreachable` gates;
-  ///    unknown is absence of evidence (the health module's rule). Recovery
-  ///    needs no listener: the next tick reads the flipped verdict.
-  /// 3. **Viewport**: airtime for a tile nobody can see is airtime taken
-  ///    from one somebody can — the still loop honours the same doctrine
-  ///    the Director's viewport stop enforces for streams. Born `true`
-  ///    like the feed's own flag (R4's bounded first-report window).
-  /// 4. **Overlay**: under a covering Popup the grid is invisible by
-  ///    route, which the VisibilityDetector cannot see (#29/#295) — the
-  ///    same `didPushNext` fact that pauses the streams pauses the grabs.
-  ///
-  /// The HA-held source has none of these gates: HA serves its cached
-  /// JPEG, no device ever hears about it.
-  bool get _grabAllowed {
-    final phaseOk = switch (_feed.phase.value) {
-      FeedPhase.idle || FeedPhase.unconfigured || FeedPhase.unsupported => true,
-      FeedPhase.queued ||
-      FeedPhase.connecting ||
-      FeedPhase.playing ||
-      FeedPhase.failed ||
-      FeedPhase.retrying ||
-      FeedPhase.offline => false,
-    };
-    return phaseOk &&
-        _feed.reachability != Reachability.unreachable &&
-        _tileVisible &&
-        !widget.director.overlaid;
-  }
-
   Future<void> _fetchStill() async {
     // The HA-held JPEG first — the doorbell's path, and the cheaper one
     // wherever a `snapshot:` binding exists (camera_proxy serves HA's own
@@ -765,7 +706,10 @@ class CameraTileState extends State<CameraTile>
     }
     final stream = _grabStream;
     final url = widget.stills.urlFor(stream);
-    if (url == null || !_grabAllowed) return;
+    // Whether the grab is worth its dial is the Director's verdict, read at
+    // fetch time — one answer over the four facts it already holds (phase,
+    // Camera Health, viewport, overlay), never re-derived here (2026-09-02).
+    if (url == null || !_feed.stillGrabAllowed) return;
     // Tokenless on purpose: go2rtc is unauthenticated on this LAN (owner
     // decision, phase-4 §B0), and the fetcher sends no header for ''.
     final result = await widget.stills.fetch(url, token: '');
@@ -815,8 +759,7 @@ class CameraTileState extends State<CameraTile>
       key: ValueKey('tile-visibility-${_device.id}'),
       onVisibilityChanged: (info) {
         if (!mounted) return;
-        _tileVisible = info.visibleFraction > 0;
-        _feed.visible = _tileVisible;
+        _feed.visible = info.visibleFraction > 0;
       },
       child: _tileBody(),
     );
@@ -879,16 +822,15 @@ class CameraTileState extends State<CameraTile>
       // wall fact"); a first connect that keeps failing stays
       // "Connecting…", because "re-" claims a restoration.
       case FeedPhase.connecting:
-        final notice = _sawPlaying && _feed.retryAttempt.value > 0
-            ? 'Reconnecting…'
-            : 'Connecting…';
-        return _FaceNotice(notice);
+        return _FaceNotice(
+          _cameraFace.reconnecting ? 'Reconnecting…' : 'Connecting…',
+        );
       // The quiet tile variant of the zoom's counted face: the aged still
       // (where one exists) with the word in the corner — the §C design
       // ("retrying = aged still + quiet badge") finally spelled.
       case FeedPhase.retrying:
         return _stillFace(
-          notice: _sawPlaying ? 'Reconnecting…' : 'Connecting…',
+          notice: _cameraFace.reconnecting ? 'Reconnecting…' : 'Connecting…',
         );
       // Only a non-camera rests here (#177014).
       case FeedPhase.failed:
@@ -936,9 +878,12 @@ class CameraTileState extends State<CameraTile>
             ),
           ),
           if (notice != null)
-            Align(alignment: Alignment.bottomLeft, child: _FaceTag(notice)),
+            Align(alignment: Alignment.bottomLeft, child: _CornerTag(notice)),
           if (badge)
-            const Align(alignment: Alignment.bottomRight, child: _TapForLive()),
+            const Align(
+              alignment: Alignment.bottomRight,
+              child: _CornerTag('Tap for live'),
+            ),
         ],
       );
     }
@@ -959,7 +904,10 @@ class CameraTileState extends State<CameraTile>
           ),
         ),
         if (badge)
-          const Align(alignment: Alignment.bottomRight, child: _TapForLive()),
+          const Align(
+            alignment: Alignment.bottomRight,
+            child: _CornerTag('Tap for live'),
+          ),
       ],
     );
   }
@@ -1032,16 +980,10 @@ class ZoomedCamera extends StatefulWidget {
     super.key,
     required this.device,
     required this.director,
-    required this.onWent,
   });
 
   final Device device;
   final StreamDirector director;
-
-  /// The same census wire the tiles report on: the zoom is the one feed
-  /// running while the grid is not, and a closing line that omitted it
-  /// would count a ghost grid instead.
-  final void Function({required String device, required bool live}) onWent;
 
   @override
   State<ZoomedCamera> createState() => _ZoomedCameraState();
@@ -1049,13 +991,13 @@ class ZoomedCamera extends StatefulWidget {
 
 class _ZoomedCameraState extends State<ZoomedCamera> {
   late final CameraFeed _feed;
-  var _wasActive = false;
 
-  /// Whether a picture was EVER up on this zoom — what separates the
-  /// honest "Reconnecting…" from a first connect that keeps failing:
-  /// "re-" claims a restoration, and a stream that never showed a frame
-  /// has nothing to restore.
-  var _sawPlaying = false;
+  /// The shared core of the not-live face (`camera_face.dart`): whether a
+  /// picture was EVER up on this zoom, and whether the wait it is in is a
+  /// restoration — "re-" claims one, and a stream that never showed a frame
+  /// has nothing to restore. Listens to both of the feed's notifiers; this
+  /// State listens to it.
+  late final CameraFace _cameraFace;
 
   Device get _device => widget.device;
 
@@ -1069,34 +1011,26 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
     // logged by the time this returns — the born-failed trap is the
     // Director's to close, once.
     _feed = widget.director.attach(_device, role: FeedRole.zoom);
-    _feed.phase.addListener(_onPhase);
-    // The count can climb with NO phase change (a re-dial failing
-    // synchronously is retrying→retrying) — the counted face listens to
-    // both or it freezes at "try 2".
-    _feed.retryAttempt.addListener(_onPhase);
-    _wasActive = _feed.phase.value.isActive;
-    if (_wasActive) widget.onWent(device: _device.id, live: true);
+    // The face listens to both of the feed's notifiers — the count can
+    // climb with NO phase change (a re-dial failing synchronously is
+    // retrying→retrying), and a counted face that listened to phase alone
+    // would freeze at "try 2" — and reads the born phase, so a zoom handed
+    // a lingered picture by the pool knows it was up.
+    _cameraFace = CameraFace(_feed)..addListener(_onPhase);
   }
 
   @override
   void dispose() {
-    _feed.phase.removeListener(_onPhase);
-    _feed.retryAttempt.removeListener(_onPhase);
-    // No census drain here, the tiles' rule: the view drains this feed's
-    // entry itself at zoom-out, and at view teardown the populated census
-    // is exactly what the closing line reads.
+    _cameraFace.dispose();
+    // The view reads its closing census off the Director in `deactivate()`,
+    // before this runs (the tiles' rule too), so the release costs it
+    // nothing.
     _feed.release();
     super.dispose();
   }
 
   void _onPhase() {
     if (!mounted) return;
-    if (_feed.phase.value == FeedPhase.playing) _sawPlaying = true;
-    final active = _feed.phase.value.isActive;
-    if (active != _wasActive) {
-      _wasActive = active;
-      widget.onWent(device: _device.id, live: active);
-    }
     setState(() {});
   }
 
@@ -1129,16 +1063,16 @@ class _ZoomedCameraState extends State<ZoomedCamera> {
         // only if a picture was ever up ("re-" claims a restoration; a
         // first connect that keeps failing is still just connecting,
         // counted out loud).
-        return _feed.retryAttempt.value > 0
+        return _cameraFace.counting
             ? _FaceNotice(
-                '${_sawPlaying ? 'Reconnecting…' : 'Connecting…'}'
-                ' try ${_feed.retryAttempt.value + 1}',
+                '${_cameraFace.reconnecting ? 'Reconnecting…' : 'Connecting…'}'
+                ' try ${_cameraFace.attempt}',
               )
             : const _FaceNotice('Connecting…');
       case FeedPhase.retrying:
         return _FaceNotice(
-          '${_sawPlaying ? 'Reconnecting…' : 'Connecting…'}'
-          ' try ${_feed.retryAttempt.value + 1}',
+          '${_cameraFace.reconnecting ? 'Reconnecting…' : 'Connecting…'}'
+          ' try ${_cameraFace.attempt}',
         );
       // Only a non-camera rests here — the doorbell, whose stream is never
       // re-dialled on a timer (#177014). A tap asks again.
@@ -1176,11 +1110,14 @@ class _FaceNotice extends StatelessWidget {
   }
 }
 
-/// The quiet corner tag a still face wears when the Director has a verdict
-/// worth a word — "Camera offline" today. Form before colour: the same
-/// pill as [_TapForLive], because it is information, not an alarm.
-class _FaceTag extends StatelessWidget {
-  const _FaceTag(this.text);
+/// The quiet corner tag a still face wears — the Director's verdict worth a
+/// word at the left ("Camera offline", "Reconnecting…"), "Tap for live" at
+/// the right. One widget for both, per CLAUDE.md: it was two identical
+/// `Container`s until 2026-09-02, and the same pill drawn twice drifts on
+/// the first change to either. Form before colour — it is information, not
+/// an alarm.
+class _CornerTag extends StatelessWidget {
+  const _CornerTag(this.text);
 
   final String text;
 
@@ -1196,30 +1133,6 @@ class _FaceTag extends StatelessWidget {
       child: Text(
         text,
         style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          color: PanelTheme.inkFaint,
-        ),
-      ),
-    );
-  }
-}
-
-class _TapForLive extends StatelessWidget {
-  const _TapForLive();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(8),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: PanelTheme.surface.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: const Text(
-        'Tap for live',
-        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: PanelTheme.inkFaint,

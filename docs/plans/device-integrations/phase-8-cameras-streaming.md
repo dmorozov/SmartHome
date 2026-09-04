@@ -115,6 +115,11 @@ Decided and applied with this phase:
   back to the frame grab for `DeviceKind.camera` only, gated by feed phase
   (grab only in idle/queued/unconfigured/unsupported — live, the retry
   ladder, and a health-declared-offline camera are never billed a grab).
+  *(Correction: `queued` was never in the shipped allow-list — at
+  view-open every tile past the first is queued, and a grab there is the
+  burst admission exists to prevent; since 2026-09-02 the gate is the
+  Director's one verdict, `CameraFeed.stillGrabAllowed`,
+  idle/unconfigured/unsupported only — see handoff N6.)*
   Measured en route: a dead camera's `frame.jpeg` is a **zero-byte 200**,
   which the fetchers now refuse rather than hand `Image.memory`.
 - **A8 Explicitly unchanged**: RTSPS/TCP transport (every shipping NVR

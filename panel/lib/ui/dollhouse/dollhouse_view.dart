@@ -9,7 +9,6 @@ import '../device_presentation.dart';
 import '../hub_controller.dart';
 import '../theme.dart';
 import '../audio/talk.dart';
-import '../video/live_video.dart';
 import '../video/snapshot.dart';
 import '../video/stream_director.dart';
 import 'floor_arrangement.dart';
@@ -88,35 +87,32 @@ class DollhouseView extends StatefulWidget {
   const DollhouseView({
     super.key,
     required this.controller,
-    required this.video,
-    this.director,
+    required this.director,
     this.snapshots,
     this.talk = const TalkConfig(),
   });
 
   final HubController controller;
 
-  /// The process-wide Stream Director, on its way to the Popup a camera pin
-  /// opens — the pin's Popup attaches a managed feed ([FeedRole.popup]).
-  /// Carried unread, exactly like [video]; null in hermetic fixtures, and
-  /// the Popup then builds its own.
-  final StreamDirector? director;
-
-  /// Where go2rtc is, on its way to the Popup a camera pin opens. Carried
-  /// rather than read here: this view neither plays nor decides anything
-  /// about video, and [FloorView] is not on the path at all — it forwards
-  /// [_onDeviceTap] and never learns what a tap turns into.
-  final VideoConfig video;
+  /// The Stream Director, on its way to the Popup a camera pin opens — the
+  /// pin's Popup attaches a managed feed ([FeedRole.popup]) to it, and where
+  /// go2rtc is travels inside it. Carried rather than read here: this view
+  /// neither plays nor decides anything about video, and [FloorView] is not
+  /// on the path at all — it forwards [_onDeviceTap] and never learns what
+  /// a tap turns into. Required, like every video surface's: there is no
+  /// Popup-built fallback for a forgotten argument to fall into.
+  final StreamDirector director;
 
   /// Where the Hub is, for the still the Popup falls back to while live video
-  /// has no picture (issue #1). Carried for exactly the reason [video] is, and
-  /// optional for the reason `showDevicePopup`'s copy is: a suite that stages
-  /// a tap on a camera pin should not have to stage a Hub REST endpoint too.
+  /// has no picture (issue #1). Carried for exactly the reason [director]
+  /// is, and optional for the reason `showDevicePopup`'s copy is: a suite
+  /// that stages a tap on a camera pin should not have to stage a Hub REST
+  /// endpoint too.
   final SnapshotConfig? snapshots;
 
-  /// Where the doorbell's push-to-talk pushes, forwarded for [video]'s reason.
-  /// Defaulted rather than required, like `showDevicePopup`'s copy: a suite
-  /// staging a tap on a *camera* pin has no talkback to stage, and an
+  /// Where the doorbell's push-to-talk pushes, forwarded for [director]'s
+  /// reason. Defaulted rather than required, like `showDevicePopup`'s copy: a
+  /// suite staging a tap on a *camera* pin has no talkback to stage, and an
   /// unconfigured default is the honest thing for it to get.
   final TalkConfig talk;
 
@@ -404,7 +400,6 @@ class _DollhouseViewState extends State<DollhouseView>
       showDevicePopup(
         context,
         presentation: presentation,
-        video: widget.video,
         director: widget.director,
         talk: widget.talk,
         controller: widget.controller,

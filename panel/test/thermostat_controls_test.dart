@@ -9,8 +9,8 @@ import 'package:panel/domain/house.dart';
 import 'package:panel/ui/device_popup.dart';
 import 'package:panel/ui/hub_controller.dart';
 import 'package:panel/ui/theme.dart';
-import 'package:panel/ui/video/live_video.dart';
 
+import 'support/hermetic_director.dart';
 import 'test_house.dart';
 
 /// The setpoint controls' whole promise, stated as scenes: the number on
@@ -45,16 +45,22 @@ void main() {
     bool handsOn = true,
   }) async {
     final device = thermostatOf(controller.house);
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(
-        builder: (context) => TextButton(
-          onPressed: () => showDevicePopup(
-            context,
-            presentation: controller.presentationOf(device),
-            video: const VideoConfig(),
-            controller: handsOn ? controller : null,
+    // A thermostat body attaches no feed, but the seam is one seam: every
+    // Popup takes the Director, and the fixture's unconfigured one is the
+    // honest thing for a scene with no video in it.
+    await tester.pumpWidget(HermeticDirector(
+      key: UniqueKey(),
+      builder: (_, director) => MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showDevicePopup(
+              context,
+              presentation: controller.presentationOf(device),
+              director: director,
+              controller: handsOn ? controller : null,
+            ),
+            child: const Text('tap the pin'),
           ),
-          child: const Text('tap the pin'),
         ),
       ),
     ));

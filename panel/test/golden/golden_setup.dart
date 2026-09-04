@@ -10,6 +10,8 @@ import 'package:panel/ui/audio/talk.dart';
 import 'package:panel/ui/video/live_video.dart';
 import 'package:panel/ui/video/snapshot.dart';
 
+import '../support/hermetic_director.dart';
+
 /// The size the goldens render at: a real 16:10 panel resolution, and big
 /// enough that every pin and room label is legible. Costs ~100-200 KB per
 /// scene in the repo. `tool/shot.sh` covers other resolutions against a
@@ -69,16 +71,21 @@ Future<void> pumpPanel(
     // `size`, and it stays comparable to a `tool/shot.sh` capture.
     ..devicePixelRatio = 1.0;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(PanelApp(
-      controller: controller,
-      hubLabel: hubLabel,
+  // The Director over [video] is the fixture's, disposed with the tree —
+  // the same seam `main()` composes, one Director for every surface.
+  await tester.pumpWidget(HermeticDirector(
+      key: UniqueKey(),
       video: video,
-      snapshots: snapshots,
-      stills: const Go2rtcStillsConfig(),
-      talk: talk,
-      // Empty: a golden is a picture of plan order, never of somebody's
-      // arrangement.
-      order: CameraOrderStore()));
+      builder: (_, director) => PanelApp(
+          controller: controller,
+          hubLabel: hubLabel,
+          director: director,
+          snapshots: snapshots,
+          stills: const Go2rtcStillsConfig(),
+          talk: talk,
+          // Empty: a golden is a picture of plan order, never of somebody's
+          // arrangement.
+          order: CameraOrderStore())));
   await tester.pumpAndSettle();
 }
 

@@ -93,7 +93,20 @@ a restoration*. A first connect that keeps failing goes on saying
 applies to the same phases (owner request, 2026-08-26), and it needs a
 `_sawPlaying` latch in the Popup's video box — the third copy of that
 latch on the Panel, and the clearest argument yet for the shared
-`CameraFace` module the same review proposed.
+`CameraFace` module the same review proposed. *(Landed 2026-09-02:
+`lib/ui/video/camera_face.dart` is that module — one latch, one birth
+read, one listener pair for all three surfaces, each keeping its own
+phrase table. The tile and the zoom gained the Popup's born-playing rule
+with it; until then only the Popup read the born phase, and a tile
+re-attached to a lingered picture whose player dropped back to
+`connecting` before failing said "Connecting…" through the whole ladder —
+a straight death was saved only by the Director counting before it flips
+the phase. One more cell moved with the shared predicate: a camera Popup's
+ladder re-dial parked at the admission gate (`queued`, count above zero)
+now keeps "Reconnecting to the camera…" instead of dropping to
+"Connecting…" for the wait — the mid-climb flicker this section's own rule
+argues against; latent on today's wall, where nothing else dials under an
+open camera Popup.)*
 
 **A health-blind ladder is bounded by the route, not the probe.** The two
 decisions compound: a popup feed never parks at `offline`, so on a camera
