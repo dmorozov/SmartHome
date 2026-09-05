@@ -57,10 +57,30 @@ class RtspTuning {
   ///
   /// Affordable at this size: a tile is 640×360 and the grid is six of them —
   /// the phase-8 prototype measured about half a core for six streams
-  /// *including* software GL rendering under Xvfb. **`VIDEO_DECODERS=auto` is
-  /// worth a run now that the real faults are fixed**: if the picture holds,
-  /// hardware decoding buys the appliance back a core it would rather spend
-  /// on something else.
+  /// *including* software GL rendering under Xvfb.
+  ///
+  /// **`VIDEO_DECODERS=auto` was finally run on 2026-09-04, and the picture
+  /// holds.** Eight freeze-probe arms, four each, CPU sampled over a 14 s
+  /// window inside the warmup: `auto` 46.1 / 47.2 / 49.6 / 50.4 % (mean 48.3),
+  /// `FFmpeg` 53.7 / 55.2 / 57.9 / 60.4 % (mean 56.8). No overlap between the
+  /// arms — every `auto` run is cheaper than every software run, about 15 %
+  /// less CPU. Grades were 5/6 three times each with one 4/6 apiece, and both
+  /// 4/6s were hub-side: one camera on "Connecting…", one with a clock 18 s
+  /// behind its neighbours. **No macroblocks in any `auto` grab**, which is
+  /// what the 2026-08-26 fault looked like and further evidence that
+  /// [lowLatency] was the whole of it.
+  ///
+  /// Two things that measurement does NOT establish, and they are why the
+  /// default has not moved on it alone. Which engine did the work is unknown:
+  /// `nvidia-smi` shows NVDEC essentially idle (4 % peak against a 0 %
+  /// baseline), so it is not the dGPU — which is the reassuring answer, since
+  /// the kiosk pins the i915 and never opens the NVIDIA card — but telling
+  /// VAAPI from a different software path needs `vainfo` or
+  /// `intel_gpu_top`, and neither is installed. And the software pin's stated
+  /// purpose is portability to the AMD mini PC, which is still unpurchased,
+  /// so `auto` there remains untested by construction. The failure it guards
+  /// against is also the deceptive one: a corrupt picture under a LIVE badge
+  /// reads as a working camera.
   final List<String>? decoders;
 
   /// fvp's `lowLatency`, and **the shipped value is 0 — off — because 1

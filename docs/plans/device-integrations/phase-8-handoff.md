@@ -668,14 +668,34 @@ two fields are `VIDEO_REPAINT_PULSE` and `VIDEO_DEBUG`.
 | `VIDEO_REPAINT_PULSE` | `off` *(since 2026-09-04; was `on`)* | the per-vsync texture repaint. `on` is the rescue if the wall goes back to updating on scroll alone — through `-e panel_video_repaint_pulse=on`, so it survives a converge |
 | `VIDEO_DEBUG` | *(off)* | `on` writes `video.pulse` once a second per stream. Exactly `on`; anything else is off, because a line per second per stream is not something to enable by typo |
 
-**Open:** whether hardware decode was ever a problem at all is now unknown —
-it was only ever observed alongside the dropped key frame. Worth one run at
-`VIDEO_DECODERS=auto` with `VIDEO_LOW_LATENCY=0` before treating software as
-required, since the production appliance is meant to be a modest AMD Radeon
-rather than this dev laptop and would rather not spend a core on decode —
-though as of 2026-09-04 that mini PC is still unpurchased, so the wall and the
-dev box are one Intel/NVIDIA machine and the portability argument is about a
-future, not a present. Software is affordable at
+**Was open, now measured (2026-09-04).** Whether hardware decode was ever a
+problem at all was unknown — it was only ever observed alongside the dropped
+key frame. `VIDEO_DECODERS=auto` with `VIDEO_LOW_LATENCY=0` has now been run:
+eight freeze-probe arms, four each, CPU sampled over a 14 s window inside the
+warmup.
+
+| arm | CPU per run | mean | grades |
+|---|---|---|---|
+| `auto` | 46.1 / 47.2 / 49.6 / 50.4 % | **48.3 %** | 5/6 ×3, 4/6 ×1 |
+| `FFmpeg` (shipped) | 53.7 / 55.2 / 57.9 / 60.4 % | **56.8 %** | 5/6 ×3, 4/6 ×1 |
+
+No overlap between the arms — every `auto` run is cheaper than every software
+run, about 15 % less. Both 4/6 grades were hub-side and symmetric between the
+arms (one camera on "Connecting…", one with a burned-in clock 18 s behind its
+neighbours), which is the rig's rule about reading clocks before convicting a
+texture. **No macroblocks in any `auto` grab** — the 2026-08-26 fault does not
+reproduce, which is further evidence `lowLatency` was the whole of it.
+
+**Still not established, and why the default has not moved on this alone.**
+Which engine did the work: `nvidia-smi` shows NVDEC essentially idle (4 % peak
+against a 0 % baseline), so it is *not* the dGPU — the reassuring answer,
+since the kiosk pins the i915 and never opens the NVIDIA card — but telling
+VAAPI from a different software path needs `vainfo` or `intel_gpu_top`, and
+neither is installed (and the Hub host has no passwordless sudo). And the
+software pin's stated purpose is portability to the AMD mini PC, which is
+still `minipc.placeholder.invalid`, so `auto` there is untested by
+construction. The failure being guarded against is the deceptive one: a
+corrupt picture under a LIVE badge reads as a working camera. Software is affordable at
 tile size regardless (640×360 × 6; the phase-8 prototype measured ~half a
 core for six streams including software GL under Xvfb); the 1080p zoom is the
 case to re-measure.

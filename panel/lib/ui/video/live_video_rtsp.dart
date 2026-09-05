@@ -4,11 +4,15 @@
 ///
 /// The same both-branches shape as `live_video.dart`, for the same reason:
 /// `main()` compiles for the appliance and for the web from one file, and
-/// this export gives it one `openRtspVideo` name whose meaning is the real
-/// fvp-backed player on the VM and an explicit fall-through to the
-/// platform's own player (MSE) on web — where RTSP is not a thing a browser
-/// can speak, and `VIDEO_TRANSPORT=rtsp` on a web build is a configuration
-/// slip that must cost nothing.
+/// this export gives it one `rtspOpener` and one `registerRtspPlayer`, each
+/// meaning the real fvp-backed player on the VM and, on web, an explicit
+/// fall-through to the platform's own player (MSE) — where RTSP is not a
+/// thing a browser can speak, and `VIDEO_TRANSPORT=rtsp` on a web build is a
+/// configuration slip that must cost nothing.
+///
+/// Both take an `RtspTuning` (`config/video_tuning.dart`), which is how the
+/// four settings that used to be process-wide globals reach the transport:
+/// bound once at the composition root, never read from ambient state.
 library;
 
 export 'live_video_rtsp_io.dart'
