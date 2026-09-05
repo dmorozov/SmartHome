@@ -89,6 +89,19 @@ panel_env_file: /etc/smarthome/panel.env
 # extra-vars land in `ps` output.
 panel_ha_token: "{{ lookup('ansible.builtin.env', 'PANEL_HA_TOKEN') }}"
 
+# Which player the Panel dials cameras with: `rtsp` (the shipped default, and
+# the only branch carrying inbound doorbell audio — ADR-0011) or `mjpeg`.
+#
+# Empty = emit no Environment=VIDEO_TRANSPORT line, so the Panel keeps its own
+# default. This exists because four documents already promise that a rollback
+# to MJPEG is "`VIDEO_TRANSPORT=mjpeg` + restart, no rebuild" — a promise with
+# nothing under it until now, since the unit templated no such line and a
+# hand-edited one is reverted by the next converge. `mjpeg` costs go2rtc a
+# per-stream transcode (52 % CPU / 573 MiB vs 35 % / 117 MiB measured
+# 2026-08-26) and gives up inbound audio, so it is a rollback and not a tuning:
+# there is no machine on which it is the better answer.
+panel_video_transport: ""
+
 # The Panel's frame pulse — a per-vsync repaint of every playing camera
 # texture. Built 2026-08-26 for a wall that only updated while it was being
 # scrolled; that fault turned out to be Impeller's and is pinned away

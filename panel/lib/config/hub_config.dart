@@ -31,8 +31,19 @@ enum ConfigSource {
 /// and for every one of them "pointed at the wrong place" and "the right
 /// place is down" look identical until [sources] says which.
 ///
-/// The values are plain strings because their consumers take plain strings —
-/// this type exists to resolve them, not to travel any further.
+/// The values are plain strings because this type exists to *resolve* them,
+/// not to travel any further: what it settles is where each one came from,
+/// and a string is what an environment variable is.
+///
+/// That is no longer quite the whole story for [go2rtcUrl], and the seam is
+/// worth naming. Its consumers read it for three meanings — nobody named a
+/// go2rtc, somebody named a typo, here it is — which is `Go2rtcAddress` in
+/// `config/go2rtc_address.dart`, derived by each config that holds the
+/// string. Parsing it *here* was rejected: this type is handed to `bootPanel`
+/// and to the widget tree as settings, and a Panel booted with no go2rtc is a
+/// supported state rather than a configuration error, so the resolver has
+/// nothing to say about the address that `GO2RTC_URL=absent` on the boot line
+/// does not already say.
 @immutable
 class HubConfig {
   const HubConfig({

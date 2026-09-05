@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../config/go2rtc_address.dart';
+
 // Both, not just the export — the same shape as `video/snapshot.dart` and for
 // the same reason: the export gives the rest of the Panel `postTalk`, and the
 // import is what lets [TalkConfig] name it as its default.
@@ -113,6 +115,10 @@ class TalkConfig {
   /// `main()` resolves it once and hands it to both.
   final String go2rtcUrl;
 
+  /// Where go2rtc is — see [Go2rtcAddress], and `VideoConfig.address` for why
+  /// this is a getter and not a field.
+  Go2rtcAddress get address => Go2rtcAddress.parse(go2rtcUrl);
+
   /// What `src=` names on the START call. See [defaultTalkMicSource].
   final String micSource;
 
@@ -143,13 +149,10 @@ class TalkConfig {
   Uri? stopUrl(String? talkStream) => _urlFor(talkStream, '');
 
   Uri? _urlFor(String? talkStream, String src) {
-    if (go2rtcUrl.isEmpty || talkStream == null || talkStream.isEmpty) {
-      return null;
-    }
-    final base = Uri.tryParse(go2rtcUrl);
-    // The same generosity guard as [VideoConfig.urlFor]: `localhost:1984`
-    // parses happily, as a URI with scheme `localhost` and no host at all.
-    if (base == null || base.host.isEmpty) return null;
+    if (talkStream == null || talkStream.isEmpty) return null;
+    final at = address;
+    if (at is! Go2rtcAt) return null;
+    final base = at.base;
     // The query is spelled out rather than handed to `queryParameters:`,
     // and the reason is the stop call. `Uri.replace(queryParameters: {'src':
     // ''})` renders the empty value as a bare `src`, with no `=` — which is

@@ -436,7 +436,11 @@ evidence in `live_video_rtsp_io.dart`: **`VIDEO_LOW_LATENCY` must stay 0**
 (every value above it sets ffmpeg's `+nobuffer`, which drops the stream's first
 key frame and paints macroblocks until the camera sends another), and
 `VIDEO_DECODERS` ships as `FFmpeg` — software, affordable at tile size, and
-never actually convicted of anything; `auto` is worth a run.
+never actually convicted of anything. `auto` was finally run on 2026-09-04
+(clean picture, ~15 % cheaper over eight arms) and software was **kept** by
+owner decision, because the winning engine could not be identified and the
+failure it guards against is a corrupt picture under a LIVE badge — see
+ADR-0014. Do not re-propose it on the CPU number alone.
 
 The appliance also **pins the Skia renderer** in `linux/runner/my_application.cc`:
 under Impeller — the Flutter 3.47 Linux default — the five-texture wall is born

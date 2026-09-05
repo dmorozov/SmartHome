@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../config/go2rtc_address.dart';
+
 // Both, not just the export: the export is what gives the rest of the Panel
 // `openLiveVideo` and `liveVideoIsAvailable`, and the import is what lets
 // [VideoConfig] name `openLiveVideo` and `liveVideoEndpoint` in its own body.
@@ -210,6 +212,13 @@ class VideoConfig {
 
   final LiveVideoOpener open;
 
+  /// Where go2rtc is, read from [go2rtcUrl] — the one place the three-way
+  /// verdict is spelled. A getter and not a field because this class is
+  /// `const`, which a dozen default parameter values depend on; see
+  /// [Go2rtcAddress] for why that is a documented limit rather than an
+  /// oversight.
+  Go2rtcAddress get address => Go2rtcAddress.parse(go2rtcUrl);
+
   /// `http://host:1984` + `ring_doorbell` ->
   /// `ws://host:1984/api/ws?src=ring_doorbell`.
   ///
@@ -237,20 +246,18 @@ class VideoConfig {
   /// whole Dialog — including the Device name and the Close button — down
   /// with it.
   Uri? urlFor(String? streamName) {
-    if (go2rtcUrl.isEmpty || streamName == null || streamName.isEmpty) {
-      return null;
+    if (streamName == null || streamName.isEmpty) return null;
+    // Above the seam, so both players refuse exactly the same set of
+    // addresses — which is what [Go2rtcAddress] now guarantees rather than
+    // three comments promising it.
+    if (address case Go2rtcAt(:final base)) {
+      return base.replace(
+        scheme: base.scheme == 'https' ? 'wss' : 'ws',
+        path: '/api/ws',
+        queryParameters: {'src': streamName},
+      );
     }
-    final base = Uri.tryParse(go2rtcUrl);
-    // `Uri.tryParse` is generous: `localhost:1984` parses happily, as a URI
-    // with scheme `localhost` and no host at all. Requiring a host is what
-    // separates an address from a typo — and it is checked here, once, above
-    // the seam, so both players refuse exactly the same set of addresses.
-    if (base == null || base.host.isEmpty) return null;
-    return base.replace(
-      scheme: base.scheme == 'https' ? 'wss' : 'ws',
-      path: '/api/ws',
-      queryParameters: {'src': streamName},
-    );
+    return null;
   }
 }
 

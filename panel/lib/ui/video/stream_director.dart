@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import '../../config/go2rtc_address.dart';
 import '../../diagnostics/log.dart';
 import '../../domain/house.dart';
 import 'live_video.dart';
@@ -814,9 +815,15 @@ class _Feed implements CameraFeed {
           'device': device.id,
           'reason': name == null
               ? 'no_stream_name'
-              : director.video.go2rtcUrl.isEmpty
-                  ? 'no_go2rtc_url'
-                  : 'bad_go2rtc_url',
+              : switch (director.video.address) {
+                  Go2rtcAbsent() => 'no_go2rtc_url',
+                  // `Go2rtcAt` cannot arrive here — a usable address and a
+                  // real stream name always yield a URL, and a null name was
+                  // answered above. Folded in with `unusable` rather than
+                  // given an arm of its own, which would be a sentence that
+                  // is false if it ever runs.
+                  Go2rtcUnusable() || Go2rtcAt() => 'bad_go2rtc_url',
+                },
         });
       }
       setPhase(FeedPhase.unconfigured);

@@ -539,7 +539,10 @@ everything else). What landed, against the plan below it:
   stated in `main()` rather than routed through the stub's
   misconfiguration warning). **Both transports are first-class peers by
   the same decision** — the owner switches in production with
-  `VIDEO_TRANSPORT=mjpeg` + restart, no rebuild — which means **step 4
+  `VIDEO_TRANSPORT=mjpeg` + restart, no rebuild — plumbed at last on
+  2026-09-04 as the ansible var `panel_video_transport` (until then this
+  promise had nothing under it: the unit templated no such line, so honouring
+  it meant hand-editing a file the next converge reverts) — which means **step 4
   below (retiring the `mjpeg/tiles`/`mjpeg/zoom` wrapper producers from
   the live go2rtc config) is OFF the table**: the fallback needs them
   serving. Revisit only if the owner ever demotes MJPEG outright.
@@ -577,9 +580,10 @@ unmeasured is the compositor — the probe runs under XWayland on GNOME, the
 kiosk under cage/wlroots — and off-by-default is what finally starts that
 measurement, since the knob had never once been set on the wall. Rescue:
 `-e panel_video_repaint_pulse=on` (appliance README), never `systemctl edit`.
-Still open: `VIDEO_DECODERS=auto`, never re-run after the real faults were
-fixed — the software pin is affordability, not a conviction (2026-08-26
-addendum below).
+The second is now closed too: `VIDEO_DECODERS=auto` was finally run on
+2026-09-04 and the default **stays** `FFmpeg` by owner decision — the
+measurement, and why it did not carry, are in the 2026-08-26 addendum below
+and in [ADR-0014](../../adr/0014-video-settings-are-set-by-a-person-not-detected.md).
 
 The original plan, for reference:
 - New file `panel/lib/ui/video/live_video_rtsp.dart`: a
@@ -686,16 +690,25 @@ neighbours), which is the rig's rule about reading clocks before convicting a
 texture. **No macroblocks in any `auto` grab** — the 2026-08-26 fault does not
 reproduce, which is further evidence `lowLatency` was the whole of it.
 
-**Still not established, and why the default has not moved on this alone.**
-Which engine did the work: `nvidia-smi` shows NVDEC essentially idle (4 % peak
+**Decided: the default stays `FFmpeg`** (owner, 2026-09-04, with the table
+above in hand). This item is closed, not pending — do not re-propose `auto` on
+the strength of the CPU number, and do not re-run the measurement to find out.
+
+What decided it is the two things the measurement does *not* establish. Which
+engine did the work: `nvidia-smi` shows NVDEC essentially idle (4 % peak
 against a 0 % baseline), so it is *not* the dGPU — the reassuring answer,
 since the kiosk pins the i915 and never opens the NVIDIA card — but telling
-VAAPI from a different software path needs `vainfo` or `intel_gpu_top`, and
-neither is installed (and the Hub host has no passwordless sudo). And the
-software pin's stated purpose is portability to the AMD mini PC, which is
-still `minipc.placeholder.invalid`, so `auto` there is untested by
-construction. The failure being guarded against is the deceptive one: a
-corrupt picture under a LIVE badge reads as a working camera. Software is affordable at
+VAAPI from a different software path needs `vainfo` or `intel_gpu_top`,
+neither installed, on a host with no passwordless sudo. And the software pin's
+stated purpose is portability to the AMD mini PC, which is still
+`minipc.placeholder.invalid`, so `auto` there is untested by construction.
+Against an unidentified mechanism and an untested future machine, the prize is
+8.5 points of a single core — and the failure being bought down is the
+deceptive one: a corrupt picture under a LIVE badge reads as a working camera.
+
+**Reopen when** the mini PC exists and can be measured on its own silicon, or
+if the appliance becomes CPU-scarce enough for 15 % of one core to matter.
+`VIDEO_DECODERS=auto` needs no rebuild, so reopening costs a restart. Software is affordable at
 tile size regardless (640×360 × 6; the phase-8 prototype measured ~half a
 core for six streams including software GL under Xvfb); the 1080p zoom is the
 case to re-measure.

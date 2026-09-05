@@ -86,8 +86,9 @@ and a restart, never a Flutter rebuild.
 | `panel_hub_kind` | `fake` | `Environment=HUB=` in the unit |
 | `panel_ha_url` | `http://localhost:8123` | `Environment=HA_URL=` in the unit |
 | `panel_go2rtc_url` | *(none — the Panel has no default)* | `Environment=GO2RTC_URL=` in the unit |
-| `panel_log_level` | *(empty — no line emitted)* | `Environment=LOG=` in the unit |
-| `panel_video_repaint_pulse` | *(empty — no line emitted)* | `Environment=VIDEO_REPAINT_PULSE=` in the unit |
+| `panel_log_level` | `info` in release, `debug` otherwise | `Environment=LOG=` in the unit |
+| `panel_video_transport` | `rtsp` | `Environment=VIDEO_TRANSPORT=` in the unit |
+| `panel_video_repaint_pulse` | `off` | `Environment=VIDEO_REPAINT_PULSE=` in the unit |
 | `panel_env_file` | `/etc/smarthome/panel.env` | `EnvironmentFile=-` in the unit |
 | `panel_ha_token` | `$PANEL_HA_TOKEN` on the controller | the 0600 file above |
 
@@ -200,6 +201,22 @@ enabled (the mini PC, or a laptop converge that passes `-e kiosk_enable=true`).
 On a default laptop converge the new token lands on disk and nothing is
 restarted, which is correct — there is no running compositor to restart — but
 it does mean "re-converge" alone is not the whole rotation there.
+
+`panel_video_transport` is the rollback from the RTSP player to MJPEG. Four
+documents already promise it as "`VIDEO_TRANSPORT=mjpeg` + restart, no
+rebuild"; until 2026-09-04 that promise had nothing under it, because the unit
+templated no such line and a hand-edited one does not survive the next
+converge.
+
+```sh
+ansible-playbook site.yml -l laptop -e panel_video_transport=mjpeg
+```
+
+It is a rollback, not a tuning. MJPEG costs go2rtc a per-stream transcode
+(52 % CPU / 573 MiB against RTSP's 35 % / 117 MiB, measured 2026-08-26) and
+gives up inbound doorbell audio (ADR-0011), so it is worse on weaker hardware
+rather than better — there is no machine for which it is the right answer, only
+a fault for which it is the way back.
 
 `panel_video_repaint_pulse` is the rescue for one specific regression, and
 it points in one direction only. The Panel's per-vsync texture repaint has

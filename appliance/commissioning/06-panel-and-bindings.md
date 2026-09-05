@@ -252,6 +252,9 @@ default (`panel/lib/config/hub_config.dart`; `LOG` via `Log.applyLevel`). An
 environment variable that is present but empty counts as absent.
 
 `GO2RTC_URL` is the newest of them and has **no built-in default** — see §6.5a.
+(These five are the *Hub* settings. The Panel's video settings resolve the same
+way through their own reader — §6.7's table lists what the unit delivers, and
+§6.10 is who decides them.)
 (`HA_TOKEN` has none either, but a default secret is not a thing that could
 exist; `GO2RTC_URL` is the only *address* the Panel refuses to guess.)
 
@@ -560,6 +563,8 @@ file.
 | `HA_URL` | `Environment=HA_URL={{ panel_ha_url }}` | not a secret |
 | `GO2RTC_URL` | `Environment=GO2RTC_URL={{ panel_go2rtc_url }}` | not a secret — go2rtc is unauthenticated here and the camera credentials live in `go2rtc.yaml`, not in this base address |
 | `LOG` | `Environment=LOG={{ panel_log_level }}` | not a secret; raising the level on a Panel already on a wall must not mean rebuilding it |
+| `VIDEO_TRANSPORT` | `Environment=VIDEO_TRANSPORT={{ panel_video_transport }}` | the rollback from the RTSP player to MJPEG. Promised in four documents as "restart, no rebuild"; templated here since 2026-09-04 so that is true |
+| `VIDEO_REPAINT_PULSE` | `Environment=VIDEO_REPAINT_PULSE={{ panel_video_repaint_pulse }}` | the rescue if the wall goes back to updating on scroll alone. The Panel ships the pulse off (2026-09-04); this is the way back on |
 | `HA_TOKEN` | `EnvironmentFile=-/etc/smarthome/panel.env`, 0600, owned by the kiosk user | `systemctl show -p Environment` hands every `Environment=` value to any local user without authentication, and the unit file is 0644. `EnvironmentFile=` exposes only the path |
 
 Source: `appliance/ansible/roles/kiosk/templates/cage@.service.j2` and
@@ -571,9 +576,9 @@ turn "no Hub yet" into a restart-looping black screen.
 
 ### The empty-by-default rule
 
-`panel_hub_kind`, `panel_ha_url`, `panel_go2rtc_url` and `panel_log_level` all
-default to `""` in `appliance/ansible/group_vars/all.yml`, and **must stay
-that way**. Resolution is environment-first, so any value set there beats a
+`panel_hub_kind`, `panel_ha_url`, `panel_go2rtc_url`, `panel_log_level`,
+`panel_video_transport` and `panel_video_repaint_pulse` all default to `""` in
+`appliance/ansible/group_vars/all.yml`, and **must stay that way**. Resolution is environment-first, so any value set there beats a
 `--dart-define` compiled into the bundle. Writing the apparently harmless
 defaults (`fake`, `http://localhost:8123`) would silently force a Panel built
 with `--dart-define=HUB=ha` back onto the fake Hub. Empty emits no
@@ -836,6 +841,85 @@ pattern rendering inside.
 The one-line summary for anyone quoting this elsewhere: **the appliance's video
 path is proven end to end against synthetic inputs, and nothing about the wall,
 the glass, or the house's own hardware is.** Say all of that or none of it.
+
+## 6.10 Grading the wall, and the two settings it decides
+
+[ADR-0014](../../docs/adr/0014-video-settings-are-set-by-a-person-not-detected.md)
+is why this is a person's job and not the Panel's — read it before proposing to
+automate this step.
+
+**Do this once per box, with your eyes, after §6.5a has cameras playing.** It is the
+same shape as `check-hybrid-gpu.sh` and `screen-power-probe.sh` — a probe
+reports, a person records a var — but numbered rather than "optional but
+recommended", because the two settings below fail *silently*: an optional step
+whose omission leaves no trace is a step that gets skipped.
+
+**It is advisory and never gating.** A camera asleep during the check is a
+Wyze daemon, not a verdict — do not fail a converge on it.
+
+### The two settings
+
+Of the Panel's four RTSP tuning fields, exactly two are properties of the
+machine. The other two are not, and asking about them here wastes the trip:
+`VIDEO_LOW_LATENCY` is `0` on every machine (above zero drops the stream's
+first key frame — it exists to reproduce a fault, not to tune one), and
+`VIDEO_DEBUG` is a diagnostic, never a default.
+
+| Setting | Shipped | What to look for | If it is wrong |
+|---|---|---|---|
+| `VIDEO_REPAINT_PULSE` | `off` | pictures that update **only while you drag the grid** and freeze the moment your finger stops | `-e panel_video_repaint_pulse=on` |
+| `VIDEO_DECODERS` | `FFmpeg` (software) | blocky, smeared or scrambled pictures — **under a LIVE badge**, which is what makes this one deceptive | leave it; see below |
+
+### The procedure
+
+Open the Cameras view and watch for thirty seconds. Ask three questions:
+
+1. **Does every picture move?** Six tiles; the Ring Doorbell is expected still
+   (it is off by default — an open Ring session suppresses real dings).
+2. **Is any picture blocky or smeared?** Not "is a camera offline" — a dead
+   camera shows an aged still and an offline badge. This is a *corrupt picture
+   wearing a LIVE badge*, which reads as a working camera and is the single
+   easiest fault here to miss.
+3. **Does a still picture have a stale clock?** Wyze burns a timestamp into
+   the frame. A tile whose clock **lags its neighbours** is a stalled stream
+   on the Hub, not a rendering fault — nothing on this box can fix it.
+
+That third question is the one people get wrong, so it is worth stating flatly:
+**read the burned-in clocks before concluding anything about the Panel.** Two
+of the eight arms measured on 2026-09-04 graded "frozen" and both were
+hub-side — one camera on "Connecting…", one with a clock eighteen seconds
+behind its neighbours.
+
+### Why by eye, and not by the rig
+
+`panel/tool/freeze_probe.sh` grades this automatically and is the right tool on
+a dev box. It is deliberately **not** used here: it needs XWayland, ImageMagick
+and a live compositor, and the production appliance runs Ubuntu Server with no
+desktop environment at all (ADR-0001) behind cage/wlroots. Porting it is its
+own effort with its own trigger. The rig exists to replace a human when nobody
+is watching; at commissioning somebody is.
+
+### Record the answer either way
+
+In `host_vars/<box>.yml`, beside `wlr_drm_devices`, write a dated line saying
+what you saw — **including when nothing was wrong**. A negative result nobody
+wrote down gets re-litigated: `VIDEO_DECODERS=auto` sat in this repo's
+documents as a bolded "worth one run" for nine days precisely because there was
+nowhere to record that it had been done.
+
+### On `VIDEO_DECODERS` specifically
+
+Do not change it here on the strength of a CPU number. It was measured on
+2026-09-04 — hardware decode was ~15 % cheaper with no corruption over eight
+arms — and **kept at software by owner decision**, because the winning engine
+could not be identified, the AMD mini PC that the software pin exists for is
+unpurchased and therefore untested, and the failure being bought down is the
+deceptive one in row two above. The reasoning is in
+`panel/lib/config/video_tuning.dart`. What reopens it is exactly this step run
+on the mini PC — that machine measured on its own silicon, which is the one
+thing nobody has been able to do.
+
+---
 
 Further reading: [`../../panel/HOUSE-PLAN.md`](../../panel/HOUSE-PLAN.md) is
 the full drawing manual, written for whoever draws the house;

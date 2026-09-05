@@ -17,6 +17,12 @@ import 'package:flutter/foundation.dart';
 /// wants a different tuning constructs one rather than mutating a global
 /// under a `tearDown` — which `live_video_rtsp_test.dart` had to do.
 ///
+/// **Nothing here is chosen by inspecting the machine** — a person grades the
+/// wall at commissioning and writes the answer into an `Environment=` line,
+/// which is why this type has no detection in it and no origin to report.
+/// ADR-0014 carries the reasoning, including the measurement that argued the
+/// other way.
+///
 /// **What is deliberately not here.** `VIDEO_TRANSPORT`. That names which
 /// transport plays at all — `rtsp`, `mjpeg` or the web build's `mse` — and
 /// folding a three-way choice between transports into a type called
@@ -70,17 +76,28 @@ class RtspTuning {
   /// what the 2026-08-26 fault looked like and further evidence that
   /// [lowLatency] was the whole of it.
   ///
-  /// Two things that measurement does NOT establish, and they are why the
-  /// default has not moved on it alone. Which engine did the work is unknown:
-  /// `nvidia-smi` shows NVDEC essentially idle (4 % peak against a 0 %
-  /// baseline), so it is not the dGPU — which is the reassuring answer, since
-  /// the kiosk pins the i915 and never opens the NVIDIA card — but telling
-  /// VAAPI from a different software path needs `vainfo` or
-  /// `intel_gpu_top`, and neither is installed. And the software pin's stated
-  /// purpose is portability to the AMD mini PC, which is still unpurchased,
-  /// so `auto` there remains untested by construction. The failure it guards
-  /// against is also the deceptive one: a corrupt picture under a LIVE badge
-  /// reads as a working camera.
+  /// **The default stays `FFmpeg` anyway — owner decision, 2026-09-04, taken
+  /// with those numbers in hand.** So this is settled rather than pending: do
+  /// not re-propose `auto` on the strength of the measurement alone, and do
+  /// not re-run it to find out.
+  ///
+  /// What the measurement does not establish is what decided it. Which engine
+  /// did the work is unknown: `nvidia-smi` shows NVDEC essentially idle (4 %
+  /// peak against a 0 % baseline), so it is not the dGPU — the reassuring
+  /// answer, since the kiosk pins the i915 and never opens the NVIDIA card —
+  /// but telling VAAPI from a different software path needs `vainfo` or
+  /// `intel_gpu_top`, neither of which is installed, on a host with no
+  /// passwordless sudo. And the pin's stated purpose is portability to the
+  /// AMD mini PC, which is still unpurchased, so `auto` there is untested by
+  /// construction. Against an unidentified mechanism and an untested future
+  /// machine, the prize is 8.5 points of a single core, and the failure being
+  /// bought down is the deceptive one: a corrupt picture under a LIVE badge
+  /// reads as a working camera, on a wall whose cameras break often enough on
+  /// their own.
+  ///
+  /// **Worth reopening when** the mini PC exists and can be measured itself,
+  /// or if the appliance ever becomes CPU-scarce enough for 15 % of one core
+  /// to matter. `VIDEO_DECODERS=auto` still needs no rebuild.
   final List<String>? decoders;
 
   /// fvp's `lowLatency`, and **the shipped value is 0 — off — because 1

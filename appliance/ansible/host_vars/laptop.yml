@@ -45,3 +45,33 @@ wlr_drm_devices: /dev/dri/by-path/pci-0000:00:02.0-card
 # held only by the transitional `linux-generic-hwe-24.04` (a shim Ubuntu
 # documents as safe to remove). The first fixed converge claims it as manual;
 # only after that is it safe to purge the shim.
+
+# WALL GRADING (commissioning 6 §6.10) — 2026-09-04, this host.
+#
+# CAVEAT ON THIS RECORD: graded under XWayland on GNOME, not under cage. This
+# box is the dev appliance and its kiosk half is still untouched, so the
+# compositor the wall will actually run under has NOT been graded — and the
+# embedder's frame-available path is exactly what differs between the two.
+#
+# Graded with panel/tool/freeze_probe.sh rather than by eye, which is possible
+# here and is not on a box with no desktop environment. Eight arms, four per
+# decoder. No picture was blocky in any arm. Two arms graded 4/6 and both were
+# hub-side rather than rendering faults: in one, a camera never left
+# "Connecting..."; in the other, a tile held a stalled picture whose burned-in
+# clock was 18 s behind its neighbours. That distinction is the whole point of
+# §6.10's third question — a lagging clock is a stalled Hub stream, a matching
+# clock over still pixels would be a severed texture.
+#
+# Result: both graded settings keep their shipped defaults. Recorded because a
+# negative nobody wrote down gets re-litigated, not because anything changed.
+#   VIDEO_REPAINT_PULSE  off     — the Panel's default since 2026-09-04; the
+#                                  pulse bought nothing measurable here
+#   VIDEO_DECODERS       FFmpeg  — `auto` measured ~15% cheaper with a clean
+#                                  picture and was KEPT at software by owner
+#                                  decision (ADR-0014)
+#
+# No panel_video_* override is set on this host, and none should be added to
+# record a negative — an empty var is what "the Panel's own default" means, and
+# a var set to a placeholder word would be delivered verbatim as an
+# Environment= line. `VIDEO_TRANSPORT=unset` in particular does not mean unset:
+# it fails the Panel's allowlist, warns, and falls through to MJPEG.

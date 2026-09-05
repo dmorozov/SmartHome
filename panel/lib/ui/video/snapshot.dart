@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../config/go2rtc_address.dart';
+
 // Same both-not-just-the-export shape as `live_video.dart`, for the same
 // reason: the export gives the rest of the Panel `fetchSnapshot`, and the
 // import lets [SnapshotConfig] name it as its default.
@@ -144,6 +146,10 @@ class Go2rtcStillsConfig {
 
   final SnapshotFetcher fetch;
 
+  /// Where go2rtc is — see [Go2rtcAddress], and [VideoConfig.address] for why
+  /// this is a getter.
+  Go2rtcAddress get address => Go2rtcAddress.parse(go2rtcUrl);
+
   /// `http://host:1984` + `wyze_garage_door_sub` ->
   /// `http://host:1984/api/frame.jpeg?src=wyze_garage_door_sub&cache=45s`.
   ///
@@ -151,19 +157,16 @@ class Go2rtcStillsConfig {
   /// `VideoConfig.urlFor` clause for clause: a bad address must only ever
   /// cost the picture.
   Uri? urlFor(String? streamName) {
-    if (go2rtcUrl.isEmpty || streamName == null || streamName.isEmpty) {
-      return null;
+    if (streamName == null || streamName.isEmpty) return null;
+    if (address case Go2rtcAt(:final base)) {
+      return base.replace(
+        path: '/api/frame.jpeg',
+        queryParameters: {
+          'src': streamName,
+          'cache': '${kGo2rtcStillCache.inSeconds}s',
+        },
+      );
     }
-    final base = Uri.tryParse(go2rtcUrl);
-    // The same generosity guard as the siblings: `localhost:1984` parses as
-    // scheme `localhost` with no host at all.
-    if (base == null || base.host.isEmpty) return null;
-    return base.replace(
-      path: '/api/frame.jpeg',
-      queryParameters: {
-        'src': streamName,
-        'cache': '${kGo2rtcStillCache.inSeconds}s',
-      },
-    );
+    return null;
   }
 }

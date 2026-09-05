@@ -64,11 +64,11 @@ re-proposed. Every anchor was re-opened; measured counts replaced estimates.
 | F | IdleReturn | Worth exploring | Landed 2026-09-03, early at the owner's call (phase-8-handoff.md:769). |
 | G | PopupClaim | Worth exploring | **Landed 2026-09-04** at the owner's call, ahead of its trigger. |
 | H | Transport tuning through the seam | Worth exploring | **Landed 2026-09-04** at the owner's call; the gate was answered rather than waited on — see the phase. |
-| I | go2rtc's address, parsed once | Speculative | Only if Phase H is done and the owner wants the string peek typed. |
+| I | go2rtc's address, parsed once | Speculative | **Landed 2026-09-04**, at the owner's call, after H. |
 | J | Composition-root prop drilling | Speculative | Re-measure after A; probably dissolves. |
 | K | Small tidies | — | Survivors of the refuted candidates; each is an afternoon. |
 
-A, B, C, D and E are recommended in that order; F, G and H landed early at the owner's call. I and J wait for their triggers.
+A, B, C, D and E are recommended in that order; F, G, H and I landed at the owner's call. J waits for its trigger.
 
 ---
 
@@ -1073,8 +1073,9 @@ consumed once by `fvp.registerWith`. Sequence H after that decision.
 
 **How the gate was answered.** It could not be waited on, because the wait
 had never started: `VIDEO_REPAINT_PULSE=off` had never been set on the wall
-for a minute, let alone a week — `cage@.service.j2` templates `HUB`,
-`HA_URL`, `GO2RTC_URL` and `LOG`, and nothing else. Two further facts settled
+for a minute, let alone a week — at that moment `cage@.service.j2` templated
+`HUB`, `HA_URL`, `GO2RTC_URL` and `LOG`, and nothing else (the two video vars
+were added later the same day, which is what makes the rescue real). Two further facts settled
 it. The code's stated reason for keeping the pulse on — "the evidence is from
 the dev box's Intel/NVIDIA stack, the appliance is different silicon" — is
 about the Ryzen mini PC, which `appliance/ansible/inventory.yml` still lists
@@ -1188,7 +1189,7 @@ Decoders/lowLatency stay hermetically untestable (fvp is the real external).
 
 ---
 
-## Phase I — go2rtc's address, parsed once (Speculative)
+## Phase I — go2rtc's address, parsed once — **DONE 2026-09-04**
 
 **Only** worth doing after H, and only if the owner wants the Director's raw
 string peek typed. The friction is navigational and the guards have never
@@ -1227,6 +1228,50 @@ Configs keep a `String go2rtcUrl` constructor (82 `VideoConfig(go2rtcUrl:`
 for its skip reason. `hub_config.dart:34-35`'s "plain strings because their
 consumers take plain strings" is the code rationale to revise; it is not an
 ADR.
+
+### What landed
+
+`lib/config/go2rtc_address.dart` — a sealed `Go2rtcAddress` with
+`Go2rtcAbsent | Go2rtcUnusable | Go2rtcAt(base)` and one `parse`. The four
+copies are gone: `VideoConfig.urlFor`, `Go2rtcStillsConfig.urlFor` and
+`TalkConfig._urlFor` each derive an `address` and switch on it, and the
+Director's raw-string peek is now an exhaustive `switch` over the same value.
+746 passing / 8 skipped (+11), analyzer clean, release build green.
+
+**The title overpromises, and the doc says so.** "Parsed once" is the *rule*
+written once, not parsing executed once. All three configs have `const`
+constructors and ten-odd default parameter values across `lib/` and `test/`
+depend on that (`this.talk = const TalkConfig()`), so none can hold a
+`late final` parsed field — each derives its address from a getter, which
+parses on the call exactly as the four copies did. Nothing got faster.
+Measured before designing around it: 15 `const VideoConfig`, 12
+`const TalkConfig`, 5 `const Go2rtcStillsConfig`.
+
+**What it did buy.** One place to be right about a guard whose subtlety was
+real and undocumented by any test: `Uri.tryParse` accepts `localhost:1984` as
+a URI whose *scheme* is `localhost`, with no host at all — the single likeliest
+thing for somebody to hand-type into `GO2RTC_URL`. And the absent-vs-unusable
+verdict is a type rather than an `.isEmpty` peek, so ADR-0013's `no_go2rtc_url`
+/ `bad_go2rtc_url` split cannot silently drift from what the openers do.
+
+**Boundaries held, as the skeptic scoped them.** `SnapshotConfig.urlFor` keeps
+its own `HA_URL` guard — a bad Hub address stops the Hub and `HaHubClient`
+throws to say so, while a bad go2rtc must only cost the picture, and merging
+those would make one rule out of two deliberately different answers. The
+transport mappers are untouched. `HubConfig.go2rtcUrl` stays a `String`: it is
+handed on as a *setting*, and a Panel booted with no go2rtc is a supported
+state the boot line already reports.
+
+**Proof.** 10 mutations, all killed — the host guard dropped, empty read as
+unusable, unusable read as absent, each of the three consumers made to stop
+refusing a bad address, the stream-name check loosened, both Director arms
+swapped, and https downgraded to `ws`. Three of those are caught only by the
+new file; the rest fail existing suites too, which is the evidence that the
+four copies really were one rule.
+
+**One edge found and pinned rather than changed:** a scheme-less `//host/path`
+has a host, so it parses as an address and always did. Unchanged behaviour,
+now asserted.
 
 ---
 

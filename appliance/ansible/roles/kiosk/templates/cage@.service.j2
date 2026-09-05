@@ -79,6 +79,13 @@ Environment=GO2RTC_URL={{ panel_go2rtc_url }}
 # anything in EnvironmentFile= would override these lines, not the reverse.
 Environment=LOG={{ panel_log_level }}
 {% endif %}
+{% if panel_video_transport %}
+# Which player the Panel dials cameras with — see panel_video_transport in
+# group_vars. The rollback switch phase-8 promises in four places; it lives
+# here so that promise is true, because a hand-edited unit does not survive
+# the next converge.
+Environment=VIDEO_TRANSPORT={{ panel_video_transport }}
+{% endif %}
 {% if panel_video_repaint_pulse %}
 # The camera wall's frame pulse, off in the Panel since 2026-09-04 and brought
 # back only from here — see panel_video_repaint_pulse in group_vars. Same

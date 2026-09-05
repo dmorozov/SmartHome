@@ -55,8 +55,8 @@ RTSP is now the shipped default, with MJPEG as a first-class production switch. 
 
 How the resolution works now, on the appliance: VIDEO_TRANSPORT from the environment wins, then the build define, then the rtsp fallthrough. So in production:
 
-- Switch to MJPEG: set VIDEO_TRANSPORT=mjpeg in the service's environment and restart — no rebuild, by design.
-- Back to RTSP: remove the variable (or set rtsp) and restart.
+- Switch to MJPEG: `ansible-playbook site.yml -l <box> -e panel_video_transport=mjpeg` — no rebuild, by design. Set it there and not by hand on the box: a `systemctl edit` drop-in is reverted by the next converge.
+- Back to RTSP: drop the variable (empty emits no line at all) and re-converge.
 - The boot log names the winner every start: panel.video_transport transport=…, so a wall running the wrong player is one journald line away from diagnosis.
 
 The web build no longer consults the variable at all — its transport is MSE, stated plainly in main(), so a normal web boot no longer routes through the rtsp stub's misconfiguration warning.
