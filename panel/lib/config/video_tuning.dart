@@ -149,11 +149,13 @@ class RtspTuning {
   /// meant to sit still for hours.
   ///
   /// **Why the default flipped.** Measured through `tool/freeze_probe.sh`
-  /// with the pulse off: 3 runs of 3 on 2026-08-28, and 2 of 2 again on
-  /// 2026-09-04 against the current build (one of those graded 4/6, and
-  /// looking at the grab said why — the sixth cell was a camera still saying
-  /// "Connecting…" in both, not a texture that stopped). And the reason it
-  /// had stayed on turned out to be about a machine that does not exist: the
+  /// with the pulse off: 3 runs of 3 on 2026-08-28; then on 2026-09-04 two
+  /// per arm of an on/off comparison that found no difference between the
+  /// arms, and 2 of 2 again against the flipped build (one of those graded
+  /// 4/6, and looking at the grab said why — the sixth cell was a camera
+  /// still saying "Connecting…" in both, not a texture that stopped). And the
+  /// reason it had stayed on turned out to be about a machine that does not
+  /// exist: the
   /// old wording was "the evidence is from the dev box's Intel/NVIDIA stack,
   /// the appliance is different silicon", but that mini PC has not been
   /// purchased (`appliance/ansible/inventory.yml` —
@@ -165,8 +167,10 @@ class RtspTuning {
   /// cage/wlroots, and the embedder's frame-available path is exactly the
   /// layer that differs between them. Only the wall settles that — and with
   /// the default on, it never would: `VIDEO_REPAINT_PULSE=off` had never been
-  /// set there once (the unit templates `HUB`, `HA_URL`, `GO2RTC_URL` and
-  /// `LOG`, and nothing else), so the week of production evidence this
+  /// set there once (at that moment the unit templated `HUB`, `HA_URL`,
+  /// `GO2RTC_URL` and `LOG`, and nothing else — the transport, decoders and
+  /// pulse vars reached `cage@.service.j2` later the same day), so the week
+  /// of production evidence this
   /// setting's own deletion note asks for could not start until somebody
   /// remembered to start it. Off by default starts it at the next deploy, and
   /// the cost of being wrong is one `Environment=VIDEO_REPAINT_PULSE=on` line
@@ -270,13 +274,13 @@ RtspTuning resolveRtspTuning({
 
   return RtspTuning(
     decoders: named.isEmpty ? null : named,
-    lowLatency: int.tryParse(pick('VIDEO_LOW_LATENCY', buildLowLatency) ?? '') ?? 0,
+    lowLatency:
+        int.tryParse(pick('VIDEO_LOW_LATENCY', buildLowLatency) ?? '') ?? 0,
     framePulse:
         (pick('VIDEO_REPAINT_PULSE', buildFramePulse) ?? '')
             .trim()
             .toLowerCase() ==
         'on',
-    debug:
-        (pick('VIDEO_DEBUG', buildDebug) ?? '').trim().toLowerCase() == 'on',
+    debug: (pick('VIDEO_DEBUG', buildDebug) ?? '').trim().toLowerCase() == 'on',
   );
 }

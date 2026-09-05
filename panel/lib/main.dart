@@ -345,6 +345,23 @@ class PanelApp extends StatelessWidget {
     return null;
   }
 
+  /// The one spelling of "open the Cameras view", because there are two ways
+  /// in — the edge tab and the boot auto-open — and a wall where those two
+  /// differ is a wall where one of them is wrong.
+  ///
+  /// Takes the context rather than closing over `build`'s: both callers sit
+  /// under their own `Builder`, which is what puts a Navigator above them.
+  /// `build`'s context sits above `MaterialApp`, so `Navigator.of` on it
+  /// would find nothing and throw.
+  void _openCameras(BuildContext context) => showCamerasView(
+    context,
+    controller: controller,
+    director: director,
+    snapshots: snapshots,
+    stills: stills,
+    order: order,
+  );
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -449,32 +466,16 @@ class PanelApp extends StatelessWidget {
                         const SizedBox(height: kEdgeTabGap),
                       if (_hasCameras)
                         Builder(
-                          builder: (context) => CamerasTab(
-                            onTap: () => showCamerasView(
-                              context,
-                              controller: controller,
-                              director: director,
-                              snapshots: snapshots,
-                              stills: stills,
-                              order: order,
-                            ),
-                          ),
+                          builder: (context) =>
+                              CamerasTab(onTap: () => _openCameras(context)),
                         ),
                     ],
                   ),
                 ),
                 if (camerasAutoOpen && _hasCameras)
                   Builder(
-                    builder: (context) => _AutoOpenCameras(
-                      open: () => showCamerasView(
-                        context,
-                        controller: controller,
-                        director: director,
-                        snapshots: snapshots,
-                        stills: stills,
-                        order: order,
-                      ),
-                    ),
+                    builder: (context) =>
+                        _AutoOpenCameras(open: () => _openCameras(context)),
                   ),
               ],
             ),

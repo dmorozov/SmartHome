@@ -572,14 +572,17 @@ arm (`CAMERAS_GRID`, `VIDEO_TILE`, `VIDEO_MIX`) was deleted with the fix.
 no rebuild.** The first is now **done**: `VIDEO_REPAINT_PULSE` shipped `off`
 by default on 2026-09-04 (owner decision) — the per-vsync texture repaint was
 a workaround for the same "moves only while scrolling" symptom, it plays
-without it 3 runs of 3 (2026-08-28) and 4 more on 2026-09-04, and the reason
+without it 3 runs of 3 (2026-08-28) and 4 more on 2026-09-04 (two as the off
+arm of an on/off comparison, two against the flipped build), and the reason
 it had been kept turned out to be about a machine that does not exist: the
 "appliance is different silicon" argument names the Ryzen mini PC, which is
 still `minipc.placeholder.invalid` in the inventory. The one thing still
 unmeasured is the compositor — the probe runs under XWayland on GNOME, the
 kiosk under cage/wlroots — and off-by-default is what finally starts that
 measurement, since the knob had never once been set on the wall. Rescue:
-`-e panel_video_repaint_pulse=on` (appliance README), never `systemctl edit`.
+`-e panel_video_repaint_pulse=on` for one converge, `panel_video_repaint_pulse:
+"on"` in the box's `host_vars` to hold it (appliance README), never
+`systemctl edit` — a drop-in survives converges and outranks the var.
 The second is now closed too: `VIDEO_DECODERS=auto` was finally run on
 2026-09-04 and the default **stays** `FFmpeg` by owner decision — the
 measurement, and why it did not carry, are in the 2026-08-26 addendum below
@@ -668,8 +671,8 @@ two fields are `VIDEO_REPAINT_PULSE` and `VIDEO_DEBUG`.
 | setting | shipped | notes |
 |---|---|---|
 | `VIDEO_LOW_LATENCY` | `0` | **the fix.** Every value > 0 sets `+nobuffer`, so 0 is the only safe one; the knob exists to reproduce the fault, not to tune it. Costs mdk's ordinary buffering — slower first frame, some delay behind real time |
-| `VIDEO_DECODERS` | `FFmpeg` | software, portable across the dev box's NVIDIA and the mini PC's AMD. `auto` restores fvp's hardware-first list — and so does any value naming no decoder at all, since an empty list tells fvp to use none |
-| `VIDEO_REPAINT_PULSE` | `off` *(since 2026-09-04; was `on`)* | the per-vsync texture repaint. `on` is the rescue if the wall goes back to updating on scroll alone — through `-e panel_video_repaint_pulse=on`, so it survives a converge |
+| `VIDEO_DECODERS` | `FFmpeg` | software, portable across the dev box's NVIDIA and the mini PC's AMD. `auto` restores fvp's hardware-first list — and so does any value naming no decoder at all, since an empty list tells fvp to use none. Delivered per box as `panel_video_decoders` in `host_vars` (ADR-0014) |
+| `VIDEO_REPAINT_PULSE` | `off` *(since 2026-09-04; was `on`)* | the per-vsync texture repaint. `on` is the rescue if the wall goes back to updating on scroll alone — through `-e panel_video_repaint_pulse=on` for one converge, or `panel_video_repaint_pulse: "on"` in the box's `host_vars` to hold across them (ADR-0014) |
 | `VIDEO_DEBUG` | *(off)* | `on` writes `video.pulse` once a second per stream. Exactly `on`; anything else is off, because a line per second per stream is not something to enable by typo |
 
 **Was open, now measured (2026-09-04).** Whether hardware decode was ever a

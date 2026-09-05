@@ -102,6 +102,23 @@ panel_ha_token: "{{ lookup('ansible.builtin.env', 'PANEL_HA_TOKEN') }}"
 # there is no machine on which it is the better answer.
 panel_video_transport: ""
 
+# Which decoders the Panel's RTSP player may use. Empty = emit no
+# Environment=VIDEO_DECODERS line, so the Panel keeps its shipped `FFmpeg`
+# (software). `auto` restores fvp's own hardware-first list. Anything else is
+# handed to fvp verbatim — unlike VIDEO_TRANSPORT there is no allowlist, so a
+# misspelt name is not rejected and the only trace is the boot line
+# `panel.video_player decoders=…`.
+#
+# The default is NOT to be changed here on a whim: software was kept by owner
+# decision on 2026-09-04 even though `auto` measured ~15 % cheaper with a clean
+# picture, because the engine responsible could not be identified and a
+# mis-decoded camera shows a corrupt picture under a LIVE badge — see ADR-0014.
+# This var exists so the ONE thing that reopens that decision is possible at
+# all: grading a new box on its own silicon (commissioning 6 §6.10) and being
+# able to act on the answer, in that box's host_vars, without a Flutter
+# rebuild.
+panel_video_decoders: ""
+
 # The Panel's frame pulse — a per-vsync repaint of every playing camera
 # texture. Built 2026-08-26 for a wall that only updated while it was being
 # scrolled; that fault turned out to be Impeller's and is pinned away
@@ -110,11 +127,14 @@ panel_video_transport: ""
 # Empty = emit no Environment=VIDEO_REPAINT_PULSE line at all, so the Panel
 # keeps its own default. This exists for one direction only: if the wall ever
 # goes back to updating on scroll alone, `-e panel_video_repaint_pulse=on`
-# plus a restart brings the workaround back with no Flutter rebuild — which is
-# the whole reason the default could be flipped. Set it HERE rather than by
-# hand on the box: a `systemctl edit` override is silently reverted by the
-# next converge, and the failure it would mask is a wall that looks fine in a
-# screenshot.
+# brings the workaround back for one converge with no Flutter rebuild — which
+# is the whole reason the default could be flipped — and
+# `panel_video_repaint_pulse: "on"` in the box's host_vars keeps it (quoted:
+# bare `on` is a YAML boolean, delivered as `True`, which the Panel reads as
+# off). Set it in ansible rather than by hand on the box: a `systemctl edit`
+# drop-in is NOT reverted by a converge — nothing removes it, and it silently
+# outranks this var for good. The failure either way is a wall that looks fine
+# in a screenshot.
 panel_video_repaint_pulse: ""
 
 # Hybrid-GPU pin (runbook Step 0a): empty = no pin. On the laptop this MUST be

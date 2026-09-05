@@ -88,6 +88,7 @@ and a restart, never a Flutter rebuild.
 | `panel_go2rtc_url` | *(none — the Panel has no default)* | `Environment=GO2RTC_URL=` in the unit |
 | `panel_log_level` | `info` in release, `debug` otherwise | `Environment=LOG=` in the unit |
 | `panel_video_transport` | `rtsp` | `Environment=VIDEO_TRANSPORT=` in the unit |
+| `panel_video_decoders` | `FFmpeg` (software) | `Environment=VIDEO_DECODERS=` in the unit |
 | `panel_video_repaint_pulse` | `off` | `Environment=VIDEO_REPAINT_PULSE=` in the unit |
 | `panel_env_file` | `/etc/smarthome/panel.env` | `EnvironmentFile=-` in the unit |
 | `panel_ha_token` | `$PANEL_HA_TOKEN` on the controller | the 0600 file above |
@@ -212,11 +213,24 @@ converge.
 ansible-playbook site.yml -l laptop -e panel_video_transport=mjpeg
 ```
 
+That `-e` lasts exactly one converge. A rollback that has to hold is
+`panel_video_transport: mjpeg` in the box's `host_vars`, and the way back is
+removing it and re-converging.
+
 It is a rollback, not a tuning. MJPEG costs go2rtc a per-stream transcode
 (52 % CPU / 573 MiB against RTSP's 35 % / 117 MiB, measured 2026-08-26) and
 gives up inbound doorbell audio (ADR-0011), so it is worse on weaker hardware
 rather than better — there is no machine for which it is the right answer, only
 a fault for which it is the way back.
+
+`panel_video_decoders` is neither a rollback nor a rescue: it is the one
+per-box *commissioning* value here. Empty keeps the Panel's shipped `FFmpeg`
+(software decode); `auto` hands the choice to fvp's own hardware-first list.
+It is graded by a person watching the wall (commissioning 6 §6.10) and, if a
+box ever grades the other way, recorded in that box's `host_vars` — not passed
+with `-e`, which the next converge forgets. The shipped default stays software
+by decision even though `auto` measured ~15 % cheaper:
+[ADR-0014](../../docs/adr/0014-video-settings-are-set-by-a-person-not-detected.md).
 
 `panel_video_repaint_pulse` is the rescue for one specific regression, and
 it points in one direction only. The Panel's per-vsync texture repaint has
@@ -230,11 +244,15 @@ wall ever goes back to freezing between scrolls:
 ansible-playbook site.yml -l laptop -e panel_video_repaint_pulse=on
 ```
 
-Empty by default, so no `Environment=VIDEO_REPAINT_PULSE=` line is emitted and
-the Panel keeps its own default. **Set it here, not with `systemctl edit`** —
-a drop-in override is silently reverted by the next converge, and what it
-would take with it is a rendering workaround whose absence looks fine in a
-screenshot and wrong only to somebody standing in front of the wall.
+That holds for one converge; to keep it, `panel_video_repaint_pulse: "on"` in
+the box's `host_vars` — quoted, because bare `on` is a YAML boolean and would
+be delivered as `True`, which the Panel reads as off. Empty by default, so no
+`Environment=VIDEO_REPAINT_PULSE=` line is emitted and the Panel keeps its own
+default. **Set it here, not with `systemctl edit`** — the role writes
+`cage@.service` and never touches its `.d/`, so a drop-in is *not* reverted by
+a converge: it survives every one and, parsing after the unit file, silently
+outranks this var for good. A wall that has quietly stopped obeying its vars
+looks fine in a screenshot and wrong only to somebody standing in front of it.
 
 `panel_log_level` is the same environment-first story with none of the
 secrecy (`panel/lib/diagnostics/log.dart`): it is what raises the Panel's log

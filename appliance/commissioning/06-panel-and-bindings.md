@@ -564,6 +564,7 @@ file.
 | `GO2RTC_URL` | `Environment=GO2RTC_URL={{ panel_go2rtc_url }}` | not a secret — go2rtc is unauthenticated here and the camera credentials live in `go2rtc.yaml`, not in this base address |
 | `LOG` | `Environment=LOG={{ panel_log_level }}` | not a secret; raising the level on a Panel already on a wall must not mean rebuilding it |
 | `VIDEO_TRANSPORT` | `Environment=VIDEO_TRANSPORT={{ panel_video_transport }}` | the rollback from the RTSP player to MJPEG. Promised in four documents as "restart, no rebuild"; templated here since 2026-09-04 so that is true |
+| `VIDEO_DECODERS` | `Environment=VIDEO_DECODERS={{ panel_video_decoders }}` | so a box graded on its own silicon can be acted on with a restart. The shipped default is software and stays that way by decision (ADR-0014) |
 | `VIDEO_REPAINT_PULSE` | `Environment=VIDEO_REPAINT_PULSE={{ panel_video_repaint_pulse }}` | the rescue if the wall goes back to updating on scroll alone. The Panel ships the pulse off (2026-09-04); this is the way back on |
 | `HA_TOKEN` | `EnvironmentFile=-/etc/smarthome/panel.env`, 0600, owned by the kiosk user | `systemctl show -p Environment` hands every `Environment=` value to any local user without authentication, and the unit file is 0644. `EnvironmentFile=` exposes only the path |
 
@@ -576,9 +577,13 @@ turn "no Hub yet" into a restart-looping black screen.
 
 ### The empty-by-default rule
 
-`panel_hub_kind`, `panel_ha_url`, `panel_go2rtc_url`, `panel_log_level`,
-`panel_video_transport` and `panel_video_repaint_pulse` all default to `""` in
-`appliance/ansible/group_vars/all.yml`, and **must stay that way**. Resolution is environment-first, so any value set there beats a
+Every `panel_*` var that carries a Panel **setting** — the ones that become
+`Environment=` lines — defaults to `""` in
+`appliance/ansible/group_vars/all.yml`, and they **must stay that way**.
+(`panel_env_file` is a path and `panel_ha_token` travels by file; neither is one
+of these.) Stated as a rule rather than as a list on purpose: the list grew
+three times in a single day, and an enumeration is stale the moment the next
+var lands. Resolution is environment-first, so any value set there beats a
 `--dart-define` compiled into the bundle. Writing the apparently harmless
 defaults (`fake`, `http://localhost:8123`) would silently force a Panel built
 with `--dart-define=HUB=ha` back onto the fake Hub. Empty emits no
@@ -867,8 +872,18 @@ first key frame — it exists to reproduce a fault, not to tune one), and
 
 | Setting | Shipped | What to look for | If it is wrong |
 |---|---|---|---|
-| `VIDEO_REPAINT_PULSE` | `off` | pictures that update **only while you drag the grid** and freeze the moment your finger stops | `-e panel_video_repaint_pulse=on` |
+| `VIDEO_REPAINT_PULSE` | `off` | pictures that update **only while you drag the grid** and freeze the moment your finger stops | `-e panel_video_repaint_pulse=on` for one converge; `panel_video_repaint_pulse: "on"` in `host_vars/<box>.yml` to keep it — quoted, since bare `on` is a YAML boolean |
 | `VIDEO_DECODERS` | `FFmpeg` (software) | blocky, smeared or scrambled pictures — **under a LIVE badge**, which is what makes this one deceptive | leave it; see below |
+
+Both are delivered the same way, and **from ansible rather than by hand** —
+but the two ansible routes are not the same thing. A `-e` extra-var lasts
+exactly one converge: the next plain run emits no `Environment=` line,
+restarts cage, and the rendering fix is gone from a wall that still looks fine
+in a screenshot. A setting that survived grading belongs in
+`host_vars/<box>.yml`, beside `wlr_drm_devices`. And never `systemctl edit`:
+no converge removes a drop-in, so it would outlive every one and silently
+outrank whatever `host_vars` says — the box would stop obeying its own record,
+and nothing in a screenshot would show why.
 
 ### The procedure
 
@@ -917,7 +932,11 @@ unpurchased and therefore untested, and the failure being bought down is the
 deceptive one in row two above. The reasoning is in
 `panel/lib/config/video_tuning.dart`. What reopens it is exactly this step run
 on the mini PC — that machine measured on its own silicon, which is the one
-thing nobody has been able to do.
+thing nobody has been able to do. If that grading ever does conclude hardware
+decode is right for a box, `-e panel_video_decoders=auto` is the trial run,
+and `panel_video_decoders: auto` in that box's `host_vars/<box>.yml` — dated,
+with the reasoning beside it — is how to keep it, because an extra-var is gone
+on the next plain converge. Then amend ADR-0014.
 
 ---
 

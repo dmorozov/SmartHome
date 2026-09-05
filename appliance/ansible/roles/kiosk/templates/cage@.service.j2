@@ -86,6 +86,13 @@ Environment=LOG={{ panel_log_level }}
 # the next converge.
 Environment=VIDEO_TRANSPORT={{ panel_video_transport }}
 {% endif %}
+{% if panel_video_decoders %}
+# Which decoders the RTSP player may use — see panel_video_decoders in
+# group_vars, and ADR-0014 for why the shipped default is software and what
+# reopens that. Delivered here so grading a box can be acted on with a
+# restart rather than a rebuild.
+Environment=VIDEO_DECODERS={{ panel_video_decoders }}
+{% endif %}
 {% if panel_video_repaint_pulse %}
 # The camera wall's frame pulse, off in the Panel since 2026-09-04 and brought
 # back only from here — see panel_video_repaint_pulse in group_vars. Same

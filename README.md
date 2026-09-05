@@ -51,19 +51,57 @@ Full reasoning with citations: [`docs/research/`](docs/research/) · Decision re
 
 ## Video streaming
 
-RTSP is now the shipped default, with MJPEG as a first-class production switch. All green: analyzer clean, 575 passed + 2 skipped, web build compiles.
+RTSP is the shipped transport, with MJPEG kept as a first-class production
+rollback rather than a deprecation. Which one runs resolves environment first,
+then the build define, then `rtsp` — and the boot line names the winner every
+start (`panel.video_transport transport=…`), so a wall playing the wrong player
+is one journald line away from diagnosis.
 
-How the resolution works now, on the appliance: VIDEO_TRANSPORT from the environment wins, then the build define, then the rtsp fallthrough. So in production:
+On the appliance the switches are Ansible vars, never hand-edits. A `-e`
+extra-var lasts exactly the converge it is passed to; a setting that has to
+hold goes in `host_vars/<box>.yml`, which is where ADR-0014 puts every per-box
+value:
 
-- Switch to MJPEG: `ansible-playbook site.yml -l <box> -e panel_video_transport=mjpeg` — no rebuild, by design. Set it there and not by hand on the box: a `systemctl edit` drop-in is reverted by the next converge.
-- Back to RTSP: drop the variable (empty emits no line at all) and re-converge.
-- The boot log names the winner every start: panel.video_transport transport=…, so a wall running the wrong player is one journald line away from diagnosis.
+- Roll back to MJPEG for one converge: `ansible-playbook site.yml -l <box> -e panel_video_transport=mjpeg`.
+  A rollback that has to hold is `panel_video_transport: mjpeg` in that box's
+  `host_vars` — otherwise the next plain converge re-templates the unit
+  without the line and, wherever the kiosk is enabled, restarts cage back onto
+  RTSP.
+- Back to RTSP: remove the var (from `host_vars` if it was written there) and
+  re-converge. Empty emits no `Environment=` line at all, so the Panel keeps
+  its own default.
 
-The web build no longer consults the variable at all — its transport is MSE, stated plainly in main(), so a normal web boot no longer routes through the rtsp stub's misconfiguration warning.
+Never `systemctl edit`. The kiosk role writes `cage@.service` and nothing
+else, so a drop-in is *not* reverted by a converge: it survives every one and,
+because drop-ins parse after the unit file and the later `Environment=` wins,
+silently overrides whatever the var says.
 
-Two durable consequences recorded in the docs and memory:
+The web build does not consult the transport setting: a browser's transport is
+MSE, full stop, and it has no process environment to read one from anyway.
 
-1. The MJPEG wrapper producers in the live go2rtc config are now load-bearing fallback, not dead lines — N5's "step 4 config retirement" is explicitly off the table while both transports stay first-class, and memory warns future sessions never to "clean them up." The Hub-side saving (52%→35% CPU, 573→117 MiB) still materializes whenever RTSP is the active transport, since the transcodes only run while an MJPEG consumer is attached.
-2. The §D adapter row is closed — prototype, adapter, soak, and default flip all done; the handoff's N5 carries the complete record including the switch procedure.
+**How the RTSP player is tuned** is a separate question from which transport
+runs, and the two are worth keeping apart. Four settings ride one value
+(`RtspTuning`), of which exactly two are properties of the machine: which
+decoders fvp may use, and whether a playing stream forces the engine to redraw.
+Both ship at values chosen deliberately — software decode, and the frame pulse
+**off** since 2026-09-04 — and both are graded by a person watching the wall at
+commissioning rather than detected by the Panel. That is
+[ADR-0014](docs/adr/0014-video-settings-are-set-by-a-person-not-detected.md),
+and the procedure is commissioning 6 §6.10.
 
-The whole batch since your last commit is unstaged: N11 + its five review fixes, the two closed N10 checks, and this default flip. The one thing worth a glance in your next live run: the rounded-corner clipping on the now-default fvp textures — if anything looks off there, VIDEO_TRANSPORT=mjpeg is your instant rollback while we look at it.
+Two consequences worth carrying:
+
+1. **The MJPEG wrapper producers in the live go2rtc config are load-bearing
+   fallback, not dead lines.** Retiring them is off the table while both
+   transports stay first-class. The Hub-side saving RTSP has over them
+   (52 % → 35 % CPU, 573 → 117 MiB) materialises whenever RTSP is the active
+   transport, because the transcodes only run while an MJPEG consumer is
+   attached.
+2. **Inbound doorbell audio is RTSP-only.** A rollback to MJPEG trades it away
+   ([ADR-0011](docs/adr/0011-ring-two-way-audio-via-go2rtc-half-duplex.md)),
+   which is the one cost of the rollback that is not obvious from the picture.
+
+The full record — the transport decision, the macroblock fault that turned out
+to be `lowLatency` rather than the decoder, and the measurements behind every
+default — is in
+[`docs/plans/device-integrations/phase-8-handoff.md`](docs/plans/device-integrations/phase-8-handoff.md).

@@ -1074,8 +1074,9 @@ consumed once by `fvp.registerWith`. Sequence H after that decision.
 **How the gate was answered.** It could not be waited on, because the wait
 had never started: `VIDEO_REPAINT_PULSE=off` had never been set on the wall
 for a minute, let alone a week — at that moment `cage@.service.j2` templated
-`HUB`, `HA_URL`, `GO2RTC_URL` and `LOG`, and nothing else (the two video vars
-were added later the same day, which is what makes the rescue real). Two further facts settled
+`HUB`, `HA_URL`, `GO2RTC_URL` and `LOG`, and nothing else (the video vars —
+transport, decoders and the pulse — were all added later the same day, which is
+what makes the rescue real). Two further facts settled
 it. The code's stated reason for keeping the pulse on — "the evidence is from
 the dev box's Intel/NVIDIA stack, the appliance is different silicon" — is
 about the Ryzen mini PC, which `appliance/ansible/inventory.yml` still lists
@@ -1176,8 +1177,9 @@ as many words which half `tool/freeze_probe.sh` measures instead.
 **The appliance side.** Flipping a default is only cheap if the rescue is, so
 the kiosk role gained `panel_video_repaint_pulse` (empty = no `Environment=`
 line, exactly like `panel_log_level`). Without it the rescue would have been a
-`systemctl edit` drop-in that the next converge silently reverts — taking a
-rendering workaround with it whose absence looks fine in a screenshot.
+`systemctl edit` drop-in, which no converge ever removes — a rendering
+workaround pinned on the box, outranking whatever the unit templates, with
+nothing in the repo to say so.
 
 ---
 `camerasAutoOpen` (`main.dart:167, :515`) is a rig knob, not tuning; leave it.
@@ -1284,9 +1286,9 @@ What remains is `PanelApp`'s eight parameters (`main.dart:293-304`) and the
 quartet `{director, snapshots, stills, talk}` forwarded through two modules
 that read none of it. A bundle value narrows the interface but has no
 implementation behind it — by the deletion test's own definition a
-pass-through — so it stays Speculative. The one cheap fix is real and can go
-in Phase K: the two verbatim `showCamerasView` calls in `main.dart:476-484`
-and `:493-501` as one closure.
+pass-through — so it stays Speculative. The one cheap fix was real and went
+into Phase K: the two verbatim `showCamerasView` calls became
+`PanelApp._openCameras` on 2026-09-04 (Phase K item 5).
 
 ---
 
@@ -1326,16 +1328,25 @@ Each is an afternoon, none needs a seam, all are behaviour-preserving.
    documented semantic difference for post-dial `unsupported`
    (`live_video_mse.dart:940-951`), the skeleton has never needed a triple
    fix, and a shared core would expose seven members to hide fourteen lines).
-5. **One `showCamerasView` closure in `main.dart`** (`:476-484` and
-   `:493-501` are verbatim copies).
+5. ~~**One `showCamerasView` closure in `main.dart`**~~ **Done 2026-09-04.**
+   `PanelApp._openCameras(BuildContext)` — taking the context rather
+   than closing over `build`'s, because both callers sit under their own
+   `Builder` and that is what puts a Navigator above them. Mutation-checked:
+   a no-op body fails 44 cases in `cameras_view_test.dart` and
+   `camera_grid_test.dart`, so both ways in genuinely route through it.
 6. **Popup dismissal fields as one object.** `_dismissRetry`,
    `_loggedBlockedDismiss`, `_retryDismiss` (`device_popup.dart:310, :329, :338`)
    and the two hand-cancels (`:714-715`, `:773-774`) become one private
    `_OwnRouteDismissal`. Popup-only; no shared seam claimed (see Phase F for
    why).
-7. **Handoff doc drift.** `phase-8-handoff.md:680-681` (queued is not
-   grab-allowed), `:699` (the offline arm is tested), `:715-719` (N7 closed
-   by Phase A).
+7. ~~**Handoff doc drift.**~~ **Already done — verified 2026-09-04.** All
+   three were fixed in passing by the phases that caused them: the
+   grab-allowed list now states outright that queued is excluded and corrects
+   the earlier draft that listed it, and the N7 block carries a "Closed
+   2026-09-02: no surface builds its own Director any more" parenthetical.
+   Nothing in the file now claims the offline arm is untested. The line
+   numbers in this item point at unrelated content and were the only thing
+   left of it.
 8. **`_VideoNotice` colours.** `device_popup.dart:1382/:1397` paint
    `Colors.white38` on a hard-coded dark frame while the Cameras faces use
    `PanelTheme.inkFaint` — a neumorphism note for the owner (CLAUDE.md), not
@@ -1451,7 +1462,12 @@ and `parseBindings`; `classifyDing`; `CameraOrderStore` / `arrangeCameras`;
 
 ## Open questions for the owner
 
-1. Phase H's precondition: run the week of `VIDEO_REPAINT_PULSE=off` first?
+1. ~~Phase H's precondition: run the week of `VIDEO_REPAINT_PULSE=off`
+   first?~~ **Answered 2026-09-04.** The week could not be waited on because
+   it had never started — the setting had never once been delivered to the
+   wall. The owner flipped the *default* instead, which starts that week at
+   the next deploy and makes `VIDEO_REPAINT_PULSE=on` the rescue. See Phase H
+   and ADR-0014.
 2. Phase B's second step: should `CameraFeed` expose `restoring` (a
    Director fact) so the latch leaves the Panel entirely, or is the widget-
    side `CameraFace` enough?
