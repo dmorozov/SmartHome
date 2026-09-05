@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'boot.dart';
 import 'config/hub_config.dart';
 import 'config/runtime_env.dart';
+import 'config/video_tuning.dart';
 import 'data/camera_order_prefs.dart';
 import 'data/hub_client.dart';
 import 'diagnostics/log.dart';
@@ -120,68 +121,37 @@ Future<void> main() async {
       'using': 'mjpeg',
     });
   }
-  final rawOpen = videoTransport == 'rtsp' ? openRtspVideo : openLiveVideo;
+  // How this machine plays RTSP — decoders, fvp's lowLatency, the frame
+  // pulse and the debug instrumentation. Resolved environment-first like
+  // every operational setting above, and resolved by a pure function with
+  // its own suite: the same four rules used to be ~50 lines here, which no
+  // test runs. `RtspTuning`'s fields carry why each default is what it is.
+  final tuning = resolveRtspTuning(
+    environment: environment,
+    buildDecoders: _buildVideoDecoders,
+    buildLowLatency: _buildLowLatency,
+    buildFramePulse: _buildRepaintPulse,
+    buildDebug: _buildVideoDebug,
+  );
+  // Bound here and nowhere else: the tuning travels to the player as an
+  // argument rather than sitting in four globals a later caller could
+  // change out from under a playing stream.
+  final rawOpen = videoTransport == 'rtsp' ? rtspOpener(tuning) : openLiveVideo;
   Log.info('panel', 'video_transport', {'transport': videoTransport});
-  // Which decoders the RTSP player may use, resolved environment-first like
-  // every operational setting above. `rtspVideoDecoders` carries the why —
-  // in short, fvp prefers hardware decoders that on this Hub render
-  // scrambled pictures rather than failing, so the shipped default is
-  // software and the escape hatch must not need a rebuild:
-  //
-  //     VIDEO_DECODERS=CUDA,FFmpeg   try the discrete GPU, fall back
-  //     VIDEO_DECODERS=auto          fvp's own list, hardware first
-  //
-  // Set before the first open and never after: fvp registers once per
-  // process, so this is a composition-root decision by construction.
-  final askedDecoders =
-      environment['VIDEO_DECODERS'] ?? _buildVideoDecoders ?? 'FFmpeg';
-  rtspVideoDecoders = askedDecoders.trim().toLowerCase() == 'auto'
-      ? null
-      : [
-          for (final name in askedDecoders.split(','))
-            if (name.trim().isNotEmpty) name.trim(),
-        ];
-  // fvp's `lowLatency`, off by default because every value above zero drops
-  // the stream's first key frame and paints macroblocks until the camera
-  // sends another — `rtspLowLatency` carries the evidence. The knob is here
-  // to reproduce that, not to tune it.
-  rtspLowLatency =
-      int.tryParse(
-        environment['VIDEO_LOW_LATENCY'] ?? _buildLowLatency ?? '',
-      ) ??
-      0;
-  // Whether a playing stream keeps the engine drawing. On by default because
-  // the GTK/Wayland embedder does not reliably turn a texture's
-  // frame-available signal into a Flutter frame — without it the camera wall
-  // only updates while somebody is scrolling it. `rtspFramePulse` carries
-  // the measurement; `VIDEO_REPAINT_PULSE=off` is how to find out whether a
-  // given machine still needs it.
-  final askedPulse =
-      (environment['VIDEO_REPAINT_PULSE'] ?? _buildRepaintPulse ?? 'on')
-          .trim()
-          .toLowerCase();
-  rtspFramePulse = askedPulse != 'off';
   // `CAMERAS_OPEN=auto` walks the app onto the Cameras view by itself two
   // seconds after boot. For the validation rig (`tool/freeze_probe.sh`):
   // Wayland offers no scripted taps, so the app cooperates instead.
   camerasAutoOpen =
       (environment['CAMERAS_OPEN'] ?? '').trim().toLowerCase() == 'auto';
-  // Once-per-second instrumentation of the render path — off unless asked
-  // for. `rtspVideoDebug` documents how to read the line it writes.
-  rtspVideoDebug =
-      (environment['VIDEO_DEBUG'] ?? _buildVideoDebug ?? '')
-          .trim()
-          .toLowerCase() ==
-      'on';
-  // Hand the settled knobs to the player, here and not at the first dial.
+  // Hand the settled tuning to the player, here and not at the first dial.
   // Registering fvp lazily meant every test binary that opened an RTSP
   // session asked it to load `libfvp.so`, on an unawaited Future fvp
   // schedules itself — and the failure landed as an unhandled async error
   // charged to an unrelated test, twice. A test binary never runs `main()`,
   // so doing it here removes the hazard by construction rather than with a
-  // test-only guard. After the knobs above and before the first surface, the
-  // ordering `rtspVideoDecoders` has always asked for.
-  if (videoTransport == 'rtsp') registerRtspPlayer();
+  // test-only guard. Before the first surface, which is the ordering fvp
+  // imposes: it registers once per process, so the first call wins.
+  if (videoTransport == 'rtsp') registerRtspPlayer(tuning);
   // The House Plan (ADR-0005): everything drawn — geometry and Device
   // Placements — generated into house.yaml, joined with the hand-maintained
   // Hub bindings.

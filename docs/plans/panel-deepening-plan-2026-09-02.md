@@ -63,12 +63,12 @@ re-proposed. Every anchor was re-opened; measured counts replaced estimates.
 | E | A contract suite for the video seam | Worth exploring | No production change; shrinks once A removes `_CountedSession`. |
 | F | IdleReturn | Worth exploring | Landed 2026-09-03, early at the owner's call (phase-8-handoff.md:769). |
 | G | PopupClaim | Worth exploring | **Landed 2026-09-04** at the owner's call, ahead of its trigger. |
-| H | Transport tuning through the seam | Worth exploring | Gated on the frame-pulse deletion decision (live_video_rtsp_io.dart:130). |
+| H | Transport tuning through the seam | Worth exploring | **Landed 2026-09-04** at the owner's call; the gate was answered rather than waited on — see the phase. |
 | I | go2rtc's address, parsed once | Speculative | Only if Phase H is done and the owner wants the string peek typed. |
 | J | Composition-root prop drilling | Speculative | Re-measure after A; probably dissolves. |
 | K | Small tidies | — | Survivors of the refuted candidates; each is an afternoon. |
 
-A, B, C, D and E are recommended in that order; F and G landed early at the owner's call. H–J wait for their triggers.
+A, B, C, D and E are recommended in that order; F, G and H landed early at the owner's call. I and J wait for their triggers.
 
 ---
 
@@ -1063,13 +1063,35 @@ for.
 
 ---
 
-## Phase H — Transport tuning through the video seam (gated)
+## Phase H — Transport tuning through the video seam — **DONE 2026-09-04**
 
 **Trigger.** `live_video_rtsp_io.dart:130-135` schedules the frame pulse
 (and its debug line) for deletion after a week on the wall with
 `VIDEO_REPAINT_PULSE=off`. Decide that first: if the pulse goes, two of the
 four knobs go with it and this phase shrinks to decoders + lowLatency, both
 consumed once by `fvp.registerWith`. Sequence H after that decision.
+
+**How the gate was answered.** It could not be waited on, because the wait
+had never started: `VIDEO_REPAINT_PULSE=off` had never been set on the wall
+for a minute, let alone a week — `cage@.service.j2` templates `HUB`,
+`HA_URL`, `GO2RTC_URL` and `LOG`, and nothing else. Two further facts settled
+it. The code's stated reason for keeping the pulse on — "the evidence is from
+the dev box's Intel/NVIDIA stack, the appliance is different silicon" — is
+about the Ryzen mini PC, which `appliance/ansible/inventory.yml` still lists
+as `minipc.placeholder.invalid`: unpurchased, so the only real appliance is
+the Legion, whose kiosk is pinned to the same i915 the freeze probe measures.
+And four fresh probe runs on 2026-09-04 found no rendering difference between
+the arms — two sub-6 verdicts were both a camera sitting on "Connecting…" in
+both grabs, which the rig's own rule says to settle by looking rather than by
+reading the number.
+
+So the **owner flipped the default** rather than deleting: `framePulse` ships
+`false`, `VIDEO_REPAINT_PULSE=on` is the rescue, and the phase kept all four
+knobs. What is still unmeasured is the compositor — the probe runs under
+XWayland on GNOME, the kiosk under cage/wlroots, and the embedder's
+frame-available path is exactly what differs between them — and
+off-by-default is what finally starts measuring it. `_FramePulse`'s deletion
+stays where it was: after a week on the wall with nothing lost.
 
 **Why, measured.** Four process-wide mutable globals in
 `live_video_rtsp_io.dart` (`rtspVideoDecoders :82`, `rtspLowLatency :112`,
@@ -1103,6 +1125,60 @@ class RtspLiveVideoSession { RtspLiveVideoSession(Uri endpoint, {required RtspTu
 LiveVideoOpener rtspOpener(RtspTuning _) => openLiveVideo-with-warn-once;
 ```
 `main.dart:118` becomes `rawOpen = transport == 'rtsp' ? rtspOpener(tuning) : openLiveVideo`.
+
+### What landed
+
+`lib/config/video_tuning.dart` (`RtspTuning` + `resolveRtspTuning`), both
+transport branches taking it as an argument, and `main()` down from ~50 lines
+of parsing to one call. 735 passing / 8 skipped (+16 tuning cases, +2 in the
+RTSP suite), analyzer clean, release build green, and the boot line on a real
+run reads `panel.video_player decoders=FFmpeg low_latency=0
+repaint_pulse=off`.
+
+**Where it differs from the sketch.**
+
+- **`registerRtspPlayer(tuning)` does not register on first open.** The sketch
+  said "registers fvp on first open — first wins"; that lazy call *was* the
+  2026-09-03 flake and now happens in `main()`. What survives of "first wins"
+  is stated on the function: fvp registers once per process, so a second
+  call's tuning is ignored — a fact fvp imposes, not a bug to fix.
+- **`RtspTuning` is defaulted on the session, not required.**
+  `RtspLiveVideoSession` takes `tuning = const RtspTuning()` beside its two
+  deadlines, so a case that is not about tuning says nothing about it — and
+  the const default is the same value `resolveRtspTuning` produces from an
+  empty environment, which one case pins so the two cannot drift.
+- **`VIDEO_TRANSPORT` stayed in `main()`.** It names which of three transports
+  plays; folding a three-way choice into a type called *Rtsp*Tuning would be a
+  category error, and it is the one video setting `main()` still warns about,
+  because naming a transport that does not exist gets you a different player
+  than you asked for.
+- **No `sources`/`overridden` map.** `HubConfig` carries one because "wrong
+  address" and "right address, daemon down" are indistinguishable on the
+  badge. Nothing here is an address; a wrong decoder is a broken picture, and
+  what the boot line wants is the *value*. Copying the precedent whole would
+  have been cargo cult.
+- **The web branch lost four inert globals and gained one ignored parameter.**
+  `rtspOpener(RtspTuning _)` strikes the same bargain the four twins did — let
+  `main()` compile from one file — at one declaration instead of four.
+
+**Proof.** 15 mutations, 12 killed. The three survivors are all in code no
+test binary can execute, and saying so is the honest report rather than
+padding the suite: `registerWith`'s options (calling `registerRtspPlayer` in a
+test is precisely the flake that was removed), `main()`'s two call sites (the
+untested composition root — Phase J), and `_pulse`'s `framePulse` guard in a
+debug-only run, which needs a `TextureBox` and `VideoPlayer` builds none on a
+VM run because no platform hands it a texture id (walked the tree: zero). That
+last gained the half that *is* observable — a debug-only session still wraps
+and still ticks, so `ticks=` in the log means something — and its case says in
+as many words which half `tool/freeze_probe.sh` measures instead.
+
+**The appliance side.** Flipping a default is only cheap if the rescue is, so
+the kiosk role gained `panel_video_repaint_pulse` (empty = no `Environment=`
+line, exactly like `panel_log_level`). Without it the rescue would have been a
+`systemctl edit` drop-in that the next converge silently reverts — taking a
+rendering workaround with it whose absence looks fine in a screenshot.
+
+---
 `camerasAutoOpen` (`main.dart:167, :515`) is a rig knob, not tuning; leave it.
 
 **Tests.** `test/video_tuning_test.dart` (env-first, define-second, `auto` →

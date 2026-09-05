@@ -41,7 +41,7 @@ void main() {
       noOpener: 'FakeGo2rtc.open cannot fail; there is no broken world');
   runSessionContract('MjpegLiveVideoSession', _mjpegWorld);
   runSessionContract('RtspLiveVideoSession', _rtspWorld,
-      noOpener: 'openRtspVideo is safe to call here since 2026-09-03 (fvp '
+      noOpener: '`rtspOpener` is safe to call here since 2026-09-03 (fvp '
           'registration moved to `main()`), but it still cannot satisfy this '
           'invariant: it hands back a live session whose dial fails '
           'asynchronously against an unimplemented platform, and what is '

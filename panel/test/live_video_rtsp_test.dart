@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:panel/ui/video/live_video.dart';
+import 'package:panel/config/video_tuning.dart';
 import 'package:panel/ui/video/live_video_rtsp.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -54,35 +55,39 @@ void main() {
   });
 
   group('the frame pulse', () {
-    // A global, so every case here puts it back — a leaked `false` would
-    // silently unpin the wall's only defence against a frozen picture.
-    tearDown(() => rtspFramePulse = true);
+    // No `tearDown` here any more, and its absence is the point: this used
+    // to be a process-wide global that every case had to put back, because a
+    // leaked `false` silently changed what the NEXT case was measuring. It
+    // is a field on the tuning each session is handed now, so a case that
+    // wants the pulse says so in its own constructor call and nothing
+    // escapes it.
 
     test(
-      'a playing view carries the pulse by default — without it the '
-      'GTK/Wayland embedder only re-samples the texture when something '
-      'else makes the engine draw, and the wall updates on scroll alone',
+      'the shipped default hands back the plain player — the pulse was a '
+      'workaround for a fault since fixed somewhere else (ADR-0012), and it '
+      'costs a per-vsync repaint of every texture on the wall',
       () {
         fakeAsync((async) {
           final session = RtspLiveVideoSession(
             _url,
             controllerFor: (_) => _FakeController(),
           );
-          // Not a bare player: something wraps it to keep frames coming.
-          expect(session.view, isNot(isA<VideoPlayer>()));
+          expect(session.view, isA<VideoPlayer>());
           session.close();
         });
       },
     );
 
-    test('VIDEO_REPAINT_PULSE=off hands back the plain player', () {
+    test('VIDEO_REPAINT_PULSE=on wraps the player again — the rescue path, '
+        'if the kiosk compositor turns out to need what GNOME does not', () {
       fakeAsync((async) {
-        rtspFramePulse = false;
         final session = RtspLiveVideoSession(
           _url,
+          tuning: const RtspTuning(framePulse: true),
           controllerFor: (_) => _FakeController(),
         );
-        expect(session.view, isA<VideoPlayer>());
+        // Not a bare player: something wraps it to keep frames coming.
+        expect(session.view, isNot(isA<VideoPlayer>()));
         session.close();
       });
     });
@@ -93,6 +98,7 @@ void main() {
       (tester) async {
         final session = RtspLiveVideoSession(
           _url,
+          tuning: const RtspTuning(framePulse: true),
           controllerFor: (_) => _FakeController(),
         );
         final before = tester.binding.transientCallbackCount;
@@ -116,7 +122,6 @@ void main() {
     testWidgets('with the pulse off nothing is scheduled at all', (
       tester,
     ) async {
-      rtspFramePulse = false;
       final session = RtspLiveVideoSession(
         _url,
         controllerFor: (_) => _FakeController(),
@@ -127,6 +132,39 @@ void main() {
       );
       expect(tester.binding.transientCallbackCount, before);
 
+      await tester.pumpWidget(const SizedBox.shrink());
+      session.close();
+      await tester.pump();
+    });
+
+    testWidgets('a VIDEO_DEBUG run still wraps and still ticks with the '
+        'pulse off — measuring the render path must not be the thing that '
+        'changes it', (tester) async {
+      // The rig's own rule, bought with a shipped ticker that never started:
+      // instrument the OFF state too, or a knob whose off-position does the
+      // same nothing as its on-position reads as ruled out while measuring
+      // nothing. `ticks=` in the `video.pulse` line only means something if
+      // the ticker runs in this arm, which is now the ORDINARY debug arm —
+      // the pulse ships off.
+      final session = RtspLiveVideoSession(
+        _url,
+        tuning: const RtspTuning(debug: true),
+        controllerFor: (_) => _FakeController(),
+      );
+      expect(session.view, isNot(isA<VideoPlayer>()));
+
+      final before = tester.binding.transientCallbackCount;
+      await tester.pumpWidget(
+        Directionality(textDirection: TextDirection.ltr, child: session.view),
+      );
+      expect(tester.binding.transientCallbackCount, greaterThan(before));
+
+      // What is NOT asserted, and cannot be from here: that the pulse
+      // repaints nothing in this arm. `markNeedsPaint` needs a `TextureBox`,
+      // and `VideoPlayer` builds none on a VM run because no platform ever
+      // hands it a texture id — a walk of this tree finds zero. That half is
+      // measured by `tool/freeze_probe.sh` with `VIDEO_DEBUG=on`, against a
+      // real texture, which is the only place it exists.
       await tester.pumpWidget(const SizedBox.shrink());
       session.close();
       await tester.pump();
@@ -314,14 +352,37 @@ void main() {
       // platform no VM run implements. Left open, both outlive the case.
       late final LiveVideoSession session;
       expect(
-          () => session = openRtspVideo(Uri.parse('ws://hub:1984/api/ws?src=x'),
+          () => session = rtspOpener(const RtspTuning())(
+              Uri.parse('ws://hub:1984/api/ws?src=x'),
               name: 'x'),
           returnsNormally);
       session.close();
     });
 
+    test('the opener hands its tuning to the session it builds — the whole '
+        'point of binding one instead of reading four globals', () {
+      fakeAsync((async) {
+        // `main()` resolves the tuning once and binds it here; if the opener
+        // dropped it, every stream on the wall would silently run the
+        // shipped defaults and `VIDEO_REPAINT_PULSE=on` would be a knob
+        // connected to nothing.
+        final wrapped = rtspOpener(const RtspTuning(framePulse: true))(
+            Uri.parse('ws://hub:1984/api/ws?src=x'),
+            name: 'x');
+        expect(wrapped.view, isNot(isA<VideoPlayer>()));
+        wrapped.close();
+
+        final bare = rtspOpener(const RtspTuning())(
+            Uri.parse('ws://hub:1984/api/ws?src=x'),
+            name: 'x');
+        expect(bare.view, isA<VideoPlayer>());
+        bare.close();
+      });
+    });
+
     test('the opener does not register the native player', () {
-      // Registration is `main()`'s to do — `registerRtspPlayer()` — and this
+      // Registration is `main()`'s to do — `registerRtspPlayer(tuning)` —
+      // and this
       // pins the split, because a test binary never calls `main()`. Put it
       // back inside the opener and fvp's `registerWith` reaches for
       // `libfvp.so` from an unawaited Future, absent on any VM run: the
@@ -339,12 +400,14 @@ void main() {
       // so this reads true from anywhere in the file and fails here rather
       // than next door. It is named by string because fvp's platform class
       // lives behind its `src/`.
-      openRtspVideo(Uri.parse('ws://hub:1984/api/ws?src=x'), name: 'x').close();
+      rtspOpener(const RtspTuning())(Uri.parse('ws://hub:1984/api/ws?src=x'),
+              name: 'x')
+          .close();
 
       expect(
         VideoPlayerPlatform.instance.runtimeType.toString(),
         isNot(contains('Mdk')),
-        reason: 'openRtspVideo registered fvp — that belongs in main()',
+        reason: 'the opener registered fvp — that belongs in main()',
       );
     });
   });

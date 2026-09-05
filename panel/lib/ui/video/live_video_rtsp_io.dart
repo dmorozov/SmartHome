@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:fvp/fvp.dart' as fvp;
 import 'package:video_player/video_player.dart';
 
+import '../../config/video_tuning.dart';
 import '../../diagnostics/log.dart';
 // `kMjpegFirstFrameTimeout`/`kMjpegStallTimeout` arrive through
 // `live_video.dart`'s own export of the platform branch.
@@ -75,150 +76,53 @@ var _fvpRegistered = false;
 /// plugin registrant has already swapped `video_player`'s platform and
 /// loaded libmdk **before** `main()` runs — the fvp banner precedes
 /// `panel.start` in the journal. That first registration passes no options;
-/// this one is how [rtspVideoDecoders] and [rtspLowLatency] reach the
-/// player at all. Idempotent, so a second call is a no-op.
-void registerRtspPlayer() {
+/// this one is how [RtspTuning.decoders] and [RtspTuning.lowLatency] reach
+/// the player at all. Idempotent, so a second call is a no-op — and the
+/// second call's tuning is therefore ignored, which is not a bug to fix but
+/// the fact fvp imposes: it registers once per process, so the first caller
+/// wins. `main()` is the only caller.
+void registerRtspPlayer(RtspTuning tuning) {
   if (_fvpRegistered) return;
   _fvpRegistered = true;
   // Swaps video_player's platform implementation for fvp (libmdk),
   // process-wide, once. RTSP-over-TCP is fvp's own default (it sets
   // `avformat.rtsp_transport: tcp` per player), which is also this house's
   // rule: RTSPS/TCP everywhere upstream.
-  final decoders = rtspVideoDecoders;
   fvp.registerWith(
     options: {
-      'lowLatency': rtspLowLatency,
+      'lowLatency': tuning.lowLatency,
       // Omitted entirely when null, so "let fvp choose" stays reachable and
       // is not spelled as an empty list fvp would read as "nothing".
-      'video.decoders': ?decoders,
+      'video.decoders': ?tuning.decoders,
     },
   );
-  Log.info('panel', 'video_player', {
-    'decoders': decoders == null ? 'fvp_default' : decoders.join(','),
-    'low_latency': rtspLowLatency,
-    'repaint_pulse': rtspFramePulse ? 'on' : 'off',
-  });
+  Log.info('panel', 'video_player', tuning.logFields);
 }
 
-/// The decoder priority list handed to fvp, or null to keep fvp's own.
+/// The seam's opener for this transport, bound to the tuning `main()`
+/// resolved.
 ///
-/// **Set this before [registerRtspPlayer], from `main()` and nowhere
-/// else** — that call is what hands the list to fvp, and fvp is registered
-/// once per process, so a later change is ignored. It is a variable rather
-/// than a constant for the reason `VIDEO_TRANSPORT` is: which decoder a
-/// given wall can actually use is an
-/// operational fact about that machine, not a property of the binary, and
-/// finding out costs a person standing in front of the screen.
-///
-/// **The shipped default is software, and that is a precaution rather than
-/// a proven fix — say so honestly.** fvp's own Linux list prefers hardware
-/// (`['VAAPI', 'CUDA', 'VDPAU', 'hap', 'FFmpeg', 'dav1d']`), and pinning
-/// `FFmpeg` was the first attempt at the broken wall of 2026-08-26. It did
-/// not fix it. The macroblocks were [rtspLowLatency] dropping the first key
-/// frame; the frozen pictures were the Impeller renderer (ADR-0012).
-/// Hardware decoding was never actually convicted of anything.
-///
-/// It stays software for now because the one property worth having here is
-/// that a broken *picture* is indistinguishable from a broken *camera* to
-/// whoever is looking at the wall, and this house's cameras break often
-/// enough on their own; software decode is the path with no driver roulette
-/// across the dev box's Intel+NVIDIA and the appliance's AMD.
-///
-/// Affordable at this size: a tile is 640×360 and the grid is six of them —
-/// the phase-8 prototype measured about half a core for six streams
-/// *including* software GL rendering under Xvfb. **`VIDEO_DECODERS=auto` is
-/// worth a run now that the real faults are fixed**: if the picture holds,
-/// hardware decoding buys the appliance back a core it would rather spend on
-/// something else.
-List<String>? rtspVideoDecoders = const ['FFmpeg'];
+/// A function that returns an opener rather than an opener that reads
+/// globals: [RtspTuning] reaches the session — and through it the render
+/// path — as an argument, so there is no moment at which it is half-set and
+/// no way to change it after a stream is playing. `main()` picks the
+/// transport and binds the tuning in the same expression; the seam
+/// downstream sees a plain [LiveVideoOpener] and knows nothing about either.
+LiveVideoOpener rtspOpener(RtspTuning tuning) =>
+    (Uri url, {required String name}) {
+      try {
+        return RtspLiveVideoSession(rtspEndpointFor(url), tuning: tuning);
+      } catch (error) {
+        // The type, never the message — `mjpegEndpointFor`'s twin, same rule
+        // (`diagnostics/log.dart`: **Never log a secret**).
+        return SettledLiveVideoSession(
+          LiveVideoPhase.failed,
+          failure: 'the player would not start: ${error.runtimeType}',
+        );
+      }
+    };
 
-/// fvp's `lowLatency`, and **the shipped value is 0 — off — because 1
-/// visibly corrupts this wall.**
-///
-/// Set alongside [rtspVideoDecoders], from `main()`, before
-/// [registerRtspPlayer] reads it.
-///
-/// This was 1 from the day the transport landed, on the reasonable-sounding
-/// argument that a live wall wants no buffering. What that actually buys is
-/// spelled out in fvp's own source, one line above where it applies it:
-///
-/// ```dart
-/// // +nobuffer: the 1st key-frame packet is dropped. -nobuffer: high latency
-/// player.setProperty('avformat.fflags', '+nobuffer');
-/// ```
-///
-/// **It drops the first key frame.** H.264 is differential, so a decoder
-/// handed the packets after an IDR but not the IDR itself has nothing to
-/// reference: it paints garbage and keeps painting garbage until the camera
-/// sends another key frame, which on a long-GOP Wyze substream is a long
-/// time and — with errors propagating — sometimes never resolves. That is
-/// the wall of macroblocks seen on 2026-08-26, and it is why the identical
-/// substreams decoded perfectly under plain `ffmpeg`, which drops nothing,
-/// and why swapping decoders only changed what the mess looked like.
-///
-/// Every value above 0 sets that flag, so **0 is the only safe setting**;
-/// `VIDEO_LOW_LATENCY=1` exists to reproduce the fault, not to tune it. The
-/// price of 0 is mdk's ordinary network buffering — a slower first frame and
-/// some delay behind real time — which is a trade this house can make
-/// happily, a picture being worth more than a second.
-int rtspLowLatency = 0;
-
-/// Whether a playing stream keeps the engine drawing frames.
-///
-/// **A workaround for the embedder, not a feature.** Built 2026-08-26, when
-/// the wall updated its pictures *only while being scrolled* and sat on a
-/// stale frame the moment the finger stopped. The mechanism it exploits is
-/// one line of Flutter's rendering layer — `TextureBox.isRepaintBoundary`
-/// is `true`, so a texture's layer is retained and nothing above it can
-/// dirty it; scrolling worked because it changed the transform above the
-/// texture and forced the scene to be rebuilt. [_FramePulse] reaches the
-/// `TextureBox` itself and calls `markNeedsPaint()` on it once per vsync,
-/// which rebuilds that layer and re-resolves the texture. It stops with the
-/// session, and with `TickerMode` under a covering route.
-///
-/// **It is probably dead weight now, and it still ships on (2026-08-28).**
-/// That symptom is also Impeller's signature, and the wall now pins Skia
-/// (ADR-0012). Measured since: `VIDEO_REPAINT_PULSE=off` through
-/// `tool/freeze_probe.sh` plays **3 runs out of 3** — this embedder
-/// delivers texture frames on its own, and the pulse buys nothing here. It
-/// stays on anyway, deliberately: the evidence is from the dev box's
-/// Intel/NVIDIA stack, the appliance is different silicon, and the cost of
-/// being wrong is the wall. **Flip it in production first**
-/// (`VIDEO_REPAINT_PULSE=off`, no rebuild); delete this and [_FramePulse]
-/// once a week on the wall says nothing was lost.
-bool rtspFramePulse = true;
-
-/// Once-per-second instrumentation of the render path, `VIDEO_DEBUG=on`.
-///
-/// Off by default because it writes a line per second per playing stream.
-/// Turn it on when the wall shows a picture that will not move, and read the
-/// line as a chain — the first field that is wrong is where to look:
-///
-/// ```
-/// I video.pulse name=wyze_back_yard_sub ticks=60 frames=60 pos=+1000ms
-///                tex=id42 paint=clean
-/// ```
-///
-/// * `ticks` — pulses in the last second. 0 means the [Ticker] is not
-///   running (a muted `TickerMode`, or [rtspFramePulse] off).
-/// * `frames` — frames the *engine* actually rasterised, counted through
-///   `SchedulerBinding.addTimingsCallback`. 0 with non-zero ticks means the
-///   scheduler is asking and the engine is not drawing.
-/// * `pos` — how far the player's clock moved. 0 means no decoding, so the
-///   problem is upstream of rendering entirely.
-/// * `tex` — the `TextureBox` this pulse found, and its texture id, or
-///   `none` if the walk found no texture to repaint.
-/// * `paint` — whether that box was still marked dirty when the line was
-///   written. `dirty` means `markNeedsPaint()` is being called and paint is
-///   never running. Needs asserts, so a `--debug` run; otherwise `n/a`.
-///
-/// The honest reading: `ticks=60 frames=60 pos=+1000ms tex=id42 paint=clean`
-/// and a frozen picture means every layer of Flutter did its job and the
-/// texture still did not update — which puts it below Dart, in the embedder
-/// or the plugin, and no amount of widget code will fix it.
-bool rtspVideoDebug = false;
-
-/// Frames the engine rasterised, counted for [rtspVideoDebug]. Global
+/// Frames the engine rasterised, counted for [RtspTuning.debug]. Global
 /// because it is a property of the process, not of one stream.
 var _engineFrames = 0;
 var _timingsHooked = false;
@@ -229,22 +133,6 @@ void _hookFrameTimings() {
   SchedulerBinding.instance.addTimingsCallback(
     (timings) => _engineFrames += timings.length,
   );
-}
-
-/// Opens go2rtc's RTSP restream through fvp, or answers a session that is
-/// already failed. Never throws — `openLiveVideo`'s contract, kept for its
-/// stated reason (the caller is a `State.initState`).
-LiveVideoSession openRtspVideo(Uri url, {required String name}) {
-  try {
-    return RtspLiveVideoSession(rtspEndpointFor(url));
-  } catch (error) {
-    // The type, never the message — `mjpegEndpointFor`'s twin, same rule
-    // (`diagnostics/log.dart`: **Never log a secret**).
-    return SettledLiveVideoSession(
-      LiveVideoPhase.failed,
-      failure: 'the player would not start: ${error.runtimeType}',
-    );
-  }
 }
 
 /// go2rtc's H.264 restream, played by fvp into a Flutter Texture.
@@ -265,6 +153,7 @@ LiveVideoSession openRtspVideo(Uri url, {required String name}) {
 class RtspLiveVideoSession implements LiveVideoSession {
   RtspLiveVideoSession(
     Uri url, {
+    this.tuning = const RtspTuning(),
     this.firstFrameTimeout = kRtspFirstFrameTimeout,
     this.stallTimeout = kRtspStallTimeout,
     VideoPlayerController Function(Uri url)? controllerFor,
@@ -282,6 +171,13 @@ class RtspLiveVideoSession implements LiveVideoSession {
 
   static VideoPlayerController _networkController(Uri url) =>
       VideoPlayerController.networkUrl(url);
+
+  /// How this machine is tuned. Only the render-path half is this class's
+  /// business — [RtspTuning.decoders] and [RtspTuning.lowLatency] were spent
+  /// at [registerRtspPlayer] long before any session existed. Defaulted, like
+  /// the deadlines beside it, so a case that is not about tuning does not
+  /// have to say anything about it.
+  final RtspTuning tuning;
 
   final Duration firstFrameTimeout;
   final Duration stallTimeout;
@@ -312,8 +208,9 @@ class RtspLiveVideoSession implements LiveVideoSession {
   /// (`MjpegLiveVideoSession.view`'s rule, and a pinned invariant: `view`
   /// identity is stable within one dial).
   @override
-  late final Widget view = rtspFramePulse || rtspVideoDebug
+  late final Widget view = tuning.framePulse || tuning.debug
       ? _FramePulse(
+          tuning: tuning,
           label: _label,
           positionMs: () => _controller.value.position.inMilliseconds,
           child: VideoPlayer(_controller),
@@ -416,8 +313,8 @@ class RtspLiveVideoSession implements LiveVideoSession {
   }
 }
 
-/// Repaints the video texture under it once per vsync — see [rtspFramePulse]
-/// for the measurement and the mechanism.
+/// Repaints the video texture under it once per vsync — see
+/// [RtspTuning.framePulse] for the measurement and what to set it to.
 ///
 /// **It has to reach the [TextureBox] itself.** That render object is a
 /// repaint boundary, so marking this widget, or anything else above it,
@@ -435,14 +332,21 @@ class RtspLiveVideoSession implements LiveVideoSession {
 /// it, and `dispose` stops it for good when the session closes.
 class _FramePulse extends StatefulWidget {
   const _FramePulse({
+    required this.tuning,
     required this.child,
     required this.label,
     required this.positionMs,
   });
 
+  /// Both halves of why this widget exists at all: [RtspTuning.framePulse]
+  /// makes it repaint, [RtspTuning.debug] makes it measure, and the session
+  /// builds it when either is set. Held whole rather than as two booleans so
+  /// a third render-path setting costs no re-threading.
+  final RtspTuning tuning;
+
   final Widget child;
 
-  /// The stream's name, for [rtspVideoDebug]'s lines. Never a URL.
+  /// The stream's name, for [RtspTuning.debug]'s lines. Never a URL.
   final String label;
 
   /// The player's clock, read once a second so a debug line can say whether
@@ -482,7 +386,7 @@ class _FramePulseState extends State<_FramePulse>
   void initState() {
     super.initState();
     _ticker = createTicker(_pulse)..start();
-    if (!rtspVideoDebug) return;
+    if (!widget.tuning.debug) return;
     _hookFrameTimings();
     _framesAtLastReport = _engineFrames;
     _positionAtLastReport = widget.positionMs();
@@ -492,7 +396,8 @@ class _FramePulseState extends State<_FramePulse>
   void _pulse(Duration _) {
     if (!mounted) return;
     _ticks++;
-    if (!rtspFramePulse) return; // debug-only run: measure, change nothing
+    // A debug-only run: measure, change nothing.
+    if (!widget.tuning.framePulse) return;
     final held = _texture;
     if (held != null && held.attached) {
       held.markNeedsPaint();
@@ -606,8 +511,9 @@ class _FramePulseState extends State<_FramePulse>
   Widget build(BuildContext context) {
     // `widget.child` is the same instance every build, so the player's
     // element is never rebuilt — and the one wrapper above it is constant
-    // for a whole run (the global is set once in `main()`).
-    if (!rtspVideoDebug) return widget.child;
+    // for the life of the session (the tuning is a value, fixed at
+    // construction).
+    if (!widget.tuning.debug) return widget.child;
     return RepaintBoundary(key: _boundaryKey, child: widget.child);
   }
 }

@@ -89,6 +89,21 @@ panel_env_file: /etc/smarthome/panel.env
 # extra-vars land in `ps` output.
 panel_ha_token: "{{ lookup('ansible.builtin.env', 'PANEL_HA_TOKEN') }}"
 
+# The Panel's frame pulse — a per-vsync repaint of every playing camera
+# texture. Built 2026-08-26 for a wall that only updated while it was being
+# scrolled; that fault turned out to be Impeller's and is pinned away
+# (ADR-0012), and the Panel has shipped with the pulse OFF since 2026-09-04.
+#
+# Empty = emit no Environment=VIDEO_REPAINT_PULSE line at all, so the Panel
+# keeps its own default. This exists for one direction only: if the wall ever
+# goes back to updating on scroll alone, `-e panel_video_repaint_pulse=on`
+# plus a restart brings the workaround back with no Flutter rebuild — which is
+# the whole reason the default could be flipped. Set it HERE rather than by
+# hand on the box: a `systemctl edit` override is silently reverted by the
+# next converge, and the failure it would mask is a wall that looks fine in a
+# screenshot.
+panel_video_repaint_pulse: ""
+
 # Hybrid-GPU pin (runbook Step 0a): empty = no pin. On the laptop this MUST be
 # set to the integrated card — Intel i915 there, amdgpu on the mini PC — and
 # always as /dev/dri/by-path/pci-<addr>-card, never /dev/dri/cardN (numbering

@@ -566,13 +566,20 @@ and `PANEL_RENDERER` knobs, and `VIDEO_DEBUG=on`'s pulse lines (its pixel
 sampler segfaults release GLES runs — the rig leaves it off). Every bisect
 arm (`CAMERAS_GRID`, `VIDEO_TILE`, `VIDEO_MIX`) was deleted with the fix.
 **Two knobs the fix leaves worth flipping in production, both one restart,
-no rebuild:** `VIDEO_REPAINT_PULSE=off` — the per-vsync texture repaint was
-a workaround for the same "moves only while scrolling" symptom and now
-plays 3 runs out of 3 without it on the dev box, so it is likely dead
-weight on the appliance too (the code says what would settle it); and
-`VIDEO_DECODERS=auto`, never re-run after the real faults were fixed — the
-software pin is affordability, not a conviction (2026-08-26 addendum
-below).
+no rebuild.** The first is now **done**: `VIDEO_REPAINT_PULSE` shipped `off`
+by default on 2026-09-04 (owner decision) — the per-vsync texture repaint was
+a workaround for the same "moves only while scrolling" symptom, it plays
+without it 3 runs of 3 (2026-08-28) and 4 more on 2026-09-04, and the reason
+it had been kept turned out to be about a machine that does not exist: the
+"appliance is different silicon" argument names the Ryzen mini PC, which is
+still `minipc.placeholder.invalid` in the inventory. The one thing still
+unmeasured is the compositor — the probe runs under XWayland on GNOME, the
+kiosk under cage/wlroots — and off-by-default is what finally starts that
+measurement, since the knob had never once been set on the wall. Rescue:
+`-e panel_video_repaint_pulse=on` (appliance README), never `systemctl edit`.
+Still open: `VIDEO_DECODERS=auto`, never re-run after the real faults were
+fixed — the software pin is affordability, not a conviction (2026-08-26
+addendum below).
 
 The original plan, for reference:
 - New file `panel/lib/ui/video/live_video_rtsp.dart`: a
@@ -646,20 +653,29 @@ time on a long-GOP Wyze substream, and with error propagation sometimes never
 resolving. That is why plain `ffmpeg`, which drops nothing, decoded the same
 substreams flawlessly, and why swapping decoders changed only the flavour.
 
-Fix: two operational settings in `live_video_rtsp_io.dart`, both resolved by
-`main()` environment-first exactly like `VIDEO_TRANSPORT`, both logged at
-boot as `panel.video_player`:
+Fix: two operational settings, resolved by `main()` environment-first exactly
+like `VIDEO_TRANSPORT` and logged at boot as `panel.video_player`. Since
+2026-09-04 they are two fields of one value — `RtspTuning` in
+`panel/lib/config/video_tuning.dart`, resolved by `resolveRtspTuning` and
+handed to the transport as an argument, rather than four process-wide globals
+set from ~50 untested lines of `main()` (deepening plan, Phase H). The other
+two fields are `VIDEO_REPAINT_PULSE` and `VIDEO_DEBUG`.
 
 | setting | shipped | notes |
 |---|---|---|
 | `VIDEO_LOW_LATENCY` | `0` | **the fix.** Every value > 0 sets `+nobuffer`, so 0 is the only safe one; the knob exists to reproduce the fault, not to tune it. Costs mdk's ordinary buffering — slower first frame, some delay behind real time |
-| `VIDEO_DECODERS` | `FFmpeg` | software, portable across the dev box's NVIDIA and the appliance's AMD. `auto` restores fvp's hardware-first list |
+| `VIDEO_DECODERS` | `FFmpeg` | software, portable across the dev box's NVIDIA and the mini PC's AMD. `auto` restores fvp's hardware-first list — and so does any value naming no decoder at all, since an empty list tells fvp to use none |
+| `VIDEO_REPAINT_PULSE` | `off` *(since 2026-09-04; was `on`)* | the per-vsync texture repaint. `on` is the rescue if the wall goes back to updating on scroll alone — through `-e panel_video_repaint_pulse=on`, so it survives a converge |
+| `VIDEO_DEBUG` | *(off)* | `on` writes `video.pulse` once a second per stream. Exactly `on`; anything else is off, because a line per second per stream is not something to enable by typo |
 
 **Open:** whether hardware decode was ever a problem at all is now unknown —
 it was only ever observed alongside the dropped key frame. Worth one run at
 `VIDEO_DECODERS=auto` with `VIDEO_LOW_LATENCY=0` before treating software as
-required, since the appliance is a modest AMD Radeon rather than this dev
-laptop and would rather not spend a core on decode. Software is affordable at
+required, since the production appliance is meant to be a modest AMD Radeon
+rather than this dev laptop and would rather not spend a core on decode —
+though as of 2026-09-04 that mini PC is still unpurchased, so the wall and the
+dev box are one Intel/NVIDIA machine and the portability argument is about a
+future, not a present. Software is affordable at
 tile size regardless (640×360 × 6; the phase-8 prototype measured ~half a
 core for six streams including software GL under Xvfb); the 1080p zoom is the
 case to re-measure.

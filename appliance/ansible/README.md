@@ -87,6 +87,7 @@ and a restart, never a Flutter rebuild.
 | `panel_ha_url` | `http://localhost:8123` | `Environment=HA_URL=` in the unit |
 | `panel_go2rtc_url` | *(none — the Panel has no default)* | `Environment=GO2RTC_URL=` in the unit |
 | `panel_log_level` | *(empty — no line emitted)* | `Environment=LOG=` in the unit |
+| `panel_video_repaint_pulse` | *(empty — no line emitted)* | `Environment=VIDEO_REPAINT_PULSE=` in the unit |
 | `panel_env_file` | `/etc/smarthome/panel.env` | `EnvironmentFile=-` in the unit |
 | `panel_ha_token` | `$PANEL_HA_TOKEN` on the controller | the 0600 file above |
 
@@ -199,6 +200,24 @@ enabled (the mini PC, or a laptop converge that passes `-e kiosk_enable=true`).
 On a default laptop converge the new token lands on disk and nothing is
 restarted, which is correct — there is no running compositor to restart — but
 it does mean "re-converge" alone is not the whole rotation there.
+
+`panel_video_repaint_pulse` is the rescue for one specific regression, and
+it points in one direction only. The Panel's per-vsync texture repaint has
+shipped **off** since 2026-09-04: it was built for a wall that updated its
+pictures only while being scrolled, and that fault turned out to be the
+Impeller renderer's, pinned away in
+[ADR-0012](../../docs/adr/0012-panel-renders-with-skia-on-linux.md). If the
+wall ever goes back to freezing between scrolls:
+
+```sh
+ansible-playbook site.yml -l laptop -e panel_video_repaint_pulse=on
+```
+
+Empty by default, so no `Environment=VIDEO_REPAINT_PULSE=` line is emitted and
+the Panel keeps its own default. **Set it here, not with `systemctl edit`** —
+a drop-in override is silently reverted by the next converge, and what it
+would take with it is a rendering workaround whose absence looks fine in a
+screenshot and wrong only to somebody standing in front of the wall.
 
 `panel_log_level` is the same environment-first story with none of the
 secrecy (`panel/lib/diagnostics/log.dart`): it is what raises the Panel's log
